@@ -373,9 +373,9 @@
             <p class="row-label">Dannify</p>
             <p class="row-hint">{{ t('settings.version', { version }) }}</p>
           </div>
-          <button class="btn" @click="desktop.openExternal(updates.repoUrl.value)">
-            <Icon icon="ph:github-logo" class="h-4 w-4" />
-            {{ t('settings.sourceCode') }}
+          <button class="btn" @click="desktop.openExternal(updates.siteUrl.value)">
+            <Icon icon="ph:globe-simple" class="h-4 w-4" />
+            {{ t('settings.website') }}
           </button>
         </div>
         <label class="row">

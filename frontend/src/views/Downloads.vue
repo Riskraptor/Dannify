@@ -82,7 +82,7 @@
               <span v-else-if="stateOf(item) === 'done'" class="pill-accent">
                 <Icon icon="ph:check-bold" class="h-3 w-3" /> {{ t('downloads.statusDone') }}
               </span>
-              <span v-else class="pill-danger" :title="item.message">
+              <span v-else class="pill-danger" :title="t('downloads.statusErrorHint')">
                 <Icon icon="ph:warning-bold" class="h-3 w-3" /> {{ t('downloads.statusError') }}
               </span>
             </div>
