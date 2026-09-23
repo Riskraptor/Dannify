@@ -167,8 +167,11 @@
               </div>
             </div>
 
-            <!-- Transport controls + speed -->
+            <!-- Transport controls + speed. Grouped and labelled: eleven
+                 bare buttons in a row is a puzzle, three named groups is a
+                 toolbar you can read at a glance. -->
             <div class="ls-trans">
+              <span class="ls-trans-label">{{ t('publish.groupSeek') }}</span>
               <button class="ls-tbtn" @click="player.seek(player.currentTime.value - 10)" :title="t('publish.back10')">
                 <Icon icon="ph:rewind-fill" class="h-4 w-4" />
                 <span>10s</span>
@@ -186,8 +189,8 @@
                 <span>10s</span>
               </button>
               <div class="ls-trans-sep" />
+              <span class="ls-trans-label">{{ t('publish.groupSpeed') }}</span>
               <div class="ls-speed" :title="t('publish.playbackSpeed')">
-                <Icon icon="ph:gauge-bold" class="h-4 w-4 text-fg/50" />
                 <button
                   v-for="r in [0.5, 0.75, 1.0, 1.25, 1.5]"
                   :key="r"
@@ -197,6 +200,7 @@
                 >{{ r }}×</button>
               </div>
               <div class="ls-trans-sep" />
+              <span class="ls-trans-label">{{ t('publish.groupEdit') }}</span>
               <button
                 class="ls-tbtn"
                 :disabled="!undoStack.length"
@@ -334,12 +338,26 @@
               </template>
             </div>
 
+            <!-- How far along, then what is wrong. "Partially timed" never
+                 answered the question the user is actually asking. -->
+            <div class="ls-progress">
+              <div class="ls-progress-head">
+                <span class="ls-progress-count">
+                  {{ t('publish.timedOf', { done: stampedCount, total: lines.length }) }}
+                </span>
+                <span class="ls-progress-state" :class="qualityClass">{{ qualityText }}</span>
+              </div>
+              <div class="ls-progress-track">
+                <div
+                  class="ls-progress-fill"
+                  :class="qualityClass"
+                  :style="{ width: stampedPercent + '%' }"
+                />
+              </div>
+            </div>
+
             <!-- Sync quality + actions -->
             <div class="ls-quality">
-              <div class="ls-quality-pill" :class="qualityClass">
-                <Icon :icon="qualityIcon" class="h-4 w-4" />
-                {{ qualityText }}
-              </div>
               <button
                 v-if="qualityErrors.length"
                 class="ls-quality-fix"
@@ -867,6 +885,11 @@ const qualityErrors = computed(() =>
 )
 const stampedCount = computed(
   () => lines.value.filter((l) => l.time != null).length
+)
+const stampedPercent = computed(() =>
+  lines.value.length
+    ? Math.round((stampedCount.value / lines.value.length) * 100)
+    : 0
 )
 const canReview = computed(
   () => stampedCount.value >= Math.max(2, Math.ceil(lines.value.length * 0.5))
@@ -1924,6 +1947,58 @@ function unbindWindowKeys() {
 [data-theme='dannify-light'] .ls-insert { color: rgba(22, 24, 28, 0.35); }
 
 /* ─── Phase 2: quality pill ─── */
+.ls-trans-label {
+  margin-right: 1px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(var(--c-fg) / 0.38);
+}
+.ls-progress {
+  margin: 0 22px 10px;
+}
+.ls-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.ls-progress-count {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: rgb(var(--c-fg) / 0.8);
+}
+.ls-progress-state {
+  font-size: 11.5px;
+  color: rgb(var(--c-fg) / 0.5);
+}
+.ls-progress-state.err {
+  color: rgb(var(--c-danger));
+}
+.ls-progress-state.ok {
+  color: rgb(var(--c-accent));
+}
+.ls-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(var(--c-tint) / 0.1);
+  overflow: hidden;
+}
+.ls-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: rgb(var(--c-accent));
+  transition: width 0.25s var(--ease-out);
+}
+.ls-progress-fill.err {
+  background: rgb(var(--c-danger));
+}
+.ls-progress-fill.idle {
+  background: rgb(var(--c-tint) / 0.2);
+}
+
 .ls-quality {
   display: flex;
   align-items: center;

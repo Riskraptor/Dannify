@@ -45,7 +45,7 @@ from loguru import logger
 from requests.adapters import HTTPAdapter
 
 LRCLIB_BASE = 'https://lrclib.net/api'
-_CLIENT_ID = 'Dannify/3.0 (https://github.com/henriquesebastiao/dannify)'
+_CLIENT_ID = 'Dannify/3.1 (https://github.com/DANIELMWENDWA9451/Dannify)'
 # Generous read timeout: lrclib occasionally takes >10s to commit a
 # publish (DB write + revision history). Connect timeout stays short so
 # the user fails fast if the service is unreachable.

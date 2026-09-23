@@ -20,7 +20,7 @@ from requests.adapters import HTTPAdapter
 LRCLIB_BASE = 'https://lrclib.net/api'
 # lrclib asks clients to identify themselves; sending the Lrclib-Client header
 # (and a matching User-Agent) improves reliability and rate-limit treatment.
-_CLIENT_ID = 'Dannify/3.0 (https://github.com/henriquesebastiao/dannify)'
+_CLIENT_ID = 'Dannify/3.1 (https://github.com/DANIELMWENDWA9451/Dannify)'
 
 SUPPORTED_PROVIDERS = {'lrclib'}
 
