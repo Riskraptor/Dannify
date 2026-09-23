@@ -1,39 +1,42 @@
 # Dannify
 
-A desktop music player for Windows. Search anything, play it instantly, and
-keep what you want as a properly tagged file with album art and synced lyrics.
+A music player for Windows. Search for anything, play it straight away, and
+keep the tracks you want as real files with artwork, tags and synced lyrics.
 
-Not a browser in a window: a native frame, a real system tray, media keys, and
-a local backend that nothing outside the app can reach.
+I built it because every other option was either a browser tab pretending to
+be an app, or a downloader with no player attached. This is one program: a
+native window, a tray icon, media keys, and a backend on loopback that nothing
+outside the app can reach.
 
 ## What it does
 
-- **Search and play** the whole YouTube Music catalogue, with results as you
-  type and the next track warmed before you click it
-- **Download** any track with embedded artwork, tags and lyrics, in MP3, FLAC,
-  OGG, Opus or M4A
-- **Synced lyrics** in a side panel that follows the song, with an editor for
-  writing and timing lyrics that do not exist yet
-- **Sign in with Google** for your own YouTube Music home feed, liked songs
-  and playlists
-- **Your library** on disk, organised how you choose, searchable and playable
-  offline
-- **Picks up where you left off**: the queue and the track you were on come
-  back on the next launch
-- **Stays out of the way**: closes to the tray and keeps playing, remembers
-  its window, and updates itself from GitHub releases
+Search the YouTube Music catalogue and play anything in about a third of a
+second. Results come in as you type.
+
+Download whatever you want to keep. MP3, FLAC, OGG, Opus or M4A, tagged
+properly, with cover art embedded and an `.lrc` beside it.
+
+Lyrics scroll in a side panel and follow the song. If a track has none, there
+is an editor for writing them and tapping the timing in, and what you write
+goes out to everyone else playing that song.
+
+Sign in with Google and you get your own home feed, liked songs and playlists.
+
+It picks up where you left off. Close it and the queue and the track you were
+on come back next launch, paused at the second you stopped.
+
+Closing the window keeps the music going. It drops to the tray instead of
+quitting.
 
 ## Install
 
-Download the latest `Dannify-Setup-x.y.z.exe` from
-[Releases](https://github.com/DANIELMWENDWA9451/dannify-releases/releases)
-and run it. Windows 10 or 11.
+Installers are on the [downloads
+page](https://github.com/DANIELMWENDWA9451/dannify-releases/releases).
 
-The app checks for new releases on its own and offers to restart into them.
+## Building it
 
-## Building from source
-
-Requires Python 3.14, Node 20+, and Inno Setup 6 for the installer.
+You need Python 3.14, Node 20 or newer, and Inno Setup 6 if you want the
+installer.
 
 ```powershell
 cd Backend
@@ -45,37 +48,56 @@ cd ..
 pwsh packaging\build.ps1
 ```
 
-The result is `Backend\dist\Dannify\` (the app folder) and
+That leaves you `Backend\dist\Dannify\` and
 `packaging\out\Dannify-Setup-<version>.exe`.
 
-Two redistributables are not in this repository because they are binaries, not
-source: a media encoder at `packaging\media\dnfmedia.exe` and a JavaScript
-engine at `packaging\jsruntime\dnfjs.exe`. See `packaging\config\README.md`.
+Two binaries are not in the repo because they are redistributables, not
+source: the media encoder at `packaging\media\dnfmedia.exe` and the JS engine
+at `packaging\jsruntime\dnfjs.exe`. Notes in `packaging\config\README.md`.
 
-## Running it in development
+## Working on it
 
 ```powershell
 cd Backend
 .\venv\Scripts\python.exe desktop.py
 ```
 
-Useful environment variables:
+Environment variables worth knowing:
 
-| Variable | Effect |
+| Variable | What it does |
 | --- | --- |
-| `DANNIFY_INSTANCE` | Suffixes the single-instance lock, so a second copy can run |
-| `DANNIFY_DATA_DIR` | Where settings, caches and the WebView profile live |
-| `DANNIFY_DEVTOOLS_PORT` | Opens a remote debugging port (source builds only) |
-| `DANNIFY_LOG_LEVEL` | `debug` for the full picture |
-| `DANNIFY_UPDATE_REPO` | Point the updater at a different `owner/name` |
+| `DANNIFY_INSTANCE` | Suffixes the single-instance lock so a second copy can run |
+| `DANNIFY_DATA_DIR` | Settings, caches and the WebView profile |
+| `DANNIFY_DEVTOOLS_PORT` | Remote debugging port. Source builds only |
+| `DANNIFY_LOG_LEVEL` | `debug` when something is wrong |
+| `DANNIFY_UPDATE_REPO` | Check a different `owner/name` for updates |
 
-## Configuration
+A second copy needs its own `DANNIFY_DATA_DIR`. WebView2 will not open the
+same profile folder twice with different options, and you get a dead window
+instead of a useful error.
 
-`packaging/config/` holds the settings baked into a release: which repository
-to check for updates (a public, releases-only repository, so the app can
-check without credentials), and the donation details. Both ship with empty or
-placeholder values; fill them in before building a release of your own.
+## A note on how it plays
 
-## License
+Streams resolve by talking to YouTube's app clients directly rather than going
+through a general-purpose extractor. Those clients hand back a plain URL, so
+there is no player script to download and no JavaScript challenge to solve.
+Roughly 350 ms instead of fifteen seconds. yt-dlp is still there as a fallback
+for the tracks those clients refuse.
 
-See [LICENSE](Backend/LICENSE).
+The client identity strings are what make this work, and Google rotates them
+every few months. They live in `Backend/dannify/clients.json` so a rotation is
+a config fix, not a rebuild.
+
+## Releases
+
+Version lives in three files: `Backend/dannify/__init__.py`,
+`Backend/version_info.txt` and `packaging/dannify.iss`. Bump all three, build,
+then attach the installer to a release on the downloads repo.
+
+## Licence
+
+[LICENSE](Backend/LICENSE).
+
+---
+
+Daniel Mwendwa
