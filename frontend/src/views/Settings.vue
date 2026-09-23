@@ -148,19 +148,6 @@
             <option v-for="l in locales" :key="l.code" :value="l.code">{{ l.name }}</option>
           </select>
         </div>
-        <label v-if="desktop.isDesktop" class="row">
-          <Icon icon="ph:app-window" class="row-icon" />
-          <div class="row-text">
-            <p class="row-label">{{ t('settings.nativeTitleBar') }}</p>
-            <p class="row-hint">{{ t('settings.nativeTitleBarHint') }}</p>
-          </div>
-          <input
-            type="checkbox"
-            class="switch"
-            :checked="nativeFramePref"
-            @change="setNativeFrame($event.target.checked)"
-          />
-        </label>
       </section>
 
       <!-- Windows integration -->
@@ -468,7 +455,6 @@ import { useUi } from '/src/model/ui'
 import { usePlayer } from '/src/model/player'
 import { useAccount } from '/src/model/account'
 import { useUpdates } from '/src/model/updates'
-import { promptRestart } from '/src/model/restart'
 import { desktop } from '/src/desktop/bridge'
 import { toast } from '/src/model/toast'
 import { useI18n } from '/src/i18n'
@@ -554,8 +540,7 @@ async function changeFolder() {
   if (path) toast(t('settings.folderChanged'), { tone: 'success' })
 }
 
-// Title-bar style and tray behaviour live in the native shell's config.
-const nativeFramePref = ref(false)
+// Tray behaviour lives in the native shell's config.
 const tray = reactive({ closeToTray: false, minimizeToTray: false })
 
 onMounted(async () => {
@@ -564,16 +549,9 @@ onMounted(async () => {
     .catch(() => {})
   if (!desktop.isDesktop) return
   await desktop.whenReady()
-  nativeFramePref.value = !!desktop.state.nativeFramePref
   tray.closeToTray = !!desktop.state.closeToTray
   tray.minimizeToTray = !!desktop.state.minimizeToTray
 })
-
-async function setNativeFrame(on) {
-  nativeFramePref.value = on
-  await desktop.setNativeFrame(on)
-  promptRestart(t('settings.restartTitleBar'))
-}
 
 async function setTray(patch) {
   Object.assign(tray, patch)
