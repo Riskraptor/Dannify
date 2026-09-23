@@ -10,7 +10,9 @@
       <span class="wc-glyph">&#xE921;</span>
     </button>
     <button
+      ref="maxBtn"
       class="wc-btn"
+      :class="{ 'is-snap-hover': win.maxHover }"
       :title="win.maximized ? t('window.restore') : t('window.maximize')"
       :aria-label="win.maximized ? t('window.restore') : t('window.maximize')"
       tabindex="-1"
@@ -31,11 +33,23 @@
 </template>
 
 <script setup>
-import { desktop } from '/src/desktop/bridge'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { bindMaxButton, desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
 
 const { t } = useI18n()
 const win = desktop.state
+
+// Hovering this button has to open Windows' snap layouts, and it can only do
+// that if the shell knows where the button is. Once it does, Windows owns the
+// mouse there: the click arrives through the bridge instead of @click, and
+// the hover state comes back as win.maxHover.
+const maxBtn = ref(null)
+let release = () => {}
+onMounted(() => {
+  release = bindMaxButton(maxBtn.value)
+})
+onBeforeUnmount(() => release())
 </script>
 
 <style scoped>
@@ -58,7 +72,8 @@ const win = desktop.state
   font-size: 10px;
   line-height: 1;
 }
-.wc-btn:hover {
+.wc-btn:hover,
+.wc-btn.is-snap-hover {
   background: rgb(var(--c-tint) / 0.08);
 }
 .wc-btn:active {
@@ -73,7 +88,7 @@ const win = desktop.state
   background: #c83c31;
   color: rgb(255 255 255 / 0.8);
 }
-.wc.is-inactive .wc-btn:not(:hover) {
+.wc.is-inactive .wc-btn:not(:hover):not(.is-snap-hover) {
   color: rgb(var(--c-fg) / 0.4);
 }
 </style>

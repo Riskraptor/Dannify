@@ -260,8 +260,6 @@ export default {
     windowsSection: 'Windows',
     closeToTray: 'Keep playing when I close the window',
     closeToTrayHint: 'Closing hides Dannify in the notification area instead of quitting.',
-    minimizeToTray: 'Minimizing also hides Dannify',
-    minimizeToTrayHint: 'Off: minimizing leaves a taskbar button, like any other app. On: minimizing hides Dannify completely, the same as closing it.',
     restartTitleBar: 'The title-bar style changes when Dannify restarts.',
     autoplayRadio: 'Keep the music going',
     autoplayRadioHint:

@@ -1,4 +1,4 @@
-import { reactive, readonly } from 'vue'
+import { reactive, readonly, watch } from 'vue'
 
 // ---------------------------------------------------------------------------
 // Bridge to the native desktop shell (Backend/desktop.py → pywebview js_api).
@@ -51,12 +51,19 @@ const state = reactive({
   nativeFrame: false,
   nativeFramePref: false, // saved preference (applies on next launch)
   closeToTray: false,
-  minimizeToTray: false,
+  // Windows takes the mouse over the maximize button so it can offer the
+  // snap layouts, which means the button never gets :hover. It tells us
+  // instead; see bindMaxButton below.
+  maxHover: false,
 })
 
 // Python pushes window-state changes through this global (evaluate_js).
 window.__dannifyWindowState = (patch) => {
   if (patch && typeof patch === 'object') Object.assign(state, patch)
+}
+
+window.__dannifyMaxHover = (on) => {
+  state.maxHover = !!on
 }
 
 let readyPromise = null
@@ -126,10 +133,14 @@ const toggleMaximize = () => call('win_toggle_maximize')
 const close = () => call('win_close')
 const toggleFullscreen = () => call('win_toggle_fullscreen')
 const setMini = (on) => call('win_set_mini', !!on)
+// Height of the compact player, in CSS pixels: it unfolds when the
+// lyrics or the queue are shown inside it.
+const setMiniSize = (height) => call('win_set_mini_size', Number(height) || 0)
 const setOnTop = (on) => call('win_set_on_top', !!on)
 const setZoom = (factor) => call('win_set_zoom', Number(factor) || 1)
 const setNativeFrame = (on) => call('win_set_native_frame', !!on)
 const showSystemMenu = () => call('win_system_menu')
+const setMaxButton = (rect) => call('win_set_max_button', rect || null)
 const setTray = (options) => call('tray_set', options)
 const setTrayLabels = (labels) => call('tray_labels', labels)
 const quit = () => call('app_quit')
@@ -215,6 +226,67 @@ export function bindWindowDrag(el, { systemMenu = true } = {}) {
   }
 }
 
+/**
+ * Tell Windows where the maximize button is, so hovering it opens the snap
+ * layout flyout like every other Windows 11 window.
+ *
+ * The button is ours, drawn in the page, so the shell would otherwise have
+ * no idea it exists. Reporting its rectangle is the whole handshake: from
+ * then on Windows treats that patch as part of the frame, and the hover and
+ * the click come back to us through the bridge.
+ */
+export function bindMaxButton(el) {
+  if (!isDesktop || !el) return () => {}
+  let last = ''
+  let frame = 0
+
+  const report = () => {
+    frame = 0
+    const box = el.getBoundingClientRect()
+    if (!box.width || !box.height || state.fullscreen || state.mini || state.nativeFrame) {
+      if (last !== 'none') {
+        last = 'none'
+        setMaxButton(null)
+      }
+      return
+    }
+    // Device pixels: devicePixelRatio already carries both the monitor's
+    // scaling and whatever zoom the user picked.
+    const dpr = window.devicePixelRatio || 1
+    const rect = {
+      left: Math.round(box.left * dpr),
+      top: Math.round(box.top * dpr),
+      right: Math.round(box.right * dpr),
+      bottom: Math.round(box.bottom * dpr),
+    }
+    const key = `${rect.left},${rect.top},${rect.right},${rect.bottom}`
+    if (key === last) return
+    last = key
+    setMaxButton(rect)
+  }
+
+  const schedule = () => {
+    if (!frame) frame = requestAnimationFrame(report)
+  }
+
+  const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null
+  if (observer) observer.observe(el)
+  window.addEventListener('resize', schedule)
+  const stopWatch = watch(
+    () => [state.maximized, state.fullscreen, state.mini, state.nativeFrame],
+    schedule
+  )
+  schedule()
+
+  return () => {
+    if (frame) cancelAnimationFrame(frame)
+    if (observer) observer.disconnect()
+    window.removeEventListener('resize', schedule)
+    stopWatch()
+    setMaxButton(null)
+  }
+}
+
 /** Begin a native resize from one of the invisible edge handles. */
 export function beginResize(e, edge) {
   if (!isDesktop || e.button !== 0) return
@@ -231,10 +303,12 @@ export const desktop = {
   close,
   toggleFullscreen,
   setMini,
+  setMiniSize,
   setOnTop,
   setZoom,
   setNativeFrame,
   showSystemMenu,
+  setMaxButton,
   setTray,
   setTrayLabels,
   quit,

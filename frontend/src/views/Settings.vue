@@ -166,19 +166,6 @@
             @change="setTray({ closeToTray: $event.target.checked })"
           />
         </label>
-        <label class="row">
-          <Icon icon="ph:arrow-line-down" class="row-icon" />
-          <div class="row-text">
-            <p class="row-label">{{ t('settings.minimizeToTray') }}</p>
-            <p class="row-hint">{{ t('settings.minimizeToTrayHint') }}</p>
-          </div>
-          <input
-            type="checkbox"
-            class="switch"
-            :checked="tray.minimizeToTray"
-            @change="setTray({ minimizeToTray: $event.target.checked })"
-          />
-        </label>
       </section>
 
       <!-- Playback -->
@@ -541,7 +528,7 @@ async function changeFolder() {
 }
 
 // Tray behaviour lives in the native shell's config.
-const tray = reactive({ closeToTray: false, minimizeToTray: false })
+const tray = reactive({ closeToTray: false })
 
 onMounted(async () => {
   API.getSupportConfig()
@@ -550,7 +537,6 @@ onMounted(async () => {
   if (!desktop.isDesktop) return
   await desktop.whenReady()
   tray.closeToTray = !!desktop.state.closeToTray
-  tray.minimizeToTray = !!desktop.state.minimizeToTray
 })
 
 async function setTray(patch) {

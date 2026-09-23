@@ -105,6 +105,8 @@ DEFAULT_W, DEFAULT_H = 1320, 860
 # Below this the desktop layout would collapse into the phone layout.
 MIN_W, MIN_H = 760, 540
 MINI_W, MINI_H = 420, 124
+# The compact player can drop a lyrics or queue panel below the bar.
+MINI_MAX_H = 560
 
 _THEME_BG = {'dark': '#08080a', 'light': '#e7e9ed'}
 
@@ -214,6 +216,14 @@ if _WIN:
     class POINT(ctypes.Structure):
         _fields_ = [('x', ctypes.c_long), ('y', ctypes.c_long)]
 
+    class TRACKMOUSEEVENT(ctypes.Structure):
+        _fields_ = [
+            ('cbSize', wintypes.DWORD),
+            ('dwFlags', wintypes.DWORD),
+            ('hwndTrack', HWND),
+            ('dwHoverTime', wintypes.DWORD),
+        ]
+
     class MONITORINFO(ctypes.Structure):
         _fields_ = [
             ('cbSize', wintypes.DWORD),
@@ -249,6 +259,8 @@ if _WIN:
            wintypes.HMENU, UINT, ctypes.c_int, ctypes.c_int, HWND, ctypes.c_void_p)
     _proto(user32.DestroyMenu, wintypes.BOOL, wintypes.HMENU)
     _proto(user32.GetCursorPos, wintypes.BOOL, ctypes.POINTER(POINT))
+    _proto(user32.ScreenToClient, wintypes.BOOL, HWND, ctypes.POINTER(POINT))
+    _proto(user32.TrackMouseEvent, wintypes.BOOL, ctypes.POINTER(TRACKMOUSEEVENT))
     _proto(user32.GetAsyncKeyState, ctypes.c_short, ctypes.c_int)
     _proto(user32.GetSystemMetrics, ctypes.c_int, ctypes.c_int)
     _proto(user32.GetWindowRect, wintypes.BOOL, HWND, ctypes.POINTER(RECT))
@@ -302,6 +314,19 @@ SC_MAXIMIZE = 0xF030
 SC_CLOSE = 0xF060
 SC_RESTORE = 0xF120
 HTCAPTION = 2
+# Returning this from WM_NCHITTEST over the maximize button is what makes
+# Windows 11 offer its snap layouts on hover. A custom frame that never
+# reports it gets no flyout, which is why the app felt unlike every other
+# window: the shortcut people expect simply was not there.
+HTMAXBUTTON = 9
+WM_NCHITTEST = 0x0084
+WM_NCMOUSEMOVE = 0x00A0
+WM_NCMOUSELEAVE = 0x02A2
+WM_NCLBUTTONDOWN = 0x00A1
+WM_NCLBUTTONUP = 0x00A2
+HTCLIENT = 1
+TME_LEAVE = 0x0002
+TME_NONCLIENT = 0x0010
 _HT_EDGES = {
     'left': 10,
     'right': 11,
@@ -363,6 +388,22 @@ def _frame_thickness(hwnd) -> tuple[int, int]:
         return 8, 8
 
 
+def _loword(value: int) -> int:
+    """Low 16 bits of an LPARAM as a signed coordinate.
+
+    Screen coordinates go negative on a monitor left of or above the
+    primary one, and reading them unsigned puts the cursor 65000 pixels
+    away from wherever it actually is.
+    """
+    word = value & 0xFFFF
+    return word - 0x10000 if word & 0x8000 else word
+
+
+def _hiword(value: int) -> int:
+    word = (value >> 16) & 0xFFFF
+    return word - 0x10000 if word & 0x8000 else word
+
+
 def _work_area_for(hwnd) -> tuple[int, int, int, int]:
     """(left, top, right, bottom) of the work area of the window's monitor."""
     try:
@@ -388,14 +429,27 @@ def _work_area_for(hwnd) -> tuple[int, int, int, int]:
 # while the left/right/bottom resize borders stay native (and invisible).
 # ---------------------------------------------------------------------------
 class _CustomFrame:
-    def __init__(self, hwnd: int, on_command=None, on_taskbar_created=None):
+    def __init__(
+        self,
+        hwnd: int,
+        on_command=None,
+        on_taskbar_created=None,
+        on_maximize=None,
+        on_max_hover=None,
+    ):
         self.hwnd = hwnd
         self.installed = False
         self._on_command = on_command
         self._on_taskbar_created = on_taskbar_created
+        self._on_maximize = on_maximize
+        self._on_max_hover = on_max_hover
         self._taskbar_msg = 0
         self._proc = None
         self._comctl = None
+        # Where the page draws its maximize button, in device pixels relative
+        # to the client area. None until the interface reports it.
+        self._max_rect: tuple[int, int, int, int] | None = None
+        self._max_hover = False
 
     def install(self) -> bool:
         """Must run on the window's UI thread."""
@@ -414,6 +468,21 @@ class _CustomFrame:
                 try:
                     if msg == WM_NCCALCSIZE and wparam:
                         return self._nccalcsize(hwnd, msg, wparam, lparam)
+                    if msg == WM_NCHITTEST:
+                        return self._hittest(hwnd, msg, wparam, lparam)
+                    # Having told Windows the button is part of the frame, we
+                    # own what happens there: the page never sees the mouse.
+                    if msg == WM_NCMOUSEMOVE and wparam == HTMAXBUTTON:
+                        self._set_hover(True)
+                        return 0
+                    if msg in (WM_NCMOUSEMOVE, WM_NCMOUSELEAVE):
+                        self._set_hover(False)
+                    if msg == WM_NCLBUTTONDOWN and wparam == HTMAXBUTTON:
+                        return 0
+                    if msg == WM_NCLBUTTONUP and wparam == HTMAXBUTTON:
+                        if self._on_maximize:
+                            self._on_maximize()
+                        return 0
                     if msg == WM_COMMAND and (wparam >> 16) & 0xFFFF == THBN_CLICKED:
                         if self._on_command:
                             self._on_command(wparam & 0xFFFF)
@@ -465,6 +534,60 @@ class _CustomFrame:
             # width; keep the top of our UI on-screen.
             rect.top += _frame_thickness(hwnd)[1]
         return 0
+
+    # --- Windows 11 snap layouts -------------------------------------------
+    # The maximize button is drawn by the page, so as far as Windows is
+    # concerned this window has no maximize button and the hover flyout with
+    # the snap layouts never appears. That flyout is how a lot of people put
+    # two windows side by side, and its absence is exactly what made the app
+    # feel unlike everything else on the desktop.
+    #
+    # Getting it back is one message: report HTMAXBUTTON from WM_NCHITTEST
+    # over the rectangle the page tells us about. The shell does the rest,
+    # including the flyout's timing and its keyboard handling. The cost is
+    # that Windows then treats that rectangle as frame, so the hover state
+    # and the click have to be handed back to the page by hand.
+
+    def set_max_button(self, rect: tuple[int, int, int, int] | None) -> None:
+        self._max_rect = rect
+        if rect is None:
+            self._set_hover(False)
+
+    def _hittest(self, hwnd, msg, wparam, lparam):  # noqa: ANN001
+        where = self._comctl.DefSubclassProc(hwnd, msg, wparam, lparam)
+        # Only ever claim ordinary client space: the invisible resize borders
+        # win, so dragging the top edge above the button still resizes.
+        if where != HTCLIENT or not self._max_rect:
+            return where
+        left, top, right, bottom = self._max_rect
+        pt = POINT(_loword(lparam), _hiword(lparam))
+        if not user32.ScreenToClient(hwnd, ctypes.byref(pt)):
+            return where
+        if left <= pt.x < right and top <= pt.y < bottom:
+            return HTMAXBUTTON
+        return where
+
+    def _set_hover(self, on: bool) -> None:
+        if on == self._max_hover:
+            return
+        self._max_hover = on
+        if on:
+            # Nothing else asks for it, and without it the mouse leaving the
+            # button never gets reported, so it stays lit forever.
+            self._track_leave()
+        if self._on_max_hover:
+            self._on_max_hover(on)
+
+    def _track_leave(self) -> None:
+        try:
+            event = TRACKMOUSEEVENT()
+            event.cbSize = ctypes.sizeof(TRACKMOUSEEVENT)
+            event.dwFlags = TME_LEAVE | TME_NONCLIENT
+            event.hwndTrack = self.hwnd
+            event.dwHoverTime = 0
+            user32.TrackMouseEvent(ctypes.byref(event))
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -979,7 +1102,13 @@ class DesktopApi:
         # 'get out of my way', not 'stop the music'. Settings can turn
         # it off, and that choice is remembered.
         self._close_to_tray = bool(prefs.get('close_to_tray', True))
-        self._minimize_to_tray = bool(prefs.get('minimize_to_tray', False))
+        # Minimising minimises. The close button is what sends the app to
+        # the tray, and a switch that made minimise do the same thing just
+        # meant people turned it on once and then could not work out why
+        # their window kept disappearing. The switch is gone; this clears it
+        # for anyone who had it on.
+        if prefs.get('minimize_to_tray'):
+            _write_prefs({'minimize_to_tray': False})
         self._hidden = False
         # Set while the user is genuinely quitting, so close-to-tray steps aside.
         self._quitting = False
@@ -1006,12 +1135,14 @@ class DesktopApi:
             return
         self._taskbar = _Taskbar(self._hwnd)
         self._tray = _Tray(self)
-        if self._close_to_tray or self._minimize_to_tray:
+        if self._close_to_tray:
             self._tray.install()
         self._frame = _CustomFrame(
             self._hwnd,
             on_command=self._on_thumb_button,
             on_taskbar_created=self._on_taskbar_created,
+            on_maximize=self.win_toggle_maximize,
+            on_max_hover=self._on_max_hover,
         )
         if self._native_frame_pref:
             # Keep the Windows caption; the subclass is still needed for the
@@ -1078,6 +1209,16 @@ class DesktopApi:
         if cmd:
             self._media(cmd)
 
+    def _on_max_hover(self, on: bool) -> None:
+        """Windows owns the mouse over the maximize button; the page does not
+        get :hover there, so tell it to light the button itself."""
+        flag = 'true' if on else 'false'
+        threading.Thread(
+            target=self._eval,
+            args=(f'window.__dannifyMaxHover && window.__dannifyMaxHover({flag})',),
+            daemon=True,
+        ).start()
+
     def _on_taskbar_created(self) -> None:
         if self._taskbar is not None:
             try:
@@ -1106,7 +1247,6 @@ class DesktopApi:
             'nativeFrame': self._native_frame,
             'nativeFramePref': self._native_frame_pref,
             'closeToTray': self._close_to_tray,
-            'minimizeToTray': self._minimize_to_tray,
         }
 
     def win_minimize(self) -> None:
@@ -1119,6 +1259,29 @@ class DesktopApi:
 
     def win_close(self) -> None:
         self._post(WM_SYSCOMMAND, SC_CLOSE)
+
+    def win_set_max_button(self, rect: dict | None = None) -> None:
+        """Where the page draws its maximize button, in device pixels.
+
+        Windows needs to know this to offer the snap layouts on hover. Pass
+        nothing to take the claim back, which the page does whenever the
+        button is not there to be hovered.
+        """
+        if self._frame is None:
+            return
+        try:
+            if not rect or self._fullscreen or self._mini:
+                self._frame.set_max_button(None)
+                return
+            box = (
+                int(rect['left']),
+                int(rect['top']),
+                int(rect['right']),
+                int(rect['bottom']),
+            )
+        except (KeyError, TypeError, ValueError):
+            return
+        self._frame.set_max_button(box if box[2] > box[0] and box[3] > box[1] else None)
 
     def win_start_drag(self) -> None:
         """Hand the drag to Windows' move loop (Aero Snap, drag-to-restore)."""
@@ -1181,6 +1344,8 @@ class DesktopApi:
         if self._window is None or self._mini:
             return self.win_state()
         self._fullscreen = not self._fullscreen
+        if self._fullscreen:
+            self.win_set_max_button(None)  # no caption buttons to snap from
         try:
             self._window.toggle_fullscreen()
         except Exception as exc:
@@ -1207,6 +1372,8 @@ class DesktopApi:
             return self.win_state()
         if on and self._fullscreen:
             self.win_toggle_fullscreen()
+        if on:
+            self.win_set_max_button(None)
         from System.Drawing import Rectangle, Size
         from System.Windows.Forms import FormWindowState
 
@@ -1246,7 +1413,14 @@ class DesktopApi:
             def leave():
                 rect = RECT()
                 if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-                    _write_prefs({'mini_pos': [round(rect.left / scale), round(rect.top / scale)]})
+                    # Remember where the *bar* was, not where the window
+                    # happens to end. With a panel open the window has grown
+                    # upwards, and saving that top would walk the compact
+                    # player a little further up the screen every time.
+                    top = rect.bottom - (int(MINI_H * scale) + fy)
+                    _write_prefs(
+                        {'mini_pos': [round(rect.left / scale), round(top / scale)]}
+                    )
                 form.TopMost = False
                 form.MinimumSize = Size(int(MIN_W * scale), int(MIN_H * scale))
                 if restore:
@@ -1264,6 +1438,40 @@ class DesktopApi:
             self._ui(leave, wait=True)
         self._push_state()
         return self.win_state()
+
+    def win_set_mini_size(self, height: float) -> None:
+        """Grow or shrink the compact player when its panel opens or closes.
+
+        The bottom edge stays put, so the window unfolds upwards: it is
+        usually parked in the bottom-right corner, and growing downwards
+        would push it off the screen.
+        """
+        if not self._mini or self._form is None or not self._hwnd:
+            return
+        from System.Drawing import Rectangle, Size
+
+        form = self._form
+        hwnd = self._hwnd
+        scale = _window_scale(hwnd)
+        fy = _frame_thickness(hwnd)[1]
+        want = int(max(MINI_H, min(float(height or MINI_H), MINI_MAX_H)) * scale) + fy
+
+        def resize():
+            rect = RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return
+            width = rect.right - rect.left
+            _, work_top, _, work_bottom = _work_area_for(hwnd)
+            y = rect.bottom - want
+            if y < work_top:
+                # Not enough room above: fall back to growing downwards.
+                y = min(rect.top, max(work_top, work_bottom - want))
+            # The minimum has to come off first or the shrink is ignored.
+            form.MinimumSize = Size(0, 0)
+            form.Bounds = Rectangle(rect.left, y, width, want)
+            form.MinimumSize = Size(width, want)
+
+        self._ui(resize, wait=True)
 
     def win_set_zoom(self, factor: float) -> None:
         try:
@@ -1283,17 +1491,14 @@ class DesktopApi:
 
     # --- tray ---------------------------------------------------------------
     def tray_set(self, options: dict) -> dict:
-        """Enable/disable close-to-tray and minimize-to-tray."""
+        """Enable or disable close-to-tray."""
         if not isinstance(options, dict):
             return self.win_state()
         if 'closeToTray' in options:
             self._close_to_tray = bool(options['closeToTray'])
             _write_prefs({'close_to_tray': self._close_to_tray})
-        if 'minimizeToTray' in options:
-            self._minimize_to_tray = bool(options['minimizeToTray'])
-            _write_prefs({'minimize_to_tray': self._minimize_to_tray})
         if self._tray is not None:
-            wanted = self._close_to_tray or self._minimize_to_tray
+            wanted = self._close_to_tray
             if wanted and not self._tray.available:
                 self._ui(self._tray.install, wait=True)
             elif not wanted and self._tray.available and not self._hidden:
@@ -1334,7 +1539,7 @@ class DesktopApi:
             form.Activate()
             if self._hwnd:
                 user32.SetForegroundWindow(self._hwnd)
-            if self._tray is not None and not (self._close_to_tray or self._minimize_to_tray):
+            if self._tray is not None and not self._close_to_tray:
                 self._tray.dispose()
 
         self._ui(restore)
@@ -2860,12 +3065,6 @@ def main() -> None:
         api._push_state()
 
     def _on_minimized() -> None:
-        # pywebview dispatches this event on a throwaway thread with no
-        # message pump, and a NotifyIcon built there never receives its
-        # taskbar callbacks: the window would vanish behind a dead tray
-        # icon. Marshal onto the real UI thread first.
-        if api._minimize_to_tray and not api._mini and not api._quitting:
-            api._ui(api._hide_to_tray, wait=True)
         api._push_state()
 
     def _on_closing():

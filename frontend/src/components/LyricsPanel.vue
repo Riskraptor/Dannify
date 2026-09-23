@@ -23,15 +23,11 @@
         :key="idx"
         :ref="(el) => setLineRef(el, idx)"
         class="lyric-line"
-        :class="{
-          active: idx === active,
-          past: idx < active,
-          near: Math.abs(idx - active) === 1,
-        }"
-        :style="idx === active ? { '--fill': `${fill * 100}%` } : null"
-        :data-time="stamp(line.time)"
+        :class="{ active: idx === active, past: idx < active }"
+        :style="lineStyle(idx)"
         @click="player.seekToLyric(idx)"
       >
+        <span class="lyric-stamp" aria-hidden="true">{{ stamp(line.time) }}</span>
         <span class="lyric-text">{{ line.text || '♪' }}</span>
       </p>
       <div class="lp-spacer-bottom" />
@@ -156,6 +152,17 @@ const fill = computed(() => {
   const at = player.currentTime.value - offsetVal.value - start
   return Math.max(0, Math.min(1, at / span))
 })
+
+// Depth of field. Every line carries how far it is from the one playing, and
+// the stylesheet turns that into blur, dimming and scale, so attention falls
+// on the current line the way it does on a stage: one thing lit, everything
+// else still there. Four steps is as far as it goes; past that the lines are
+// only a texture and grading them further costs paint for nothing.
+function lineStyle(idx) {
+  const distance = Math.min(4, Math.abs(idx - active.value))
+  if (idx !== active.value) return { '--d': distance }
+  return { '--d': 0, '--fill': `${fill.value * 100}%` }
+}
 
 function stamp(seconds) {
   const total = Math.max(0, Math.floor(seconds || 0))
@@ -338,32 +345,39 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
 }
 
 .lyric-line {
+  --d: 4;
   position: relative;
   font-family: var(--font-display, theme('fontFamily.display'));
-  font-size: 1.45rem;
-  line-height: 1.32;
+  font-size: 1.4rem;
+  line-height: 1.34;
   font-weight: 700;
   letter-spacing: -0.01em;
-  padding: 0.3rem 0;
-  color: rgb(var(--c-fg) / 0.3);
+  padding: 0.3rem 0.55rem;
+  margin: 0 -0.55rem;
+  border-radius: 10px;
+  color: rgb(var(--c-fg) / 0.55);
   cursor: pointer;
   transform-origin: left center;
+  /* The graded part: one step away is almost sharp, four steps is scenery. */
+  opacity: calc(1 - var(--d) * 0.17);
+  filter: blur(calc(var(--d) * 0.5px));
+  transform: scale(calc(1 - var(--d) * 0.008));
   transition:
-    color 0.3s ease,
-    opacity 0.3s ease,
-    filter 0.3s ease,
-    transform 0.3s var(--ease-out);
+    color 0.32s ease,
+    opacity 0.32s var(--ease-out),
+    filter 0.32s var(--ease-out),
+    font-size 0.32s var(--ease-out),
+    transform 0.32s var(--ease-out);
 }
-/* Distant lines recede: the eye lands on the line that is playing. */
-.lyric-line:not(.active):not(.near) {
-  opacity: 0.62;
-  filter: blur(0.6px);
-}
+/* Lines already sung recede further than lines still to come: looking back
+   is rarely what you want, and it leaves the road ahead easier to read. */
 .lyric-line.past {
-  color: rgb(var(--c-fg) / 0.22);
+  color: rgb(var(--c-fg) / 0.4);
+  opacity: calc(0.82 - var(--d) * 0.17);
 }
 .lyric-line:hover {
-  color: rgb(var(--c-fg) / 0.65);
+  color: rgb(var(--c-fg) / 0.8);
+  background: rgb(var(--c-tint) / 0.06);
   filter: none;
   opacity: 1;
 }
@@ -372,10 +386,13 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
 .is-large .synced-scroll {
   padding-left: 3.4rem;
 }
-.is-large .lyric-line::before {
-  content: attr(data-time);
+.lyric-stamp {
+  display: none;
+}
+.is-large .lyric-stamp {
+  display: block;
   position: absolute;
-  left: -3.1rem;
+  left: -2.6rem;
   top: 50%;
   transform: translateY(-50%);
   font-family: inherit;
@@ -386,22 +403,47 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
   opacity: 0;
   transition: opacity 0.15s ease;
 }
-.is-large .lyric-line:hover::before {
+.is-large .lyric-line:hover .lyric-stamp {
   opacity: 1;
 }
 
 /* The whole line lights up when it starts, rather than colouring in word by
-   word as it is sung. The sweeping fill drew the eye along the text at the
-   singer's pace and made the panel feel busy; a line that simply arrives is
-   easier to read and easier to sing along to. The timing bar underneath
-   still shows how far through the line playback is, for anyone syncing. */
+   word as it is sung. Word timings are often a little off, and a sweep that
+   runs ahead of the voice is worse than no sweep at all; a line that simply
+   arrives, grows and comes into focus is easier to read and easier to sing
+   along to. The timing bar underneath still shows how far through the line
+   playback is, for anyone syncing. */
 .lyric-line.active {
   color: rgb(var(--c-fg));
-  transform: scale(1.03);
-  text-shadow: 0 0 28px rgb(var(--c-accent) / 0.25);
+  font-size: 1.62rem;
+  opacity: 1;
+  filter: none;
+  transform: scale(1.01);
+  text-shadow: 0 0 30px rgb(var(--c-accent) / 0.22);
+}
+/* A soft pool of light behind the line that is playing. Barely there, but
+   it is what makes the current line findable at a glance in a wall of text. */
+.lyric-line.active::before {
+  content: '';
+  position: absolute;
+  inset: -0.35rem -1.1rem;
+  z-index: -1;
+  border-radius: 16px;
+  background: radial-gradient(
+    120% 100% at 0% 50%,
+    rgb(var(--c-accent) / 0.13),
+    transparent 72%
+  );
+  animation: lyric-glow 0.5s var(--ease-out) both;
+  pointer-events: none;
 }
 .lyric-line.active .lyric-text {
   animation: lyric-land 0.42s var(--ease-out) both;
+}
+@keyframes lyric-glow {
+  from {
+    opacity: 0;
+  }
 }
 /* A hairline under the active line, tracking its progress. Quiet enough to
    ignore, precise enough to sync against. */
@@ -427,12 +469,14 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
 }
 
 .is-large .lyric-line {
-  font-size: clamp(1.7rem, 2.6vw, 2.5rem);
-  line-height: 1.25;
-  padding: 0.45rem 0;
+  font-size: clamp(1.6rem, 2.4vw, 2.3rem);
+  line-height: 1.26;
+  padding: 0.45rem 0.7rem;
+  margin: 0 -0.7rem;
 }
 .is-large .lyric-line.active {
-  text-shadow: 0 0 40px rgb(var(--c-accent) / 0.3);
+  font-size: clamp(1.9rem, 2.9vw, 2.75rem);
+  text-shadow: 0 0 44px rgb(var(--c-accent) / 0.28);
 }
 .is-large .lyric-line.active::after {
   height: 3px;
@@ -444,9 +488,15 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
 @media (prefers-reduced-motion: reduce) {
   .lyric-line {
     transition: none;
-  }
-  .lyric-line:not(.active):not(.near) {
     filter: none;
+    transform: none;
+  }
+  .lyric-line.active {
+    transform: none;
+  }
+  .lyric-line.active::before,
+  .lyric-line.active .lyric-text {
+    animation: none;
   }
 }
 
