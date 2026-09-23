@@ -137,6 +137,8 @@ const restart = () => call('app_restart')
 const installUpdate = (path) => call('app_install_update', String(path || ''))
 // Hand the shell a downloaded installer to apply when the app next closes.
 const stageUpdate = (path) => call('app_stage_update', String(path || ''))
+// A partial update: a folder of replacement files, not an installer.
+const stageDelta = (path) => call('app_stage_delta', String(path || ''))
 
 // --- YouTube Music account --------------------------------------------------
 // The sign-in itself happens in a real Google window opened by the shell;
@@ -239,6 +241,7 @@ export const desktop = {
   restart,
   installUpdate,
   stageUpdate,
+  stageDelta,
   accountSignIn,
   accountClearSession,
   revealInFolder,

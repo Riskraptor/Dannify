@@ -93,6 +93,9 @@ APP_USER_MODEL_ID = 'Dannify.Player'
 # An installer that has been downloaded and is waiting for the app to close.
 # Applied by _apply_staged_update() on the way out.
 _staged_update: Optional[Path] = None
+# Or a folder of replacement files from a partial update, applied the same
+# way but by our own helper rather than by Setup.
+_staged_delta: Optional[Path] = None
 _INSTANCE_FILE = _DATA_DIR / 'instance.json'
 _WINDOW_STATE_FILE = _DATA_DIR / 'window.json'
 _WEBVIEW_STORAGE = _DATA_DIR / 'WebView2'
@@ -1417,9 +1420,29 @@ class DesktopApi:
         logger.info('Update staged for the next exit: {}', path.name)
         return True
 
+    def app_stage_delta(self, folder: str) -> bool:
+        """Hold a folder of replacement files to apply when the app closes.
+
+        Same contract as staging an installer: nothing happens now, the work
+        is done on the way out so no file is in use when it is replaced.
+        """
+
+        global _staged_delta
+        try:
+            path = Path(str(folder or '')).resolve()
+            path.relative_to((_DATA_DIR / 'updates').resolve())
+            if not (path / 'apply.json').is_file():
+                return False
+        except Exception:
+            return False
+        _staged_delta = path
+        logger.info('Partial update staged for the next exit: {}', path.name)
+        return True
+
     def app_clear_staged_update(self) -> bool:
-        global _staged_update
+        global _staged_update, _staged_delta
         _staged_update = None
+        _staged_delta = None
         return True
 
     # --- YouTube Music account ----------------------------------------------
@@ -1927,6 +1950,120 @@ def _wait_for_parent_exit() -> None:
         kernel32.WaitForSingleObject(handle, 20000)
     finally:
         kernel32.CloseHandle(handle)
+
+
+# --- Applying a downloaded update -----------------------------------------
+#
+# An update that only fetched the files that changed arrives as a folder of
+# replacements plus an apply.json describing them. Something has to copy
+# them over the installation, and it cannot be the app itself: a running
+# executable holds its own file open.
+#
+# So the app relaunches itself with --apply-update. That second copy waits
+# for the first to exit, does the copying, and starts the app again. Using
+# our own executable rather than shipping a separate updater means there is
+# no extra binary to sign, to explain, or to go missing. It is a windowed
+# program, so nothing appears on screen while it works.
+
+
+def _apply_update_folder(staging: Path) -> bool:
+    """Copy a staged update over this installation. Runs in the helper."""
+
+    import shutil
+
+    staging = Path(staging)
+    plan_file = staging / 'apply.json'
+    try:
+        plan = json.loads(plan_file.read_text(encoding='utf-8'))
+    except Exception:
+        logger_print('no usable apply.json in', staging)
+        return False
+
+    target = Path(sys.executable).resolve().parent
+    logger_print(f'applying update {plan.get("version", "?")} into {target}')
+
+    # Replace first, delete afterwards: a half-copied install that still has
+    # its old files is recoverable, one missing them is not.
+    copied = 0
+    for rel in sorted(plan.get('files', {})):
+        source = staging / rel
+        if not source.is_file():
+            continue  # unchanged file, was never downloaded
+        dest = target / rel
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists():
+                # A running executable cannot be overwritten, but it can be
+                # renamed out of the way: that includes this very file.
+                stale = dest.with_suffix(dest.suffix + '.old')
+                try:
+                    stale.unlink()
+                except OSError:
+                    pass
+                try:
+                    dest.rename(stale)
+                except OSError:
+                    pass
+            shutil.copy2(source, dest)
+            copied += 1
+        except Exception as exc:
+            logger_print('could not replace', rel, exc)
+            return False
+
+    for rel in plan.get('removed', []):
+        try:
+            gone = (target / rel).resolve()
+            gone.relative_to(target)  # never delete outside the install
+            if gone.is_file():
+                gone.unlink()
+        except Exception:
+            pass
+
+    logger_print(f'update applied: {copied} file(s) replaced')
+    return True
+
+
+def _sweep_old_files(root: Path) -> None:
+    """Remove the .old copies a previous update left behind."""
+
+    try:
+        for stale in Path(root).rglob('*.old'):
+            try:
+                stale.unlink()
+            except OSError:
+                pass  # still locked; the next launch gets it
+    except Exception:
+        pass
+
+
+def _run_update_helper(staging: str) -> int:
+    """The --apply-update entry point."""
+
+    _wait_for_parent_exit()
+    ok = _apply_update_folder(Path(staging))
+    exe = Path(sys.executable).resolve()
+    if ok:
+        try:
+            import shutil
+
+            shutil.rmtree(staging, ignore_errors=True)
+        except Exception:
+            pass
+    # Start the app again either way: a failed update must not leave the
+    # user with nothing running. A bad copy still has the old files, and the
+    # update will simply be offered again.
+    try:
+        import subprocess
+
+        subprocess.Popen(
+            [str(exe)],
+            cwd=str(exe.parent),
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            close_fds=True,
+        )
+    except Exception:
+        logger_print('could not relaunch after the update')
+    return 0 if ok else 1
 
 
 # A name the installer can signal to ask us to shut down. Without this the
@@ -2528,27 +2665,43 @@ def _apply_staged_update() -> None:
     install.
     """
 
+    import subprocess
+
+    # A partial update goes first: it is the cheaper and more common one.
+    if _staged_delta is not None and _WIN:
+        try:
+            exe = Path(sys.executable).resolve()
+            logger.info('Applying partial update from {}', _staged_delta.name)
+            env = dict(os.environ)
+            env['DANNIFY_WAIT_PID'] = str(os.getpid())
+            subprocess.Popen(
+                [str(exe), '--apply-update', str(_staged_delta)],
+                cwd=str(exe.parent),
+                env=env,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                close_fds=True,
+            )
+            return
+        except Exception:
+            logger.opt(exception=True).debug('could not start the update helper')
+
     installer = _staged_update
     if installer is None or not _WIN:
         return
-    import subprocess
 
     try:
         if not installer.is_file():
             return
         logger.info('Applying staged update: {}', installer.name)
-        # Waits for our own process to be gone before starting, so the
-        # installer's single-instance check does not trip over us.
+        # Launched directly. This used to go through `cmd /c ping ... &` to
+        # wait for our own process to exit, which put a console window on
+        # screen for a moment with 127.0.0.1 in it: CREATE_NO_WINDOW is
+        # documented to be ignored when combined with DETACHED_PROCESS, so
+        # the flags never suppressed it. The wait was not needed anyway,
+        # because the installer waits for our mutex itself.
         subprocess.Popen(
-            [
-                'cmd', '/c',
-                f'ping -n 3 127.0.0.1 >nul & '
-                f'"{installer}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART',
-            ],
-            creationflags=(
-                getattr(subprocess, 'CREATE_NO_WINDOW', 0)
-                | getattr(subprocess, 'DETACHED_PROCESS', 0)
-            ),
+            [str(installer), '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'],
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
             close_fds=True,
         )
     except Exception:
@@ -2577,6 +2730,18 @@ def main() -> None:
     if '--quit' in sys.argv[1:]:
         _signal_quit_request()
         sys.exit(0)
+
+    # `--apply-update <dir>` is this same program acting as its own updater:
+    # it waits for the copy that spawned it to exit, replaces the files, and
+    # starts the app again.
+    if '--apply-update' in sys.argv[1:]:
+        where = sys.argv[sys.argv.index('--apply-update') + 1 :]
+        if where:
+            sys.exit(_run_update_helper(where[0]))
+        sys.exit(2)
+
+    # Tidy up whatever the last update renamed out of the way.
+    _sweep_old_files(Path(sys.executable).resolve().parent)
 
     _claim_app_identity()
     if not _acquire_single_instance():

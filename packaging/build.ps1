@@ -18,6 +18,11 @@ $root = Split-Path -Parent $PSScriptRoot
 $frontend = Join-Path $root 'frontend'
 $backend = Join-Path $root 'Backend'
 
+# One source of truth for the version: the package itself.
+$version = (Select-String -Path (Join-Path $backend 'dannify\__init__.py') `
+    -Pattern "__version__\s*=\s*'([^']+)'").Matches[0].Groups[1].Value
+if (-not $version) { throw 'could not read the version from dannify/__init__.py' }
+
 function Step($text) { Write-Host "`n=== $text ===" -ForegroundColor Cyan }
 function Size($path) {
     if (-not (Test-Path $path)) { return 'n/a' }
@@ -58,6 +63,13 @@ if (Test-Path $runtime) {
         }
 }
 Write-Host ("App folder: " + (Size (Join-Path $backend 'dist\Dannify')))
+
+Step 'Update assets'
+# A manifest and a per-file archive, so an update can fetch only what moved
+# instead of the whole installer. See Backend/dannify/delta.py.
+& (Join-Path $backend 'venv\Scripts\python.exe') (Join-Path $PSScriptRoot 'make_update_assets.py') `
+    (Join-Path $backend 'dist\Dannify') $version (Join-Path $PSScriptRoot 'out')
+if ($LASTEXITCODE -ne 0) { throw "update assets failed ($LASTEXITCODE)" }
 
 if ($SkipInstaller) { return }
 
