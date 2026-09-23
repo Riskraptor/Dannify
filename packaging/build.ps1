@@ -1,0 +1,87 @@
+# Dannify release build: frontend -> PyInstaller bundle -> Inno installer.
+#
+#   pwsh packaging\build.ps1              # full build
+#   pwsh packaging\build.ps1 -SkipTests   # skip the frontend test run
+#
+# Output:
+#   Backend\dist\Dannify\            the app folder (what the installer ships)
+#   packaging\out\Dannify-Setup-<version>.exe
+
+[CmdletBinding()]
+param(
+    [switch]$SkipTests,
+    [switch]$SkipInstaller
+)
+
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
+$frontend = Join-Path $root 'frontend'
+$backend = Join-Path $root 'Backend'
+
+function Step($text) { Write-Host "`n=== $text ===" -ForegroundColor Cyan }
+function Size($path) {
+    if (-not (Test-Path $path)) { return 'n/a' }
+    $bytes = (Get-ChildItem $path -Recurse -File | Measure-Object Length -Sum).Sum
+    '{0:N1} MB' -f ($bytes / 1MB)
+}
+
+Step 'Frontend'
+Push-Location $frontend
+try {
+    if (-not $SkipTests) { & npx vitest run }
+    & npx vite build
+} finally { Pop-Location }
+
+Step 'PyInstaller'
+Push-Location $backend
+try {
+    # A stale build/ cache silently keeps removed data files (ffprobe!) around.
+    foreach ($dir in 'build', 'dist') {
+        if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+    }
+    & .\venv\Scripts\python.exe -m PyInstaller --noconfirm --log-level WARN dannify.spec
+    if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed ($LASTEXITCODE)" }
+} finally { Pop-Location }
+
+# Packaging metadata names every third-party library and its exact version,
+# which is the first thing anyone opening the folder would read. Nothing here
+# needs it at runtime: the one library that asks for its own version catches
+# the lookup failing. Dropped after the build rather than excluded in the
+# spec, because PyInstaller's own hooks put it back.
+$runtime = Join-Path $backend 'dist\Dannify\runtime'
+if (Test-Path $runtime) {
+    Get-ChildItem $runtime -Directory |
+        Where-Object { $_.Name -like "*.dist-info" -or $_.Name -like "*.egg-info" } |
+        ForEach-Object {
+            Write-Host ("  pruned " + $_.Name)
+            Remove-Item -Recurse -Force $_.FullName
+        }
+}
+Write-Host ("App folder: " + (Size (Join-Path $backend 'dist\Dannify')))
+
+if ($SkipInstaller) { return }
+
+Step 'Installer'
+$iscc = @(
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+    "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $iscc) {
+    Write-Warning 'Inno Setup 6 not found: skipping the installer.'
+    Write-Warning 'Install it from https://jrsoftware.org/isdl.php and re-run.'
+    return
+}
+
+Push-Location $PSScriptRoot
+try {
+    & $iscc 'dannify.iss'
+    if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
+} finally { Pop-Location }
+
+$setup = Get-ChildItem (Join-Path $PSScriptRoot 'out\Dannify-Setup-*.exe') |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($setup) {
+    Write-Host ("Installer: {0} ({1:N1} MB)" -f $setup.Name, ($setup.Length / 1MB)) -ForegroundColor Green
+}

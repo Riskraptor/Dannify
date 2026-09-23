@@ -1,0 +1,487 @@
+"""YouTube Music account: sign-in, personalized feeds, likes.
+
+Signing in is a real Google login shown in a WebView2 window (see
+``Backend/desktop.py``). We keep the resulting ``youtube.com`` cookies and
+turn them into ytmusicapi's "browser" auth, which unlocks:
+
+* a personalized home feed, liked songs and library playlists,
+* liking / unliking tracks straight from the player,
+* yt-dlp requests that carry the session, which is what keeps YouTube from
+  answering "Sign in to confirm you're not a bot" on downloads.
+
+The ``Authorization`` header is a SAPISIDHASH that ytmusicapi recomputes per
+request from the cookie jar, so nothing here expires on its own: the cookies
+are refreshed whenever the user opens the sign-in window again.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import threading
+import time
+from pathlib import Path
+from typing import Any, Optional
+
+import requests
+from loguru import logger
+from ytmusicapi import YTMusic
+
+ORIGIN = 'https://music.youtube.com'
+USER_AGENT = (
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+)
+# Everything Google's endpoints validate. The jar is sent verbatim.
+_COOKIE_NAMES = (
+    '__Secure-3PAPISID',
+    '__Secure-1PAPISID',
+    'SAPISID',
+    'APISID',
+    'SID',
+    'HSID',
+    'SSID',
+    '__Secure-1PSID',
+    '__Secure-3PSID',
+    '__Secure-1PSIDTS',
+    '__Secure-3PSIDTS',
+    '__Secure-1PSIDCC',
+    '__Secure-3PSIDCC',
+    'SIDCC',
+    'LOGIN_INFO',
+    'PREF',
+    'SOCS',
+    'VISITOR_INFO1_LIVE',
+    'YSC',
+)
+
+
+# ytmusicapi never passes a timeout to requests, so a stalled socket parks a
+# worker thread for as long as the OS keeps the connection open. Every client
+# gets a session that supplies one, which is what makes the per-facet
+# timeouts in explorer.search actually mean something.
+REQUEST_TIMEOUT = 12.0
+
+
+class _TimeoutSession(requests.Session):
+    def request(self, *args, **kwargs):  # noqa: ANN002, ANN003
+        kwargs.setdefault('timeout', REQUEST_TIMEOUT)
+        return super().request(*args, **kwargs)
+
+
+class NotSignedIn(RuntimeError):
+    """Raised when an account-only call is made while signed out."""
+
+
+_lock = threading.Lock()
+_local = threading.local()
+_state: dict[str, Any] = {
+    'cookies': {},
+    'profile': {},
+    'path': None,
+    'gen': 0,  # bumped on sign in/out so thread-local clients rebuild
+    'visitor_id': '',  # shared across clients: saves a round trip each
+    'visitor_gen': -1,
+}
+
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+def init(data_dir: Path) -> None:
+    """Load a previously saved session (called once at startup)."""
+
+    path = Path(data_dir) / 'account.json'
+    _state['path'] = path
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+        cookies = data.get('cookies') or {}
+        if isinstance(cookies, dict) and cookies.get('__Secure-3PAPISID'):
+            _state['cookies'] = cookies
+            _state['profile'] = data.get('profile') or {}
+            _state['gen'] += 1
+            logger.info(
+                'YouTube Music account restored ({})',
+                _state['profile'].get('name') or 'signed in',
+            )
+    except FileNotFoundError:
+        pass
+    except Exception:
+        logger.opt(exception=True).debug('Could not read saved account')
+
+
+def _save() -> None:
+    path = _state.get('path')
+    if not path:
+        return
+    try:
+        if _state['cookies']:
+            tmp = Path(str(path) + '.tmp')
+            tmp.write_text(
+                json.dumps(
+                    {'cookies': _state['cookies'], 'profile': _state['profile']}
+                ),
+                encoding='utf-8',
+            )
+            tmp.replace(path)
+        else:
+            Path(path).unlink(missing_ok=True)
+    except Exception:
+        logger.opt(exception=True).debug('Could not persist account')
+
+
+# ---------------------------------------------------------------------------
+# Auth plumbing
+# ---------------------------------------------------------------------------
+def _sapisid_hash(sapisid: str) -> str:
+    ts = str(int(time.time()))
+    digest = hashlib.sha1(f'{ts} {sapisid} {ORIGIN}'.encode()).hexdigest()
+    return f'SAPISIDHASH {ts}_{digest}'
+
+
+def auth_headers() -> Optional[dict[str, str]]:
+    cookies = _state['cookies']
+    sapisid = cookies.get('__Secure-3PAPISID') or cookies.get('SAPISID')
+    if not sapisid:
+        return None
+    jar = dict(cookies)
+    jar.setdefault('__Secure-3PAPISID', sapisid)
+    jar.setdefault('SOCS', 'CAI')
+    return {
+        'Cookie': '; '.join(f'{k}={v}' for k, v in jar.items()),
+        # ytmusicapi re-signs this on every request; it only has to be present.
+        'Authorization': _sapisid_hash(sapisid),
+        'X-Goog-AuthUser': '0',
+        'origin': ORIGIN,
+        'x-origin': ORIGIN,
+        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Accept-Encoding': 'gzip, deflate',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': USER_AGENT,
+    }
+
+
+def is_signed_in() -> bool:
+    return bool(_state['cookies'].get('__Secure-3PAPISID'))
+
+
+def profile() -> dict[str, Any]:
+    return dict(_state['profile'])
+
+
+def status() -> dict[str, Any]:
+    return {'signed_in': is_signed_in(), 'profile': profile()}
+
+
+def client(require_auth: bool = False) -> YTMusic:
+    """A YTMusic client for the calling thread.
+
+    ytmusicapi mutates its header dict per request, so every worker thread
+    gets its own instance instead of sharing one. The visitor id (normally
+    an extra HTTP round trip per instance) is fetched once and handed to
+    every later client, which is what keeps parallel searches cheap.
+    """
+
+    gen = _state['gen']
+    cached = getattr(_local, 'client', None)
+    if cached is not None and getattr(_local, 'gen', -1) == gen:
+        if not require_auth or getattr(_local, 'authed', False):
+            return cached
+
+    headers = auth_headers()
+    visitor = _state.get('visitor_id') if _state.get('visitor_gen') == gen else None
+    session = _TimeoutSession()
+    if headers:
+        if visitor:
+            headers['X-Goog-Visitor-Id'] = visitor  # skips the lookup entirely
+        instance = YTMusic(auth=headers, requests_session=session)
+        _local.authed = True
+    else:
+        if require_auth:
+            raise NotSignedIn('Sign in with Google to use this feature')
+        instance = YTMusic(requests_session=session)
+        _local.authed = False
+        if visitor:
+            try:
+                from requests.structures import CaseInsensitiveDict
+                from ytmusicapi.helpers import initialize_headers
+
+                seeded = CaseInsensitiveDict(initialize_headers())
+                seeded['X-Goog-Visitor-Id'] = visitor
+                # Pre-fill the cached_property so no visitor-id request runs.
+                instance.__dict__['base_headers'] = seeded
+            except Exception:
+                logger.opt(exception=True).debug('visitor id reuse failed')
+
+    if not visitor:
+        try:
+            found = instance.base_headers.get('X-Goog-Visitor-Id')
+            if found:
+                _state['visitor_id'] = found
+                _state['visitor_gen'] = gen
+        except Exception:
+            logger.opt(exception=True).debug('could not read visitor id')
+
+    _local.client = instance
+    _local.gen = gen
+    return instance
+
+
+def cookie_dict() -> dict[str, str]:
+    return dict(_state['cookies'])
+
+
+def ydl_cookiefile() -> Optional[io.StringIO]:
+    """An in-memory Netscape cookie jar for yt-dlp (None when signed out).
+
+    Passing the signed-in session to yt-dlp is what stops YouTube's
+    "confirm you're not a bot" wall. A fresh stream is required per
+    YoutubeDL instance because yt-dlp writes the jar back on close.
+    """
+
+    cookies = _state['cookies']
+    if not cookies:
+        return None
+    expires = int(time.time()) + 365 * 24 * 3600
+    lines = ['# Netscape HTTP Cookie File', '']
+    for domain in ('.youtube.com', '.google.com'):
+        for name, value in cookies.items():
+            lines.append(f'{domain}\tTRUE\t/\tTRUE\t{expires}\t{name}\t{value}')
+    return io.StringIO('\n'.join(lines) + '\n')
+
+
+# ---------------------------------------------------------------------------
+# Sign in / out
+# ---------------------------------------------------------------------------
+def sign_in(cookies: dict[str, str]) -> dict[str, Any]:
+    """Validate a cookie jar from the login window and store it."""
+
+    keep = {
+        name: value
+        for name, value in (cookies or {}).items()
+        if name in _COOKIE_NAMES and value
+    }
+    if not (keep.get('__Secure-3PAPISID') or keep.get('SAPISID')):
+        raise NotSignedIn('No Google session found: the sign-in was not completed')
+
+    with _lock:
+        previous = _state['cookies']
+        _state['cookies'] = keep
+        _state['gen'] += 1
+    try:
+        info = (
+            YTMusic(auth=auth_headers(), requests_session=_TimeoutSession())
+            .get_account_info()
+            or {}
+        )
+    except Exception as exc:
+        with _lock:
+            _state['cookies'] = previous
+            _state['gen'] += 1
+        logger.opt(exception=True).info('Sign-in validation failed')
+        raise NotSignedIn(f'Could not verify the Google session: {exc}') from exc
+
+    _state['profile'] = {
+        'name': info.get('accountName') or '',
+        'handle': info.get('channelHandle') or '',
+        'photo': info.get('accountPhotoUrl') or '',
+    }
+    _save()
+    logger.log('SUCCESS', 'Signed in to YouTube Music as {}', _state['profile']['name'])
+    return status()
+
+
+def sign_out() -> dict[str, Any]:
+    with _lock:
+        _state['cookies'] = {}
+        _state['profile'] = {}
+        _state['gen'] += 1
+    _save()
+    logger.info('Signed out of YouTube Music')
+    return status()
+
+
+# ---------------------------------------------------------------------------
+# Normalizers: every item the UI sees uses the same song/card shapes
+# ---------------------------------------------------------------------------
+def _thumb(item: dict[str, Any], size: int = 544) -> str:
+    thumbs = item.get('thumbnails') or []
+    if not thumbs:
+        return ''
+    url = thumbs[-1].get('url', '')
+    return _resize_thumb(url, size)
+
+
+def _resize_thumb(url: str, size: int = 544) -> str:
+    """Ask Google's CDN for exactly the size we render (smaller + faster)."""
+
+    if not url:
+        return url
+    import re
+
+    if '=w' in url and '-h' in url:
+        return re.sub(r'=w\d+-h\d+[^&]*$', f'=w{size}-h{size}-l90-rj', url)
+    if '=s' in url:
+        return re.sub(r'=s\d+[^&]*$', f'=s{size}', url)
+    return url
+
+
+def _artists(item: dict[str, Any]) -> list[dict[str, str]]:
+    out = []
+    for a in item.get('artists') or []:
+        if isinstance(a, dict) and a.get('name'):
+            out.append({'name': a['name'], 'id': a.get('id') or ''})
+    return out
+
+
+def song_from_item(item: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """YT Music track/quick-pick → Dannify song dict."""
+
+    video_id = item.get('videoId')
+    if not video_id:
+        return None
+    album = item.get('album') or {}
+    artists = _artists(item)
+    duration = item.get('duration_seconds') or 0
+    if not duration and isinstance(item.get('duration'), str):
+        parts = [p for p in item['duration'].split(':') if p.isdigit()]
+        if len(parts) == 2:
+            duration = int(parts[0]) * 60 + int(parts[1])
+        elif len(parts) == 3:
+            duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    return {
+        'song_id': video_id,
+        'video_id': video_id,
+        'name': item.get('title', ''),
+        'artists': [a['name'] for a in artists],
+        'artist_ids': artists,
+        'album_name': album.get('name', '') if isinstance(album, dict) else '',
+        'album_id': album.get('id', '') if isinstance(album, dict) else '',
+        'cover_url': _thumb(item),
+        'duration': duration,
+        'url': f'https://music.youtube.com/watch?v={video_id}',
+        'explicit': bool(item.get('isExplicit')),
+        'like_status': item.get('likeStatus') or '',
+        'source': 'youtube',
+    }
+
+
+def card_from_item(item: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Home-feed entry → song / album / playlist / artist card."""
+
+    if item.get('videoId'):
+        song = song_from_item(item)
+        if song:
+            song['type'] = 'song'
+        return song
+    if item.get('playlistId') and not item.get('browseId'):
+        return {
+            'type': 'playlist',
+            'browse_id': item['playlistId'],
+            'name': item.get('title', ''),
+            'cover_url': _thumb(item, 400),
+            'author': ', '.join(
+                a.get('name', '') for a in (item.get('author') or []) if isinstance(a, dict)
+            )
+            or item.get('description', ''),
+            'item_count': str(item.get('count') or ''),
+        }
+    browse_id = item.get('browseId') or ''
+    if browse_id.startswith('UC') or item.get('subscribers'):
+        return {
+            'type': 'artist',
+            'browse_id': browse_id,
+            'name': item.get('title', ''),
+            'cover_url': _thumb(item, 400),
+            'subscribers': item.get('subscribers') or '',
+        }
+    if browse_id:
+        return {
+            'type': 'album',
+            'browse_id': browse_id,
+            'name': item.get('title', ''),
+            'cover_url': _thumb(item, 400),
+            'artists': [a['name'] for a in _artists(item)],
+            'artist_ids': _artists(item),
+            'year': str(item.get('year') or ''),
+            'album_type': item.get('type') or '',
+        }
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Feeds
+# ---------------------------------------------------------------------------
+def home(limit: int = 6) -> list[dict[str, Any]]:
+    """The YouTube Music home feed: personalized once signed in."""
+
+    rows = client().get_home(limit=limit)
+    sections = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        items = []
+        for entry in row.get('contents') or []:
+            if not isinstance(entry, dict):
+                continue
+            card = card_from_item(entry)
+            if card:
+                items.append(card)
+        if items:
+            sections.append({'title': row.get('title', ''), 'items': items})
+    return sections
+
+
+def liked_songs(limit: int = 250) -> list[dict[str, Any]]:
+    data = client(require_auth=True).get_liked_songs(limit=limit) or {}
+    out = []
+    for track in data.get('tracks') or []:
+        song = song_from_item(track)
+        if song:
+            out.append(song)
+    return out
+
+
+def library_playlists(limit: int = 50) -> list[dict[str, Any]]:
+    rows = client(require_auth=True).get_library_playlists(limit=limit) or []
+    out = []
+    for row in rows:
+        if not isinstance(row, dict) or not row.get('playlistId'):
+            continue
+        out.append(
+            {
+                'type': 'playlist',
+                'browse_id': row['playlistId'],
+                'name': row.get('title', ''),
+                'cover_url': _thumb(row, 400),
+                'item_count': str(row.get('count') or ''),
+                'author': ', '.join(
+                    a.get('name', '') for a in (row.get('author') or []) if isinstance(a, dict)
+                ),
+            }
+        )
+    return out
+
+
+def rate(video_id: str, liked: bool) -> dict[str, Any]:
+    """Like / unlike a song on the user's YouTube Music account."""
+
+    if not video_id:
+        raise ValueError('video_id required')
+    rating = 'LIKE' if liked else 'INDIFFERENT'
+    client(require_auth=True).rate_song(video_id, rating)
+    return {'video_id': video_id, 'liked': bool(liked)}
+
+
+def radio(video_id: str, limit: int = 30) -> list[dict[str, Any]]:
+    """Endless mix for a track (used for autoplay when the queue runs dry)."""
+
+    data = client().get_watch_playlist(videoId=video_id, radio=True, limit=limit) or {}
+    out = []
+    for track in data.get('tracks') or []:
+        song = song_from_item(track)
+        if song and song['song_id'] != video_id:
+            out.append(song)
+    return out
