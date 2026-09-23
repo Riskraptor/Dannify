@@ -2215,7 +2215,16 @@ def _apply_update_folder(staging: Path) -> bool:
             logger_print('could not replace', rel, exc)
             return False
 
+    from dannify import delta
+
     for rel in plan.get('removed', []):
+        # The plan is written by whichever version downloaded the update, and
+        # an older one listed everything the manifest did not mention: the
+        # uninstaller Setup left here, and the ship-time config. Check again
+        # on this side, where the files actually are.
+        if not delta.is_ours(str(rel)):
+            logger_print('keeping', rel, '(not ours to remove)')
+            continue
         try:
             gone = (target / rel).resolve()
             gone.relative_to(target)  # never delete outside the install

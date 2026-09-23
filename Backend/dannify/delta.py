@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import struct
 import urllib.request
 import zlib
@@ -38,6 +39,26 @@ MAX_DELTA_BYTES = 40 * 1024 * 1024
 # Zip end-of-central-directory lives in the last 64 KB at worst (it can carry
 # a comment), and the central directory itself is a few hundred KB here.
 _EOCD_SEARCH = 66 * 1024
+
+# An installed copy holds more than our build produces. Setup writes its own
+# uninstaller next to the app and copies the ship-time settings into config/.
+# Neither is in the manifest, which is built from the app folder alone, so a
+# plain "anything the manifest does not list is stale" rule would take the
+# uninstaller away and reset settings the installer owns, on the first
+# partial update. Those files are not ours to remove, whatever is missing
+# from the manifest.
+_INSTALLER_OWNED_DIRS = ('config/',)
+_INSTALLER_OWNED_NAMES = re.compile(r'^unins\d*\.(exe|dat|msg)$', re.IGNORECASE)
+
+
+def is_ours(rel: str) -> bool:
+    """True when *rel* is a file this build produces, and may remove."""
+
+    rel = rel.replace('\\', '/').lstrip('/').lower()
+    if any(rel.startswith(d) for d in _INSTALLER_OWNED_DIRS):
+        return False
+    return not _INSTALLER_OWNED_NAMES.match(rel)
+
 
 _EOCD_SIG = b'PK\x05\x06'
 _EOCD64_LOCATOR_SIG = b'PK\x06\x07'
@@ -237,7 +258,7 @@ def plan(app_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         for p in app_dir.rglob('*')
         if p.is_file()
     }
-    removed = sorted(have - set(wanted))
+    removed = sorted(rel for rel in have - set(wanted) if is_ours(rel))
     return {'changed': changed, 'removed': removed, 'bytes': total}
 
 
