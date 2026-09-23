@@ -538,7 +538,7 @@ onRefresh(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: theme('fontFamily.display');
+  font-family: var(--font-display, theme('fontFamily.display'));
   font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.02em;

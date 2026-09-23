@@ -339,7 +339,7 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
 
 .lyric-line {
   position: relative;
-  font-family: theme('fontFamily.display');
+  font-family: var(--font-display, theme('fontFamily.display'));
   font-size: 1.45rem;
   line-height: 1.32;
   font-weight: 700;

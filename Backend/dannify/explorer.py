@@ -360,13 +360,40 @@ def artist(browse_id: str) -> dict[str, Any]:
     data = _ytm().get_artist(browse_id)
     channel_id = data.get('channelId') or browse_id
 
-    # Full songs list: prefer the artist's songs *playlist* (all tracks) over
-    # the 5-track inline preview.
+    # The artist page needs three more things from YouTube: the full songs
+    # playlist, the full album list and the full singles list. They only
+    # depend on the response above, not on each other, so running them one
+    # after another was spending three round trips of wall clock on work
+    # that fits in one. Measured serially: 1.1 s + 1.9 s + two more.
     songs_section = data.get('songs') or {}
-    songs_bid = songs_section.get('browseId') if isinstance(songs_section, dict) else None
-    songs = _playlist_songs(songs_bid) if songs_bid else []
-    if not songs:
-        songs = _section_songs(songs_section)
+    songs_bid = (
+        songs_section.get('browseId') if isinstance(songs_section, dict) else None
+    )
+
+    def _songs() -> list[dict[str, Any]]:
+        # Prefer the artist's songs *playlist* (every track) over the
+        # five-track inline preview.
+        rows = _playlist_songs(songs_bid) if songs_bid else []
+        return rows or _section_songs(songs_section)
+
+    jobs = {
+        'songs': _POOL.submit(_songs),
+        'albums': _POOL.submit(
+            _artist_full_albums, browse_id, data.get('albums'), channel_id, 'albums'
+        ),
+        'singles': _POOL.submit(
+            _artist_full_albums, browse_id, data.get('singles'), channel_id, 'singles'
+        ),
+    }
+
+    def _done(name: str, fallback):
+        try:
+            # Generous: this is the whole page, and a slow section is still
+            # better than an empty one.
+            return jobs[name].result(timeout=20)
+        except Exception:
+            logger.opt(exception=True).debug('artist {} section failed', name)
+            return fallback
 
     out = {
         'type': 'artist',
@@ -376,13 +403,9 @@ def artist(browse_id: str) -> dict[str, Any]:
         'cover_url': _thumb(data),
         'subscribers': data.get('subscribers') or '',
         'monthly_listeners': data.get('monthlyListeners') or '',
-        'songs': songs,
-        'albums': _artist_full_albums(
-            browse_id, data.get('albums'), channel_id, 'albums'
-        ),
-        'singles': _artist_full_albums(
-            browse_id, data.get('singles'), channel_id, 'singles'
-        ),
+        'songs': _done('songs', []),
+        'albums': _done('albums', []),
+        'singles': _done('singles', []),
     }
     _cache_put(cache_key, out)
     return out

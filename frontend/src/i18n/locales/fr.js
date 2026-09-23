@@ -18,6 +18,14 @@ export default {
     minutes: '{m} min',
     hoursMinutes: '{h} h {m} min',
   },
+  fonts: {
+    system: 'Systeme',
+    systemNote: 'Celle de Windows, la plus legere',
+    inter: 'Inter',
+    interNote: 'Precise, concue pour les ecrans',
+    jakarta: 'Jakarta',
+    jakartaNote: 'Plus chaleureuse, plus ronde',
+  },
   theme: {
     midnight: 'Minuit',
     graphite: 'Graphite',
@@ -242,6 +250,8 @@ export default {
     themeHint: 'Suivre Windows, ou toujours utiliser le mode clair ou sombre.',
     palette: 'Palette',
     paletteHint: 'Couleurs pour les modes sombre et clair. Chacun est memorise separement.',
+    font: 'Police',
+    fontHint: "La police de toute l'application.",
     themeSystem: 'Système',
     themeLight: 'Clair',
     themeDark: 'Sombre',

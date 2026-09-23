@@ -18,6 +18,14 @@ export default {
     minutes: '{m} min',
     hoursMinutes: '{h} hr {m} min',
   },
+  fonts: {
+    system: 'System',
+    systemNote: "Windows' own, and the lightest",
+    inter: 'Inter',
+    interNote: 'Precise, built for screens',
+    jakarta: 'Jakarta',
+    jakartaNote: 'Warmer, a little rounder',
+  },
   theme: {
     midnight: 'Midnight',
     graphite: 'Graphite',
@@ -240,6 +248,8 @@ export default {
     themeHint: 'Follow Windows, or always use light or dark.',
     palette: 'Palette',
     paletteHint: 'Colours for the dark and light sides. Each one is remembered separately.',
+    font: 'Typeface',
+    fontHint: 'What the whole app is set in.',
     themeSystem: 'System',
     themeLight: 'Light',
     themeDark: 'Dark',
