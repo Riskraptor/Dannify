@@ -1594,6 +1594,14 @@ class DesktopApi:
 
     def app_restart(self) -> bool:
         """Relaunch Dannify (used by the 'restart to apply' prompt)."""
+        # When a partial update is waiting, the helper that applies it is also
+        # the thing that starts the app again. Spawning a copy here as well
+        # put two processes in the same folder at the same moment: one
+        # rewriting it, one booting out of it. Whoever lost that race came up
+        # broken. Just close; the helper does the rest.
+        if _staged_delta is not None:
+            threading.Timer(0.25, self._quit).start()
+            return True
         try:
             import subprocess
 
@@ -2229,40 +2237,106 @@ def _apply_update_folder(staging: Path) -> bool:
 
     exe_name = Path(sys.executable).name.lower()
     target = Path(sys.executable).resolve().parent
+    files = plan.get('files', {})
     logger_print(f'applying update {plan.get("version", "?")} into {target}')
 
-    # Replace first, delete afterwards: a half-copied install that still has
-    # its old files is recoverable, one missing them is not.
+    # Two passes, because the old way could destroy an installation.
     #
-    # Our own executable goes last. Alphabetically it came first, which meant
-    # every other file was copied with the archive already swapped underneath
-    # us. Last is the smallest window in which anything can go wrong, and by
-    # then there is nothing left to read out of it.
-    order = sorted(plan.get('files', {}), key=lambda r: (r.lower() == exe_name, r))
-    copied = 0
-    for rel in order:
-        source = staging / rel
-        if not source.is_file():
-            continue  # unchanged file, was never downloaded
-        dest = target / rel
-        try:
+    # It used to rename the live file out of the way and then copy the new one
+    # in. If that copy failed - a full disk, a virus scanner holding the fresh
+    # unsigned executable, the power going - the rename had already happened
+    # and the file was simply gone. When the file in question is Dannify.exe,
+    # nothing launches any more and there is nothing left to roll back to.
+    #
+    # So: copy everything beside its destination first, touching nothing live.
+    # Only once every copy has landed do the renames, which are as close to
+    # atomic as the filesystem gets and cannot half-write. If one of those
+    # fails, put back the ones already done.
+    staged: list[tuple[Path, Path]] = []  # (destination, its .new)
+    try:
+        for rel in sorted(files):
+            source = staging / rel
+            if not source.is_file():
+                continue  # unchanged file, was never downloaded
+            dest = target / rel
+            fresh = dest.with_name(dest.name + '.new')
             dest.parent.mkdir(parents=True, exist_ok=True)
-            if dest.exists():
+            try:
+                fresh.unlink()
+            except OSError:
+                pass
+            shutil.copy2(source, fresh)
+            staged.append((dest, fresh))
+    except Exception as exc:
+        logger_print('could not stage', exc)
+        for _dest, fresh in staged:
+            try:
+                fresh.unlink()
+            except OSError:
+                pass
+        return False
+
+    # Our own executable goes last, so the window in which this process is
+    # running against a swapped archive is as small as it can be.
+    staged.sort(key=lambda p: p[0].name.lower() == exe_name)
+
+    marker = target / '.updating'
+    try:
+        marker.write_text(str(plan.get('version', '')), encoding='utf-8')
+    except OSError:
+        pass
+
+    done: list[tuple[Path, Path, bool]] = []  # (dest, its .old, .old exists)
+    for dest, fresh in staged:
+        stale = dest.with_name(dest.name + '.old')
+        try:
+            try:
+                stale.unlink()
+            except OSError:
+                pass
+            had = dest.exists()
+            if had:
                 # A running executable cannot be overwritten, but it can be
                 # renamed out of the way: that includes this very file.
-                stale = dest.with_suffix(dest.suffix + '.old')
-                try:
-                    stale.unlink()
-                except OSError:
-                    pass
-                try:
-                    dest.rename(stale)
-                except OSError:
-                    pass
-            shutil.copy2(source, dest)
-            copied += 1
+                dest.rename(stale)
+            fresh.rename(dest)
+            done.append((dest, stale, had))
         except Exception as exc:
-            logger_print('could not replace', rel, exc)
+            logger_print('could not put', dest.name, 'in place:', exc)
+            # Undo, newest first, so the install is exactly as we found it.
+            for gone, old, had in reversed(done):
+                try:
+                    gone.rename(gone.with_name(gone.name + '.new'))
+                    if had:
+                        old.rename(gone)
+                except OSError:
+                    logger_print('rollback failed for', gone.name)
+            try:
+                marker.unlink()
+            except OSError:
+                pass
+            return False
+
+    copied = len(done)
+    try:
+        marker.unlink()
+    except OSError:
+        pass
+
+    # Check what actually landed. Only the handful we replaced, so this costs
+    # nothing, and a silently corrupt copy is worth catching here rather than
+    # at the next launch.
+    for dest, _stale, _had in done:
+        rel = dest.relative_to(target).as_posix()
+        want = files.get(rel) or {}
+        if not want.get('sha256'):
+            continue
+        try:
+            if delta.sha256_of(dest) != want['sha256']:
+                logger_print('what landed does not match the manifest:', rel)
+                return False
+        except OSError as exc:
+            logger_print('could not read back', rel, exc)
             return False
 
     for rel in plan.get('removed', []):
@@ -2285,11 +2359,43 @@ def _apply_update_folder(staging: Path) -> bool:
     return True
 
 
+def _wait_for_apply_to_finish(root: Path, timeout: float = 45.0) -> None:
+    """Hold off while an update helper is part way through the folder.
+
+    The helper leaves a marker beside the app for the few seconds its renames
+    take. Starting in the middle of that means loading half of one build and
+    half of another, so wait it out. A stale marker from a helper that died is
+    cleared once the timeout passes: an app that refuses to start for ever is
+    worse than one that starts against a folder nobody is touching.
+    """
+
+    marker = root / '.updating'
+    waited = 0.0
+    while waited < timeout:
+        try:
+            if not marker.exists():
+                return
+        except OSError:
+            return
+        time.sleep(0.25)
+        waited += 0.25
+    logger_print('an update looks stuck; starting anyway')
+    try:
+        marker.unlink()
+    except OSError:
+        pass
+
+
 def _sweep_old_files(root: Path) -> None:
-    """Remove the .old copies a previous update left behind."""
+    """Clear what a previous update left lying about.
+
+    Reaching here means this build started, so the copies it replaced are
+    safe to drop. Half-staged .new files are swept too: an apply that never
+    got as far as its renames leaves them, and they are dead weight.
+    """
 
     try:
-        for stale in Path(root).rglob('*.old'):
+        for stale in list(Path(root).rglob('*.old')) + list(Path(root).rglob('*.new')):
             try:
                 stale.unlink()
             except OSError:
@@ -3019,6 +3125,9 @@ def main() -> None:
             sys.exit(_run_update_helper(where[0]))
         sys.exit(2)
 
+    # Never boot out of a folder something is still rewriting.
+    _wait_for_apply_to_finish(Path(sys.executable).resolve().parent)
+
     # Tidy up whatever the last update renamed out of the way.
     _sweep_old_files(Path(sys.executable).resolve().parent)
 
@@ -3129,9 +3238,12 @@ def main() -> None:
                 _splash_html(
                     theme,
                     api._native_frame,
+                    # Nothing about files or folders here. Someone looking at
+                    # this screen wants to know what to do, not where we keep
+                    # our notes.
                     '<h2>Dannify could not start</h2>'
-                    '<p>Please check the log file at<br><code>'
-                    f'{_DATA_DIR / "dannify.log"}</code></p>',
+                    '<p>Close it from the notification area if a copy is '
+                    'still running, then open it again.</p>',
                 )
             )
 

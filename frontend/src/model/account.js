@@ -77,7 +77,8 @@ async function signIn() {
       window.dispatchEvent(new CustomEvent('dannify:account-changed'))
       return true
     }
-    if (result && result.error) toast(result.error, { tone: 'error' })
+    // Whatever WebView2 said about it is for the log, not for a toast.
+    if (result && result.error) toast(t('account.signInFailed'), { tone: 'error' })
     return false
   } finally {
     busy.value = false

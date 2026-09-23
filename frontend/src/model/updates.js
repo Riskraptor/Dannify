@@ -16,11 +16,11 @@ import { t } from '/src/i18n'
 // The backend does the network work; this is the state the UI binds to.
 
 const SKIP_KEY = 'dannify-skipped-update'
-const info = ref({ available: false, version: '', notes: '', url: '', size: 0, repo_url: '' })
-// Where this build's source lives. Comes from the backend so a fork
-// changes one config file rather than hunting for a hard-coded URL.
-const repoUrl = computed(
-  () => info.value.repo_url || 'https://github.com/DANIELMWENDWA9451/Dannify'
+const info = ref({ available: false, version: '', notes: '', url: '', size: 0, site_url: '' })
+// The product page. Comes from the backend so a rebrand changes one config
+// file rather than a hard-coded URL in here.
+const siteUrl = computed(
+  () => info.value.site_url || 'https://danielmwendwa9451.github.io/dannify-releases/'
 )
 const checking = ref(false)
 const downloading = ref(false)
@@ -111,10 +111,11 @@ async function download({ quiet = false } = {}) {
     }
     return true
   } catch (e) {
-    const detail = (e.response && e.response.data && e.response.data.detail) || ''
     // A background attempt that fails says nothing: it will be retried, and
-    // an error about work the user never asked for is just noise.
-    if (!quiet) toast(detail || t('update.downloadFailed'), { tone: 'error' })
+    // an error about work the user never asked for is just noise. What the
+    // server said goes to the log; the toast says something readable.
+    console.warn('[update] download failed', e)
+    if (!quiet) toast(t('update.downloadFailed'), { tone: 'error' })
     return false
   } finally {
     downloading.value = false
@@ -223,7 +224,7 @@ if (typeof window !== 'undefined') {
 export function useUpdates() {
   return {
     info,
-    repoUrl,
+    siteUrl,
     available,
     ready,
     checking,

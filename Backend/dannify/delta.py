@@ -97,6 +97,10 @@ def _content_length(url: str) -> int:
         return int(response.headers.get('Content-Length') or 0)
 
 
+def _mb(size: int) -> str:
+    return f'{size / 1048576:.1f} MB'
+
+
 def sha256_of(path: Path) -> str:
     digest = hashlib.sha256()
     with open(path, 'rb') as handle:
@@ -258,22 +262,29 @@ def plan(
 ) -> dict[str, Any]:
     """Work out what this installation is missing.
 
-    Returns ``{changed, removed, bytes}``. Hashing the whole folder costs a
-    second or two of disk, which is nothing against downloading 50 MB — but
+    Returns ``{changed, removed, bytes}``. Hashing the folder costs a second
+    or two of disk, which is nothing against downloading fifty megabytes, but
     it is a second or two with nothing on screen, so it reports as it goes.
+
+    Progress is counted in bytes, not in files. Of the couple of hundred
+    files here one is ninety six megabytes and most of the rest are tiny, so
+    counting files put the bar at ninety percent while nine tenths of the
+    work was still to come.
     """
 
     app_dir = Path(app_dir).resolve()
     wanted = manifest.get('files') or {}
     changed: list[str] = []
     total = 0
-    seen = 0
-    count = len(wanted) or 1
+    read = 0
+    to_read = sum(int(m.get('size') or 0) for m in wanted.values()) or 1
     for rel, meta in wanted.items():
-        seen += 1
-        if progress and seen % 16 == 0:
-            progress(seen * 100.0 / count, 'Checking what changed')
         local = app_dir / rel
+        read += int(meta.get('size') or 0)
+        # A fraction of this stage, not of the whole update: the caller owns
+        # the scale and decides how much of the bar this part is worth.
+        if progress:
+            progress(read / to_read)
         try:
             if not local.is_file() or local.stat().st_size != meta['size']:
                 changed.append(rel)
@@ -313,24 +324,24 @@ def fetch(
     done = 0
     total = sum(archive.compressed_size(n) for n in names) or 1
 
-    for index, name in enumerate(names, 1):
-        label = f'Downloading {index} of {len(names)}'
+    for name in names:
         got = [0]
 
-        def on_bytes(count: int, _got=got) -> None:
+        def on_bytes(count: int, _got=got, _done=done) -> None:
             _got[0] += count
             if progress:
-                progress(min(99.0, (done + _got[0]) * 100.0 / total), label)
+                moved = _done + _got[0]
+                progress(moved / total, f'Downloading, {_mb(moved)} of {_mb(total)}')
 
         if progress:
-            progress(min(99.0, done * 100.0 / total), label)
+            progress(done / total, f'Downloading, {_mb(done)} of {_mb(total)}')
         data = archive.read(name, on_bytes=on_bytes)
         target = into / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
         done += archive.compressed_size(name)
     if progress:
-        progress(100.0, 'Downloaded')
+        progress(1.0, f'Downloaded {_mb(total)}')
 
 
 def write_plan(staging: Path, manifest: dict[str, Any], removed: list[str]) -> Path:

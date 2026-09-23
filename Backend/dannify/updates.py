@@ -27,6 +27,8 @@ from loguru import logger
 # the app would hand every copy read access to the source, which is worse
 # than publishing it.
 DEFAULT_REPO = 'DANIELMWENDWA9451/dannify-releases'
+# Where About sends people. The product page, never a repository.
+SITE_URL = 'https://danielmwendwa9451.github.io/dannify-releases/'
 CHECK_TTL = 60 * 60 * 6  # re-check at most every 6 hours
 _USER_AGENT = 'Dannify-Updater'
 
@@ -130,9 +132,9 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         'size': 0,
         'published_at': '',
         'error': '',
-        # Where this build's releases come from. The UI links to it rather
-        # than hard-coding a URL, so a fork only edits updates.json.
-        'repo_url': f'https://github.com/{repo()}',
+        # The product page. About links here rather than at a repository:
+        # nothing in the app should send anyone looking for source code.
+        'site_url': SITE_URL,
         # The pieces a partial update needs. Absent on older releases, in
         # which case the installer is the only route and that is fine.
         'manifest_url': '',
@@ -177,6 +179,52 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
     return result
 
 
+class Progress:
+    """One honest 0 to 100 for a whole update, not one per stage.
+
+    Each stage used to report its own percentage into the same bar, so the
+    number ran to a hundred, dropped back to nothing and climbed again. Worse,
+    the download stage only reported once a file had finished, and the app
+    executable is twelve megabytes of a fourteen megabyte update: the bar sat
+    at zero for the entire download and then jumped to ninety something.
+
+    Stages get a slice of the bar here, sized roughly by how long they take.
+    The number only ever goes up, and it is never sent more than a few times
+    a second, because a thousand websocket messages help nobody.
+    """
+
+    def __init__(self, send: Optional[Callable[..., None]]) -> None:
+        self._send = send
+        self._low = 0.0
+        self._high = 1.0
+        self._label = ''
+        self._last = -1.0
+
+    def stage(self, label: str, low: float, high: float) -> None:
+        self._label, self._low, self._high = label, low, high
+        self(0.0)
+
+    def __call__(self, fraction: float, detail: str = '') -> None:
+        if self._send is None:
+            return
+        fraction = max(0.0, min(1.0, fraction))
+        value = (self._low + (self._high - self._low) * fraction) * 100.0
+        # Never backwards, and never more than one step of a fifth of a
+        # percent: the bar animates between points on its own.
+        if value < self._last + 0.2 and fraction < 1.0:
+            return
+        self._last = value
+        self._send(round(value, 1), detail or self._label)
+
+    def done(self) -> None:
+        self._last = -1.0
+        self.__call__(1.0)
+
+
+def _megabytes(done: int, total: int) -> str:
+    return f'{done / 1048576:.1f} of {total / 1048576:.1f} MB'
+
+
 def download(
     url: str,
     dest_dir: Path,
@@ -189,6 +237,8 @@ def download(
     name = url.rsplit('/', 1)[-1] or 'Dannify-Setup.exe'
     target = dest_dir / name
     partial = target.with_suffix(target.suffix + '.part')
+    bar = Progress(progress_cb)
+    bar.stage('Downloading the installer', 0.0, 0.98)
     request = urllib.request.Request(url, headers={'User-Agent': _USER_AGENT})
     with urllib.request.urlopen(request, timeout=30) as response:
         total = int(response.headers.get('Content-Length') or 0)
@@ -200,13 +250,11 @@ def download(
                     break
                 handle.write(chunk)
                 done += len(chunk)
-                if progress_cb and total:
-                    progress_cb(
-                        min(99.0, done * 100.0 / total), 'Downloading the installer'
-                    )
+                if total:
+                    bar(done / total, f'Downloading the installer, {_megabytes(done, total)}')
+    bar.stage('Ready to install', 0.98, 1.0)
     partial.replace(target)
-    if progress_cb:
-        progress_cb(100.0, 'Downloaded')
+    bar.done()
     logger.info('Update downloaded to {}', target)
     return target
 
@@ -232,17 +280,19 @@ def prepare_delta(
         logger.debug('release has no update assets; using the installer')
         return None
 
-    def say(percent: float, label: str) -> None:
-        if progress:
-            progress(percent, label)
+    # Shares of the bar, sized by how long each part actually takes. Reading
+    # the release is one small request; checking is a second of hashing; the
+    # download is everything else.
+    bar = Progress(progress)
 
     try:
-        say(0.0, 'Reading the release')
+        bar.stage('Reading the release', 0.0, 0.04)
         manifest = json.loads(_get_text(manifest_url))
         if not isinstance(manifest, dict) or not manifest.get('files'):
             return None
 
-        found = delta.plan(app_dir, manifest, say)
+        bar.stage('Checking what changed', 0.04, 0.14)
+        found = delta.plan(app_dir, manifest, bar)
         changed, removed, size = found['changed'], found['removed'], found['bytes']
         if not changed and not removed:
             logger.debug('nothing to fetch; already up to date on disk')
@@ -264,15 +314,17 @@ def prepare_delta(
         staging = Path(dest_dir) / f'delta-{manifest.get("version", "next")}'
         if staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
-        delta.fetch(files_url, changed, staging, say)
+        bar.stage('Downloading', 0.14, 0.93)
+        delta.fetch(files_url, changed, staging, bar)
 
-        say(100.0, 'Checking the download')
+        bar.stage('Checking the download', 0.93, 1.0)
         if not delta.verify_staged(staging, changed, manifest):
             logger.warning('Partial update failed verification; using the installer')
             shutil.rmtree(staging, ignore_errors=True)
             return None
 
         delta.write_plan(staging, manifest, removed)
+        bar.done()
         return staging
     except Exception as exc:
         logger.info('Partial update not possible ({}); using the installer', exc)
