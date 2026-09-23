@@ -4,7 +4,7 @@
 ; Output: packaging\out\Dannify-Setup-<version>.exe
 
 #define MyAppName "Dannify"
-#define MyAppVersion "3.3.0"
+#define MyAppVersion "3.4.0"
 #define MyAppPublisher "Dannify"
 #define MyAppExeName "Dannify.exe"
 #define BuildDir "..\Backend\dist\Dannify"
@@ -24,17 +24,21 @@ OutputDir=out
 OutputBaseFilename=Dannify-Setup-{#MyAppVersion}
 SetupIconFile=..\Backend\assets\dannify.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
-; The running app owns this mutex (see desktop.py): Inno then asks the user
-; to close it instead of failing on locked files.
-AppMutex=Local\DannifyAppMutex
+; Deliberately no AppMutex. With one set, Setup stops and asks the user to
+; go and close the app themselves, which is the "Dannify is running" wall
+; people kept hitting on an upgrade. PrepareToInstall below asks the app to
+; close itself instead, and Restart Manager picks up anything left.
 Compression=lzma2/ultra64
 LZMAUseSeparateProcess=yes
 LZMANumBlockThreads=4
 LZMADictionarySize=262144
 SolidCompression=yes
 WizardStyle=modern
-; The app binds a LAN port; closing running instance before upgrade
-CloseApplications=yes
+; Close anything still holding our files, and do not bring it back: the
+; user either asked for this install from inside the app (which restarts
+; itself) or ran the installer by hand, and neither wants a surprise launch.
+CloseApplications=force
+CloseApplicationsFilter=*.exe,*.dll,*.pyd
 RestartApplications=no
 ArchitecturesInstallIn64BitMode=x64compatible
 
@@ -66,22 +70,56 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 Type: filesandordirs; Name: "{localappdata}\Dannify"
 
 [Code]
-// Kill a running Dannify before install/uninstall so files aren't locked.
-procedure TaskKill();
-var
-  R: Integer;
+// Closing a running Dannify before its files are replaced.
+//
+// This used to be a straight `taskkill /F`, which is why an upgrade could
+// take the app out mid-write and lose whatever it had not saved yet. Ask
+// first: `--quit` signals the running instance to shut down properly,
+// which a window close cannot do because close-to-tray swallows it.
+// Force is still there, but only for a copy that ignored the request.
+
+function DannifyIsRunning(): Boolean;
 begin
-  Exec('taskkill.exe', '/F /IM Dannify.exe', '', SW_HIDE, ewWaitUntilTerminated, R);
+  Result := CheckForMutexes('Local\DannifyAppMutex');
+end;
+
+procedure StopDannify();
+var
+  Exe: String;
+  ResultCode, Waited: Integer;
+begin
+  if not DannifyIsRunning() then
+    Exit;
+
+  Exe := ExpandConstant('{app}\{#MyAppExeName}');
+  if FileExists(Exe) then
+    Exec(Exe, '--quit', '', SW_HIDE, ewNoWait, ResultCode);
+
+  // Give it six seconds to drain and let go of its files.
+  Waited := 0;
+  while (Waited < 6000) and DannifyIsRunning() do
+  begin
+    Sleep(250);
+    Waited := Waited + 250;
+  end;
+
+  // Still there: it is not going to leave on its own.
+  if DannifyIsRunning() then
+  begin
+    Exec('taskkill.exe', '/F /IM {#MyAppExeName}', '', SW_HIDE,
+         ewWaitUntilTerminated, ResultCode);
+    Sleep(800);
+  end;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
-  TaskKill();
+  StopDannify();
   Result := '';
 end;
 
 function InitializeUninstall(): Boolean;
 begin
-  TaskKill();
+  StopDannify();
   Result := True;
 end;
