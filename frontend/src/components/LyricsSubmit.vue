@@ -20,7 +20,9 @@
             </button>
           </header>
 
-          <!-- Stepper: numbered beads on a rail, the way a wizard should read -->
+          <!-- Stepper: numbered beads on a rail, the way a wizard should read.
+               Each step says what it is for, because "Paste / Sync / Review"
+               on its own does not tell a first-time contributor anything. -->
           <ol class="ls-steps" :aria-label="t('publish.contributeTo')">
             <li
               v-for="(label, idx) in stepLabels"
@@ -36,9 +38,17 @@
               <span class="ls-step-label">{{ label }}</span>
             </li>
           </ol>
+          <p class="ls-step-why">
+            <Icon icon="ph:info" class="h-3.5 w-3.5 shrink-0" />
+            <span>{{ stepWhy }}</span>
+          </p>
 
           <!-- ─── Phase 1: paste / detect ─── -->
           <section v-if="phase === 0" class="ls-body">
+            <p class="ls-intro">
+              <Icon icon="ph:sparkle-fill" class="h-4 w-4 shrink-0 text-accent" />
+              <span>{{ t('publish.intro') }}</span>
+            </p>
             <p class="ls-help">
               {{ t('publish.pasteHelp') }}
             </p>
@@ -532,6 +542,17 @@ const stepLabels = computed(() => [
   t('publish.step.sync'),
   t('publish.step.review'),
 ])
+
+// What the current step is actually for. Shown under the rail so it is read
+// once, where the user already is, rather than hidden behind a tooltip.
+const stepWhy = computed(
+  () =>
+    [
+      t('publish.stepWhy.paste'),
+      t('publish.stepWhy.sync'),
+      t('publish.stepWhy.review'),
+    ][phase.value] || ''
+)
 
 const DRAFT_KEY = computed(() => {
   const k = `${form.value.track}|${form.value.artist}`.toLowerCase()
@@ -1280,8 +1301,40 @@ function unbindWindowKeys() {
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 2px 22px 16px;
+  padding: 2px 22px 10px;
   list-style: none;
+}
+.ls-step-why {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0 22px 14px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: rgb(var(--c-tint) / 0.05);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgb(var(--c-fg) / 0.66);
+}
+.ls-step-why svg {
+  margin-top: 1px;
+  color: rgb(var(--c-fg) / 0.4);
+}
+.ls-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--c-accent) / 0.2);
+  background: rgb(var(--c-accent) / 0.06);
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgb(var(--c-fg) / 0.82);
+}
+.ls-intro svg {
+  margin-top: 1px;
 }
 .ls-step {
   position: relative;

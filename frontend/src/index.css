@@ -46,6 +46,110 @@
   --scroll-thumb-hover: rgb(0 0 0 / 0.36);
 }
 
+/* --- Extra themes ---------------------------------------------------------
+   Each one is a single low-saturation hue for the neutrals plus an accent
+   from a different part of the wheel, so the app reads as tinted charcoal
+   rather than coloured. Every pairing that carries meaning was measured
+   rather than eyeballed: body text is at least 7:1 on its surface, the
+   accent at least 3:1, and text on the accent at least 4.5:1. All seven
+   pass. See packaging notes if you add another.
+   -------------------------------------------------------------------------- */
+
+[data-theme='dannify-graphite'] {
+  color-scheme: dark;
+  --c-app: 12 14 17;
+  --c-panel: 22 25 30;
+  --c-raised: 32 36 43;
+  --c-elev: 43 48 56;
+  --c-fg: 233 237 243;
+  --c-tint: 255 255 255;
+  --c-accent: 88 166 255;
+  --c-accent-hover: 120 186 255;
+  --c-accent-fg: 4 16 32;
+  --c-danger: 242 109 109;
+  --c-warn: 245 184 61;
+  --shadow-pop: 0 14px 44px rgb(0 0 0 / 0.55), 0 2px 10px rgb(0 0 0 / 0.35);
+  --shadow-card: 0 8px 26px rgb(0 0 0 / 0.4);
+  --scroll-thumb: rgb(255 255 255 / 0.17);
+  --scroll-thumb-hover: rgb(255 255 255 / 0.32);
+}
+
+[data-theme='dannify-ember'] {
+  color-scheme: dark;
+  --c-app: 17 12 10;
+  --c-panel: 28 21 18;
+  --c-raised: 40 31 26;
+  --c-elev: 53 41 34;
+  --c-fg: 245 238 232;
+  --c-tint: 255 244 235;
+  --c-accent: 255 150 60;
+  --c-accent-hover: 255 172 98;
+  --c-accent-fg: 38 18 2;
+  --c-danger: 242 109 109;
+  --c-warn: 245 184 61;
+  --shadow-pop: 0 14px 44px rgb(0 0 0 / 0.55), 0 2px 10px rgb(0 0 0 / 0.35);
+  --shadow-card: 0 8px 26px rgb(0 0 0 / 0.4);
+  --scroll-thumb: rgb(255 255 255 / 0.17);
+  --scroll-thumb-hover: rgb(255 255 255 / 0.32);
+}
+
+[data-theme='dannify-orchid'] {
+  color-scheme: dark;
+  --c-app: 14 10 18;
+  --c-panel: 24 18 31;
+  --c-raised: 35 27 44;
+  --c-elev: 47 37 58;
+  --c-fg: 240 234 246;
+  --c-tint: 250 240 255;
+  --c-accent: 214 116 255;
+  --c-accent-hover: 226 147 255;
+  --c-accent-fg: 28 6 40;
+  --c-danger: 242 109 109;
+  --c-warn: 245 184 61;
+  --shadow-pop: 0 14px 44px rgb(0 0 0 / 0.55), 0 2px 10px rgb(0 0 0 / 0.35);
+  --shadow-card: 0 8px 26px rgb(0 0 0 / 0.4);
+  --scroll-thumb: rgb(255 255 255 / 0.17);
+  --scroll-thumb-hover: rgb(255 255 255 / 0.32);
+}
+
+[data-theme='dannify-deepsea'] {
+  color-scheme: dark;
+  --c-app: 7 14 20;
+  --c-panel: 14 24 33;
+  --c-raised: 22 35 47;
+  --c-elev: 31 47 61;
+  --c-fg: 230 240 247;
+  --c-tint: 235 248 255;
+  --c-accent: 45 212 191;
+  --c-accent-hover: 80 226 208;
+  --c-accent-fg: 2 28 25;
+  --c-danger: 242 109 109;
+  --c-warn: 245 184 61;
+  --shadow-pop: 0 14px 44px rgb(0 0 0 / 0.55), 0 2px 10px rgb(0 0 0 / 0.35);
+  --shadow-card: 0 8px 26px rgb(0 0 0 / 0.4);
+  --scroll-thumb: rgb(255 255 255 / 0.17);
+  --scroll-thumb-hover: rgb(255 255 255 / 0.32);
+}
+
+[data-theme='dannify-sand'] {
+  color-scheme: light;
+  --c-app: 238 232 222;
+  --c-panel: 253 250 245;
+  --c-raised: 246 241 233;
+  --c-elev: 255 253 249;
+  --c-fg: 38 31 24;
+  --c-tint: 40 28 12;
+  --c-accent: 160 76 16;
+  --c-accent-hover: 140 64 12;
+  --c-accent-fg: 255 250 244;
+  --c-danger: 220 76 76;
+  --c-warn: 200 138 18;
+  --shadow-pop: 0 14px 44px rgb(15 20 30 / 0.16), 0 2px 8px rgb(15 20 30 / 0.08);
+  --shadow-card: 0 8px 26px rgb(15 20 30 / 0.12);
+  --scroll-thumb: rgb(0 0 0 / 0.2);
+  --scroll-thumb-hover: rgb(0 0 0 / 0.36);
+}
+
 :root {
   --titlebar-h: 44px;
   --player-h: 84px;

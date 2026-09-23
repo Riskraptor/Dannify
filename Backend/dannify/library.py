@@ -406,6 +406,12 @@ def _get(base: Path) -> dict[str, Any]:
     return built
 
 
+def signature(base: Path) -> tuple[int, float]:
+    """Public view of the folder fingerprint, for the disk watcher."""
+
+    return _signature(base)
+
+
 def invalidate_cache() -> None:
     """Force the next :func:`library` call to re-scan the disk.
 

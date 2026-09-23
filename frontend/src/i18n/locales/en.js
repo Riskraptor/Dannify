@@ -18,6 +18,15 @@ export default {
     minutes: '{m} min',
     hoursMinutes: '{h} hr {m} min',
   },
+  theme: {
+    midnight: 'Midnight',
+    graphite: 'Graphite',
+    deepsea: 'Deep Sea',
+    orchid: 'Orchid',
+    ember: 'Ember',
+    paper: 'Paper',
+    sand: 'Sand',
+  },
   window: {
     minimize: 'Minimize',
     maximize: 'Maximize',
@@ -229,6 +238,8 @@ export default {
     appearance: 'Appearance',
     theme: 'Theme',
     themeHint: 'Follow Windows, or always use light or dark.',
+    palette: 'Palette',
+    paletteHint: 'Colours for the dark and light sides. Each one is remembered separately.',
     themeSystem: 'System',
     themeLight: 'Light',
     themeDark: 'Dark',
@@ -394,19 +405,26 @@ export default {
     albumOptional: 'optional',
     duration: 'Duration',
     pasteHelp:
-      'Paste or type the lyrics for this song. If your text already includes [mm:ss.xx] timestamps we detect that automatically and skip straight to review.',
+      'One line per line, exactly as they are sung. If what you paste already has [mm:ss.xx] timestamps in it, the timing step is skipped.',
     pastePlaceholder:
       "Hello darkness, my old friend\nI've come to talk with you again…",
     detectedPlain: 'Detected {count} lyric lines.',
     detectedSynced: 'Detected {count} synced timestamps. Ready to review.',
     step: {
-      paste: 'Paste',
-      sync: 'Sync',
-      review: 'Review & publish',
+      paste: 'Write the words',
+      sync: 'Match the timing',
+      review: 'Check and publish',
     },
+    stepWhy: {
+      paste: 'Type or paste the lyrics, one line at a time. Nothing needs to be timed yet.',
+      sync: 'Play the song and tap Space as each line comes, so the words follow along.',
+      review: 'Last look before it goes out. Anyone who plays this song will see it.',
+    },
+    intro:
+      'Two minutes of your time and this song has lyrics that scroll in time for everyone who plays it.',
     next: {
-      sync: 'Sync along to the song',
-      review: 'Review',
+      sync: 'Next: match the timing',
+      review: 'Next: check it over',
     },
     back: 'Back',
     stampLine: 'Tap to set this line at the current playback time',
@@ -419,7 +437,7 @@ export default {
     linesStamped: 'Stamped',
     linesTotal: 'Total lines',
     submit: 'Publish lyrics',
-    solving: 'Solving security challenge…',
+    solving: 'Publishing...',
     powSlow:
       'This usually takes 10 - 30 seconds. Almost there.',
     success:

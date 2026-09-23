@@ -639,6 +639,25 @@ def build_app() -> FastAPI:
 
         asyncio.create_task(_warm_up())
 
+        # Watch the music folder for changes made outside the app. Deleting an
+        # album in Explorer used to leave it listed here until the next
+        # restart, with play buttons that led nowhere.
+        from dannify import diskwatch
+
+        def _library_base():
+            downloader = api.state.downloader
+            return downloader.download_dir if downloader is not None else None
+
+        def _announce() -> None:
+            # The watcher runs on its own thread; the broadcast has to go back
+            # to the loop that owns the websockets.
+            asyncio.run_coroutine_threadsafe(
+                api.state.connections.broadcast({'type': 'library_changed'}),
+                loop,
+            )
+
+        diskwatch.start(_library_base, _announce)
+
     app.router.lifespan_context = _make_lifespan(_run_startup)
 
     def _live_download_dir() -> Path:

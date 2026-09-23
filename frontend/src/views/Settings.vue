@@ -77,6 +77,37 @@
             </button>
           </div>
         </div>
+        <!-- Palette. Separate from light/dark on purpose: picking a dark
+             palette and leaving the mode on "System" should still follow
+             Windows, into the palettes chosen for each side. -->
+        <div class="row is-stacked">
+          <Icon icon="ph:swatches" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('settings.palette') }}</p>
+            <p class="row-hint">{{ t('settings.paletteHint') }}</p>
+          </div>
+          <div class="palette-grid">
+            <button
+              v-for="p in theme.themes"
+              :key="p.id"
+              class="palette press"
+              :class="{ 'is-active': theme.currentTheme.value === p.id }"
+              :title="t(p.name)"
+              :aria-pressed="theme.currentTheme.value === p.id"
+              @click="theme.setTheme(p.id)"
+            >
+              <span class="palette-chip" :style="{ background: p.bg }">
+                <span class="palette-dot" :style="{ background: p.accent }" />
+                <Icon
+                  v-if="theme.currentTheme.value === p.id"
+                  icon="ph:check-bold"
+                  class="palette-tick"
+                />
+              </span>
+              <span class="palette-name">{{ t(p.name) }}</span>
+            </button>
+          </div>
+        </div>
         <div class="row">
           <Icon icon="ph:translate" class="row-icon" />
           <div class="row-text">
@@ -518,6 +549,76 @@ async function setTray(patch) {
   font-size: 14px;
   font-weight: 600;
 }
+/* The palette row always stacks: seven swatches never sit sensibly beside a
+   label in a pane this narrow. */
+.row.is-stacked {
+  align-items: flex-start;
+}
+.row.is-stacked .row-text {
+  flex: 1 1 100%;
+}
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+.palette {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 2px 6px;
+  border-radius: 10px;
+}
+.palette:hover {
+  background: rgb(var(--c-tint) / 0.05);
+}
+.palette-chip {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 9px;
+  border: 1px solid rgb(var(--c-tint) / 0.12);
+  overflow: hidden;
+  transition:
+    border-color 0.15s ease,
+    transform 0.12s var(--ease-out);
+}
+.palette:hover .palette-chip {
+  transform: translateY(-1px);
+}
+.palette.is-active .palette-chip {
+  border-color: rgb(var(--c-accent));
+  box-shadow: 0 0 0 2px rgb(var(--c-accent) / 0.35);
+}
+/* The accent, shown on the palette's own background: the pairing is the
+   thing being chosen, so show the pairing. */
+.palette-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+}
+.palette-tick {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  width: 12px;
+  height: 12px;
+  color: rgb(var(--c-accent));
+}
+.palette-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgb(var(--c-fg) / 0.62);
+}
+.palette.is-active .palette-name {
+  color: rgb(var(--c-fg));
+}
+
 .row {
   display: flex;
   /* Wrap instead of crushing: with the lyrics panel open the pane can be
