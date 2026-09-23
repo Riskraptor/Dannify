@@ -2624,13 +2624,41 @@ def _port_is_free(port: int, host: str = BIND_HOST) -> bool:
         return False
 
 
+_PORT_FILE = _DATA_DIR / 'port.json'
+
+
 def _pick_port() -> int:
-    """A port the kernel guarantees is free, different on every launch."""
+    """The same port this installation used last time, if it is still free.
+
+    It used to take whatever the kernel handed out, which meant a different
+    port on every launch. The page is served from that port, so the browser
+    engine saw a different origin each time and handed the app an empty
+    localStorage: volume, language, zoom, the home cache, the playing
+    position, half-written lyrics, all gone every single start. Everything
+    the app thought it remembered between launches, it did not.
+
+    Still not a fixed number, and still not a well-known one. It is chosen
+    once per installation and kept, so the origin stops moving.
+    """
+
     if PREFERRED_PORT and _port_is_free(PREFERRED_PORT):
         return PREFERRED_PORT
+
+    try:
+        saved = int(json.loads(_PORT_FILE.read_text(encoding='utf-8'))['port'])
+        if 1024 < saved < 65536 and _port_is_free(saved):
+            return saved
+    except Exception:
+        pass
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((BIND_HOST, 0))  # the OS hands us a port nobody owns
-        return s.getsockname()[1]
+        port = int(s.getsockname()[1])
+    try:
+        _PORT_FILE.write_text(json.dumps({'port': port}), encoding='utf-8')
+    except OSError:
+        pass  # a moving port is a nuisance, not a reason to fail to start
+    return port
 
 
 # ---------------------------------------------------------------------------
