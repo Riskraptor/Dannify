@@ -57,7 +57,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     'output': '{artists} - {title}.{output-ext}',
     'generate_m3u': True,
     'max_parallel_downloads': 3,
-    'organize_by_artist': False,
+    # On by default: a flat folder of a few hundred tracks is unusable
+    # outside the app, and an artist folder is what every music player
+    # and every phone expects to find.
+    'organize_by_artist': True,
     # User-controlled storage. The default '' is replaced at startup with
     # the OS-appropriate Music\Dannify folder by main.py.
     'download_dir': '',

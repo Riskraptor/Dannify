@@ -26,8 +26,10 @@ def test_default_settings_has_required_keys():
     assert required <= set(DEFAULT_SETTINGS)
 
 
-def test_default_organize_by_artist_is_false():
-    assert DEFAULT_SETTINGS['organize_by_artist'] is False
+def test_default_organize_by_artist_is_true():
+    # Changed deliberately: a flat folder of hundreds of tracks is unusable
+    # outside the app, and per-artist folders are what other players expect.
+    assert DEFAULT_SETTINGS['organize_by_artist'] is True
 
 
 def test_default_generate_m3u_is_true():

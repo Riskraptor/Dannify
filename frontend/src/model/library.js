@@ -53,6 +53,21 @@ window.addEventListener('dannify:library-changed', (e) => {
   scheduleRefresh(removed ? 400 : 1200)
 })
 
+// Coming back to the window is the moment the list is most likely to be
+// wrong: the usual reason someone alt-tabbed away was to go and move or
+// delete files. The backend watcher catches this too, but only while the app
+// is running, and this costs one request.
+let lastFocusCheck = 0
+if (typeof window !== 'undefined') {
+  window.addEventListener('focus', () => {
+    if (!loaded.value) return
+    const now = Date.now()
+    if (now - lastFocusCheck < 3000) return // alt-tabbing back and forth
+    lastFocusCheck = now
+    refresh()
+  })
+}
+
 export function useLibrary() {
   return { tracks, artists, loaded, loading, error, refresh, ensureLoaded }
 }
