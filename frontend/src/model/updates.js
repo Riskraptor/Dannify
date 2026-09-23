@@ -26,6 +26,8 @@ const checking = ref(false)
 const downloading = ref(false)
 const progress = ref(0)
 const installerPath = ref('')
+// 'installer' or 'delta': what `installerPath` actually points at.
+const updateKind = ref('installer')
 const lastError = ref('')
 const skipped = ref(localStorage.getItem(SKIP_KEY) || '')
 
@@ -89,10 +91,17 @@ async function download({ quiet = false } = {}) {
   progress.value = 0
   try {
     const res = await API.downloadUpdate(info.value.download_url)
-    installerPath.value = (res.data && res.data.path) || ''
+    const data = res.data || {}
+    installerPath.value = data.path || ''
+    updateKind.value = data.kind || 'installer'
     progress.value = 100
-    // Tell the shell about it so closing the app is enough to apply it.
-    if (installerPath.value) desktop.stageUpdate(installerPath.value)
+    // Tell the shell about it so closing the app is enough to apply it. A
+    // partial update is a folder of replacement files rather than an
+    // installer, and the shell applies it with its own helper.
+    if (installerPath.value) {
+      if (updateKind.value === 'delta') desktop.stageDelta(installerPath.value)
+      else desktop.stageUpdate(installerPath.value)
+    }
     return true
   } catch (e) {
     const detail = (e.response && e.response.data && e.response.data.detail) || ''
@@ -108,6 +117,9 @@ async function download({ quiet = false } = {}) {
 /** Run the downloaded installer. Dannify closes so it can replace itself. */
 async function install({ ask = true } = {}) {
   if (!installerPath.value) return false
+  // A partial update is applied by the shell on the way out, so "restart
+  // now" is exactly that: restart. The helper does the rest.
+  if (updateKind.value === 'delta') return desktop.restart()
   if (!ask) return desktop.installUpdate(installerPath.value)
   const ok = await confirmDialog({
     title: t('update.installTitle', { version: info.value.version }),

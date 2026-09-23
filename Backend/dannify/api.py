@@ -22,6 +22,7 @@ import asyncio
 import contextlib
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -1907,9 +1908,34 @@ async def update_download_endpoint(
         )
 
     dest = Path(state.data_dir or Path.home()) / 'updates'
+
+    # Try to build this update out of just the files that changed. Between
+    # two releases most of the 145 MB on disk is byte for byte identical, so
+    # this is usually a fraction of the installer. It returns None whenever
+    # it cannot be trusted, and then the installer runs as before.
+    app_dir = Path(sys.executable).resolve().parent
+    if getattr(sys, 'frozen', False):
+        try:
+            staged = await asyncio.to_thread(
+                updates.prepare_delta, app_dir, dest, info, _progress
+            )
+        except Exception:
+            logger.opt(exception=True).info('partial update failed')
+            staged = None
+        if staged is not None:
+            return {
+                'path': str(staged),
+                'version': info.get('version', ''),
+                'kind': 'delta',
+            }
+
     try:
         path = await asyncio.to_thread(updates.download, url, dest, _progress)
     except Exception as exc:
         logger.opt(exception=True).info('update download failed')
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {'path': str(path), 'version': info.get('version', '')}
+    return {
+        'path': str(path),
+        'version': info.get('version', ''),
+        'kind': 'installer',
+    }

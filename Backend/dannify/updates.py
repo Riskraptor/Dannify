@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import threading
 import time
 import urllib.request
@@ -100,6 +101,16 @@ def _fetch_latest() -> dict[str, Any]:
     return _get(f'{base}/latest')
 
 
+def _asset(assets: list, prefix: str, suffix: str) -> str:
+    """Find a release asset by name shape."""
+
+    for item in assets or []:
+        name = str(item.get('name', ''))
+        if name.startswith(prefix) and name.endswith(suffix):
+            return item.get('browser_download_url', '')
+    return ''
+
+
 def check(current_version: str, force: bool = False) -> dict[str, Any]:
     """Return ``{available, version, notes, url, download_url, size}``."""
 
@@ -122,6 +133,10 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         # Where this build's releases come from. The UI links to it rather
         # than hard-coding a URL, so a fork only edits updates.json.
         'repo_url': f'https://github.com/{repo()}',
+        # The pieces a partial update needs. Absent on older releases, in
+        # which case the installer is the only route and that is fine.
+        'manifest_url': '',
+        'files_url': '',
     }
     try:
         data = _fetch_latest()
@@ -148,6 +163,8 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
                 'download_url': (installer or {}).get('browser_download_url', ''),
                 'size': int((installer or {}).get('size') or 0),
                 'published_at': data.get('published_at') or '',
+                'manifest_url': _asset(assets, 'manifest-', '.json'),
+                'files_url': _asset(assets, 'files-', '.zip'),
             }
         )
     except Exception as exc:  # offline, rate-limited, no releases yet…
@@ -190,3 +207,71 @@ def download(
         progress_cb(100.0)
     logger.info('Update downloaded to {}', target)
     return target
+
+
+def prepare_delta(
+    app_dir: Path,
+    dest_dir: Path,
+    info: dict[str, Any],
+    progress: Optional[Callable[[float], None]] = None,
+) -> Optional[Path]:
+    """Try to assemble this update from just the files that changed.
+
+    Returns the staging folder when it worked, or None to say "use the
+    installer". Every failure returns None rather than raising: a partial
+    update is an optimisation, and the full path is always there.
+    """
+
+    from . import delta
+
+    manifest_url = str(info.get('manifest_url') or '')
+    files_url = str(info.get('files_url') or '')
+    if not manifest_url or not files_url:
+        logger.debug('release has no update assets; using the installer')
+        return None
+
+    try:
+        manifest = json.loads(_get_text(manifest_url))
+        if not isinstance(manifest, dict) or not manifest.get('files'):
+            return None
+
+        found = delta.plan(app_dir, manifest)
+        changed, removed, size = found['changed'], found['removed'], found['bytes']
+        if not changed and not removed:
+            logger.debug('nothing to fetch; already up to date on disk')
+            return None
+        if size > delta.MAX_DELTA_BYTES:
+            logger.info(
+                'Partial update would be {:.0f} MB; taking the installer instead',
+                size / 1048576,
+            )
+            return None
+
+        logger.info(
+            'Partial update: {} file(s), {:.1f} MB of {:.1f} MB total',
+            len(changed),
+            size / 1048576,
+            sum(f['size'] for f in manifest['files'].values()) / 1048576,
+        )
+
+        staging = Path(dest_dir) / f'delta-{manifest.get("version", "next")}'
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+        delta.fetch(files_url, changed, staging, progress)
+
+        if not delta.verify_staged(staging, changed, manifest):
+            logger.warning('Partial update failed verification; using the installer')
+            shutil.rmtree(staging, ignore_errors=True)
+            return None
+
+        delta.write_plan(staging, manifest, removed)
+        return staging
+    except Exception as exc:
+        logger.info('Partial update not possible ({}); using the installer', exc)
+        return None
+
+
+def _get_text(url: str) -> str:
+    request = urllib.request.Request(url, headers={'User-Agent': _USER_AGENT})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read().decode('utf-8')
