@@ -544,6 +544,10 @@ export default {
     downloading: 'Downloading update… {percent}%',
     downloadFailed: 'Could not download the update.',
     installNow: 'Install and restart',
+    readyToast: 'Dannify {version} is ready. Restart to use it, or it will install when you close the app.',
+    restartNow: 'Restart now',
+    autoUpdate: 'Keep Dannify up to date',
+    autoUpdateHint: 'Downloads new versions in the background and applies them when you close the app.',
     restartToUpdate: 'Restart to update',
     installTitle: 'Install Dannify {version}?',
     installMessage:

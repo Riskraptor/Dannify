@@ -49,6 +49,7 @@ import urllib.request
 import webbrowser
 from ctypes import wintypes
 from pathlib import Path
+from typing import Optional
 
 # The shell's own diagnostics. loguru's logger is a singleton, so this is the
 # same sink main.py configures; importing it here is not a second logger.
@@ -88,6 +89,10 @@ APP_TITLE = 'Dannify'
 # installer writes on the Start Menu shortcut, or Windows treats the running
 # app and its shortcut as two different programs.
 APP_USER_MODEL_ID = 'Dannify.Player'
+
+# An installer that has been downloaded and is waiting for the app to close.
+# Applied by _apply_staged_update() on the way out.
+_staged_update: Optional[Path] = None
 _INSTANCE_FILE = _DATA_DIR / 'instance.json'
 _WINDOW_STATE_FILE = _DATA_DIR / 'window.json'
 _WEBVIEW_STORAGE = _DATA_DIR / 'WebView2'
@@ -1424,19 +1429,56 @@ class DesktopApi:
         threading.Timer(0.25, self._quit).start()
         return True
 
-    def app_install_update(self, installer: str) -> bool:
-        """Run a downloaded installer and step out of its way."""
+    @staticmethod
+    def _vetted_installer(installer: str) -> Optional[Path]:
+        """The path, but only if it is an installer we put there ourselves.
+
+        Nothing outside our own updates folder is ever run, whatever the UI
+        asks for: this is a path arriving from JavaScript.
+        """
+
         try:
             path = Path(str(installer or '')).resolve()
-            updates_dir = (_DATA_DIR / 'updates').resolve()
-            path.relative_to(updates_dir)  # never run anything from elsewhere
+            path.relative_to((_DATA_DIR / 'updates').resolve())
             if path.suffix.lower() != '.exe' or not path.is_file():
-                return False
+                return None
+            return path
+        except Exception:
+            return None
+
+    def app_install_update(self, installer: str) -> bool:
+        """Run a downloaded installer and step out of its way."""
+        path = self._vetted_installer(installer)
+        if path is None:
+            return False
+        try:
             os.startfile(str(path))  # noqa: S606
         except Exception as exc:
             logger_print('could not launch installer:', exc)
             return False
         threading.Timer(0.4, self._quit).start()
+        return True
+
+    def app_stage_update(self, installer: str) -> bool:
+        """Hold an installer to apply when the app next closes.
+
+        The point of this is that nobody has to decide anything. An update
+        downloads quietly, the user is told it is ready, and if they never
+        press restart it goes in the next time they close the window: the
+        way a browser does it.
+        """
+
+        global _staged_update
+        path = self._vetted_installer(installer)
+        if path is None:
+            return False
+        _staged_update = path
+        logger.info('Update staged for the next exit: {}', path.name)
+        return True
+
+    def app_clear_staged_update(self) -> bool:
+        global _staged_update
+        _staged_update = None
         return True
 
     # --- YouTube Music account ----------------------------------------------
@@ -2410,6 +2452,47 @@ def _main_hwnd() -> int:
         return 0
 
 
+def _apply_staged_update() -> None:
+    """Install a downloaded update now that the window is gone.
+
+    Silent on purpose: the user closed the app, so putting a wizard on
+    screen would be the opposite of helpful. The installer keeps settings
+    and the library, and does not relaunch (its post-install step is
+    skipped in silent mode).
+
+    If this fails there is nothing to tell anyone, because nobody is
+    looking. The next launch finds the same update still pending and offers
+    it again, so a failure costs one more prompt rather than a broken
+    install.
+    """
+
+    installer = _staged_update
+    if installer is None or not _WIN:
+        return
+    import subprocess
+
+    try:
+        if not installer.is_file():
+            return
+        logger.info('Applying staged update: {}', installer.name)
+        # Waits for our own process to be gone before starting, so the
+        # installer's single-instance check does not trip over us.
+        subprocess.Popen(
+            [
+                'cmd', '/c',
+                f'ping -n 3 127.0.0.1 >nul & '
+                f'"{installer}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART',
+            ],
+            creationflags=(
+                getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                | getattr(subprocess, 'DETACHED_PROCESS', 0)
+            ),
+            close_fds=True,
+        )
+    except Exception:
+        logger.opt(exception=True).debug('could not apply the staged update')
+
+
 def _schedule_media_identity() -> None:
     """Re-stamp a few times: WebView2 creates and replaces these windows
     after the app is already up."""
@@ -2583,6 +2666,7 @@ def main() -> None:
 
     # Window closed → give uvicorn a moment to drain, then exit.
     time.sleep(0.3)
+    _apply_staged_update()
 
 
 if __name__ == '__main__':

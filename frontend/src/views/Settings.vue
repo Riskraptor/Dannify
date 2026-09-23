@@ -402,6 +402,19 @@
             {{ t('settings.sourceCode') }}
           </button>
         </div>
+        <label class="row">
+          <Icon icon="ph:arrows-clockwise" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('update.autoUpdate') }}</p>
+            <p class="row-hint">{{ t('update.autoUpdateHint') }}</p>
+          </div>
+          <input
+            type="checkbox"
+            class="switch"
+            :checked="updates.autoUpdate.value"
+            @change="updates.setAutoUpdate($event.target.checked)"
+          />
+        </label>
         <div class="row">
           <Icon icon="ph:arrow-circle-down" class="row-icon" />
           <div class="row-text">

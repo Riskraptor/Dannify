@@ -549,6 +549,10 @@ export default {
     downloading: 'Téléchargement de la mise à jour… {percent} %',
     downloadFailed: 'Impossible de télécharger la mise à jour.',
     installNow: 'Installer et redémarrer',
+    readyToast: 'Dannify {version} est pret. Redemarrez pour en profiter, sinon il sera installe a la fermeture.',
+    restartNow: 'Redemarrer',
+    autoUpdate: 'Maintenir Dannify a jour',
+    autoUpdateHint: 'Telecharge les nouvelles versions en arriere-plan et les applique a la fermeture.',
     restartToUpdate: 'Redemarrer pour mettre a jour',
     installTitle: 'Installer Dannify {version} ?',
     installMessage:
