@@ -108,6 +108,36 @@
             </button>
           </div>
         </div>
+        <!-- Typeface. Two bundled faces plus whatever Windows offers, each
+             previewed in itself so the choice is visible rather than a name. -->
+        <div class="row is-stacked">
+          <Icon icon="ph:text-aa" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('settings.font') }}</p>
+            <p class="row-hint">{{ t('settings.fontHint') }}</p>
+          </div>
+          <div class="font-grid">
+            <button
+              v-for="f in fonts.fonts"
+              :key="f.id"
+              class="font-card press"
+              :class="{ 'is-active': fonts.current.value === f.id }"
+              :aria-pressed="fonts.current.value === f.id"
+              @click="fonts.setFont(f.id)"
+            >
+              <span class="font-sample" :style="{ fontFamily: f.display }">Aa</span>
+              <span class="font-meta">
+                <span class="font-name" :style="{ fontFamily: f.body }">{{ t(f.name) }}</span>
+                <span class="font-note">{{ t(f.note) }}</span>
+              </span>
+              <Icon
+                v-if="fonts.current.value === f.id"
+                icon="ph:check-circle-fill"
+                class="font-tick"
+              />
+            </button>
+          </div>
+        </div>
         <div class="row">
           <Icon icon="ph:translate" class="row-icon" />
           <div class="row-text">
@@ -420,6 +450,7 @@ import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
 import { useSettingsManager } from '/src/model/settings'
 import { useTheme } from '/src/model/theme'
+import { useFonts } from '/src/model/fonts'
 import { useUi } from '/src/model/ui'
 import { usePlayer } from '/src/model/player'
 import { useAccount } from '/src/model/account'
@@ -433,6 +464,7 @@ import ViewHeader from '/src/components/ui/ViewHeader.vue'
 const { t, locale, setLocale, locales } = useI18n()
 const sm = useSettingsManager()
 const theme = useTheme()
+const fonts = useFonts()
 const ui = useUi()
 const player = usePlayer()
 const account = useAccount()
@@ -557,6 +589,67 @@ async function setTray(patch) {
 .row.is-stacked .row-text {
   flex: 1 1 100%;
 }
+.font-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+.font-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border-radius: 11px;
+  border: 1px solid rgb(var(--c-tint) / 0.1);
+  background: rgb(var(--c-tint) / 0.03);
+  text-align: left;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.font-card:hover {
+  background: rgb(var(--c-tint) / 0.06);
+}
+.font-card.is-active {
+  border-color: rgb(var(--c-accent) / 0.55);
+  background: rgb(var(--c-accent) / 0.07);
+}
+/* The sample is set in the face it names: the point is to see it. */
+.font-sample {
+  flex: none;
+  width: 38px;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: rgb(var(--c-fg) / 0.9);
+}
+.font-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.font-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.font-note {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: rgb(var(--c-fg) / 0.55);
+}
+.font-tick {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 15px;
+  height: 15px;
+  color: rgb(var(--c-accent));
+}
+
 .palette-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));

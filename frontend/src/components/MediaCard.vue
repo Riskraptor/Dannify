@@ -7,6 +7,9 @@
     @click="$emit('open')"
     @keydown.enter.prevent="$emit('open')"
     @contextmenu="onMenu"
+    @mouseenter="warmPageOnHover(kind, item.browse_id)"
+    @mouseleave="cancelPageWarm()"
+    @focus="warmPageOnHover(kind, item.browse_id)"
   >
     <div class="mcard-art" :class="{ 'is-round': round }">
       <CoverImage
@@ -37,6 +40,7 @@ import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import CoverImage from './ui/CoverImage.vue'
 import { openContextMenu } from '/src/model/contextMenu'
+import { warmPageOnHover, cancelPageWarm } from '/src/model/prefetch'
 import { useI18n } from '/src/i18n'
 
 const props = defineProps({

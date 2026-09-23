@@ -1,3 +1,5 @@
+@import './assets/fonts/fonts.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -183,12 +185,24 @@
     overscroll-behavior: none;
     background: rgb(var(--c-app));
     color: rgb(var(--c-fg));
-    font-family: theme('fontFamily.sans');
+    font-family: var(--font-body, theme('fontFamily.sans'));
     font-size: 14px;
-    line-height: 1.45;
+    line-height: 1.5;
+    letter-spacing: var(--font-tracking, 0em);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     font-feature-settings: 'tnum' 0;
+    /* Proportional figures read better in prose, but anything that is a
+       time or a count sits in a column and has to line up. */
+  }
+
+  .stile-time,
+  .pb-time,
+  .tt-row td:last-child,
+  .dur,
+  [data-time],
+  time {
+    font-variant-numeric: tabular-nums;
     /* Native apps don't let you drag-select the chrome. */
     user-select: none;
     -webkit-user-select: none;
@@ -265,7 +279,10 @@
   h1,
   h2,
   h3 {
-    font-family: theme('fontFamily.display');
+    font-family: var(--font-display, theme('fontFamily.display'));
+    /* Headings carry a little more of the tracking than body text: at 24px
+       and up the default spacing reads loose. */
+    letter-spacing: calc(var(--font-tracking, 0em) + -0.012em);
   }
 }
 
@@ -633,6 +650,19 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+/* Respect the system setting everywhere, not just where someone remembered
+   to add it. Motion is decoration here; nothing depends on it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
