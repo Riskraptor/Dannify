@@ -437,7 +437,20 @@ function trackFromSong(song) {
 
 // --- Synced lyrics ---
 function _lyricsParams(track) {
-  if (track.type === 'local' && track.file) return { file: track.file }
+  if (track.type === 'local' && track.file) {
+    // Send the file AND what we know about the track. The backend used to
+    // get only the filename, so an online lookup could only go on whatever
+    // tags the download happened to write. When those are thin (a missing
+    // artist is enough) the lookup was skipped entirely, which is why
+    // lyrics published for a downloaded song never came back.
+    return {
+      file: track.file,
+      title: track.title || '',
+      artist: track.artist || '',
+      album: track.album || '',
+      duration: Math.round(track.duration || duration.value || 0),
+    }
+  }
   if (track.spotify_url) return { url: track.spotify_url }
   return {
     title: track.title,
@@ -672,8 +685,16 @@ function syncMediaSession() {
       title: track.title || '',
       artist: track.artist || '',
       album: track.album || '',
+      // Windows needs an absolute url for the artwork; a relative one
+      // resolves to nothing and the flyout shows an empty square.
       artwork: track.cover
-        ? [{ src: track.cover, sizes: '512x512', type: 'image/jpeg' }]
+        ? [
+            {
+              src: new URL(track.cover, window.location.href).href,
+              sizes: '512x512',
+              type: 'image/jpeg',
+            },
+          ]
         : [],
     })
     navigator.mediaSession.playbackState = isPlaying.value
@@ -845,12 +866,14 @@ function playAt(index) {
   playGen += 1
   isBuffering.value = track.type === 'stream'
   streamBaseOffset = 0
-  // Hard-reset the element so no buffered audio from the previous source can
-  // leak into the new track.
+  // Point the element at the new track and let it do the rest. This used to
+  // clear the src and call load() first, on the theory that the old buffer
+  // needed flushing. Assigning a new src already discards it, and the
+  // teardown had a cost: with no source the browser drops its media session,
+  // so Windows tore the now-playing flyout down and rebuilt it on every
+  // skip. That is the blink.
   try {
     a.pause()
-    a.removeAttribute('src')
-    a.load()
   } catch {
     // ignore
   }

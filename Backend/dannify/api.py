@@ -1132,7 +1132,11 @@ def _read_existing_lyrics(full: Path, artist: str, title: str) -> str:
     return central or ''
 
 
-def _lyrics_from_file(file: str, refresh: bool = False) -> dict[str, Any]:
+def _lyrics_from_file(
+    file: str,
+    refresh: bool = False,
+    hints: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
     """Read synced/plain lyrics from a downloaded file's .lrc or tags.
 
     When *refresh* is True the local ``.lrc``/embedded copies are skipped and
@@ -1206,10 +1210,47 @@ def _lyrics_from_file(file: str, refresh: bool = False) -> dict[str, Any]:
             'album_name': meta.get('album') or '',
             'duration': meta.get('duration') or 0,
         }
+        # A downloaded file's tags are whatever the download managed to
+        # write, and they are regularly thinner than what the app itself
+        # knows: a missing artist used to skip the online lookup entirely,
+        # which is why lyrics published for a downloaded song never came
+        # back. Fall back to what the player is showing.
+        hint = hints or {}
+        if not song['name']:
+            song['name'] = str(hint.get('title') or '')
+        if not song['artists']:
+            song['artists'] = [
+                a.strip()
+                for a in str(hint.get('artist') or '').split(',')
+                if a.strip()
+            ]
+        if not song['album_name']:
+            song['album_name'] = str(hint.get('album') or '')
+        if not song['duration']:
+            song['duration'] = int(hint.get('duration') or 0)
+
         if song['name'] and song['artists']:
             raw = lyrics_mod.fetch(
                 song, _effective_lyrics_providers(state.settings) or ['lrclib']
             )
+            # Tags and the player can disagree about how a track is named.
+            # If the file's own version found nothing, try the player's.
+            if (raw is None or not raw.has_any()) and hint.get('title'):
+                alt = {
+                    'name': str(hint.get('title') or ''),
+                    'artists': [
+                        a.strip()
+                        for a in str(hint.get('artist') or '').split(',')
+                        if a.strip()
+                    ],
+                    'album_name': str(hint.get('album') or ''),
+                    'duration': int(hint.get('duration') or 0),
+                }
+                if alt['name'] and alt['artists'] and alt != song:
+                    raw = lyrics_mod.fetch(
+                        alt,
+                        _effective_lyrics_providers(state.settings) or ['lrclib'],
+                    )
             if raw is not None and raw.has_any():
                 # Persist using the user-chosen storage location.
                 text_to_save = raw.synced or (raw.plain or '')
@@ -1263,7 +1304,15 @@ async def lyrics_endpoint(
 
     if file:
         result = await asyncio.to_thread(
-            _lyrics_from_file, file, bool(refresh)
+            _lyrics_from_file,
+            file,
+            bool(refresh),
+            {
+                'title': title,
+                'artist': artist,
+                'album': album,
+                'duration': duration,
+            },
         )
         # Attach the crowd-sourced prefs using the file's own tags.
         try:

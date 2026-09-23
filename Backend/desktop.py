@@ -238,6 +238,13 @@ if _WIN:
     _proto(user32.IsZoomed, wintypes.BOOL, HWND)
     _proto(user32.IsIconic, wintypes.BOOL, HWND)
     _proto(user32.IsWindowVisible, wintypes.BOOL, HWND)
+    _proto(user32.CreatePopupMenu, wintypes.HMENU)
+    _proto(user32.AppendMenuW, wintypes.BOOL,
+           wintypes.HMENU, UINT, ctypes.c_size_t, wintypes.LPCWSTR)
+    _proto(user32.SetMenuDefaultItem, wintypes.BOOL, wintypes.HMENU, UINT, UINT)
+    _proto(user32.TrackPopupMenuEx, wintypes.BOOL,
+           wintypes.HMENU, UINT, ctypes.c_int, ctypes.c_int, HWND, ctypes.c_void_p)
+    _proto(user32.DestroyMenu, wintypes.BOOL, wintypes.HMENU)
     _proto(user32.GetCursorPos, wintypes.BOOL, ctypes.POINTER(POINT))
     _proto(user32.GetAsyncKeyState, ctypes.c_short, ctypes.c_int)
     _proto(user32.GetSystemMetrics, ctypes.c_int, ctypes.c_int)
@@ -315,6 +322,9 @@ MONITOR_DEFAULTTONEAREST = 2
 SM_CXFRAME, SM_CYFRAME, SM_CXPADDEDBORDER, SM_SWAPBUTTON, SM_CXSMICON = 32, 33, 92, 23, 49
 VK_LBUTTON, VK_RBUTTON = 0x01, 0x02
 SW_RESTORE, SW_MAXIMIZE = 9, 3
+SW_SHOW = 5
+# GetSystemMetrics: non-zero while the session is ending.
+SM_SHUTTINGDOWN = 0x2000
 MF_BYCOMMAND, MF_ENABLED, MF_GRAYED = 0x0, 0x0, 0x1
 TPM_RETURNCMD, TPM_RIGHTBUTTON = 0x0100, 0x0002
 GW_OWNER = 4
@@ -635,143 +645,116 @@ class _Taskbar:
 # transport controls, and is the only way back to a window that was closed
 # to tray. Double-click restores, middle-click plays/pauses.
 # ---------------------------------------------------------------------------
-# --- Tray menu appearance -------------------------------------------------
+# --- The tray menu, drawn by Windows ---------------------------------------
 #
-# WinForms draws menus the way Windows 7 did: a hard 3D border, a grey image
-# gutter, and a blue selection bar. Next to Windows 11's own tray menus that
-# reads as a broken or very old application, which is exactly what it looked
-# like. These two helpers give it flat modern colours and rounded corners.
+# WinForms cannot draw a Windows 11 menu. Whatever colours you hand a
+# ContextMenuStrip you still get the old metrics, the old shadow, square
+# corners and no acrylic, which is why it kept reading as something from a
+# much older program next to every other tray icon on the taskbar.
+#
+# So this stops trying to imitate one and asks Windows for the real thing:
+# CreatePopupMenu plus TrackPopupMenuEx. The menu is then drawn by the shell,
+# which means it matches the system exactly and follows it when it changes.
+#
+# Dark mode needs one nudge. The APIs for it are exported by uxtheme as
+# ordinals with no names, which is undocumented but is what every Windows
+# application using native menus in dark mode does; if a future Windows drops
+# them the calls fail and the menu is simply light.
 
-# DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND. Ignored before Windows 11.
-_DWMWA_WINDOW_CORNER_PREFERENCE = 33
-_DWMWCP_ROUND = 2
+MF_STRING = 0x0000
+MF_SEPARATOR = 0x0800
+MF_GRAYED = 0x0001
+MF_DISABLED = 0x0002
+MFS_DEFAULT = 0x1000
+TPM_RIGHTBUTTON = 0x0002
+TPM_RETURNCMD = 0x0100
+TPM_NONOTIFY = 0x0080
+_dark_menus_ready = False
 
 
-def _round_window_corners(hwnd: int) -> None:
-    if not _WIN or not hwnd:
+def _enable_dark_menus() -> None:
+    """Ask Windows to draw menus dark when the system is dark."""
+
+    global _dark_menus_ready
+    if _dark_menus_ready or not _WIN:
+        return
+    _dark_menus_ready = True
+    if _system_uses_light_theme():
         return
     try:
-        value = ctypes.c_int(_DWMWCP_ROUND)
-        dwmapi.DwmSetWindowAttribute(
-            wintypes.HWND(hwnd),
-            ctypes.c_uint(_DWMWA_WINDOW_CORNER_PREFERENCE),
-            ctypes.byref(value),
-            ctypes.sizeof(value),
-        )
+        uxtheme = ctypes.WinDLL('uxtheme')
+        # 135 = SetPreferredAppMode, 136 = FlushMenuThemes. Ordinals, because
+        # Microsoft never gave them names.
+        set_mode = uxtheme[135]
+        set_mode.restype = ctypes.c_int
+        set_mode.argtypes = [ctypes.c_int]
+        set_mode(2)  # ForceDark
+        try:
+            uxtheme[136]()
+        except Exception:
+            pass
     except Exception:
-        logger.opt(exception=True).debug('could not round the menu corners')
+        logger.opt(exception=True).debug('dark menus unavailable')
 
 
-_TRAY_RENDERER_CACHE: dict = {}
+class _NativeMenu:
+    """A Win32 popup menu. Items are (label, callback, flags)."""
 
+    def __init__(self) -> None:
+        self._items: list = []
 
-def _tray_renderer(dark: bool):
-    """A flat renderer with Windows 11 selection colours.
+    def add(self, label: str, action=None, *, enabled: bool = True,
+            default: bool = False) -> None:
+        self._items.append((label, action, enabled, default))
 
-    Cached per theme: a renderer holds no per-menu state, and building the
-    .NET subclass on every menu rebuild is wasted work.
-    """
+    def add_separator(self) -> None:
+        self._items.append((None, None, False, False))
 
-    cached = _TRAY_RENDERER_CACHE.get(dark)
-    if cached is not None:
-        return cached
+    def show(self, hwnd: int) -> None:
+        """Pop the menu at the cursor and run whatever was chosen."""
 
-    from System.Drawing import Color, SolidBrush, Rectangle
-    from System.Drawing.Drawing2D import SmoothingMode
-    from System.Windows.Forms import (
-        ProfessionalColorTable,
-        ToolStripProfessionalRenderer,
-    )
+        _enable_dark_menus()
+        menu = user32.CreatePopupMenu()
+        if not menu:
+            return
+        actions: dict[int, object] = {}
+        try:
+            for index, (label, action, enabled, default) in enumerate(self._items, 1):
+                if label is None:
+                    user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
+                    continue
+                flags = MF_STRING
+                if not enabled:
+                    flags |= MF_GRAYED | MF_DISABLED
+                user32.AppendMenuW(menu, flags, index, label)
+                if default:
+                    user32.SetMenuDefaultItem(menu, index, 0)
+                actions[index] = action
 
-    surface = (
-        Color.FromArgb(255, 44, 44, 47) if dark else Color.FromArgb(255, 249, 249, 249)
-    )
-    hover = (
-        Color.FromArgb(255, 60, 60, 64) if dark else Color.FromArgb(255, 236, 236, 238)
-    )
-    line = (
-        Color.FromArgb(255, 62, 62, 66) if dark else Color.FromArgb(255, 226, 226, 229)
-    )
-
-    class _Colors(ProfessionalColorTable):
-        @property
-        def MenuItemSelected(self):  # noqa: N802
-            return hover
-
-        @property
-        def MenuItemSelectedGradientBegin(self):  # noqa: N802
-            return hover
-
-        @property
-        def MenuItemSelectedGradientEnd(self):  # noqa: N802
-            return hover
-
-        @property
-        def MenuItemBorder(self):  # noqa: N802
-            return hover
-
-        @property
-        def MenuBorder(self):  # noqa: N802
-            return line
-
-        @property
-        def ToolStripDropDownBackground(self):  # noqa: N802
-            return surface
-
-        @property
-        def ImageMarginGradientBegin(self):  # noqa: N802
-            return surface
-
-        @property
-        def ImageMarginGradientMiddle(self):  # noqa: N802
-            return surface
-
-        @property
-        def ImageMarginGradientEnd(self):  # noqa: N802
-            return surface
-
-        @property
-        def SeparatorDark(self):  # noqa: N802
-            return line
-
-        @property
-        def SeparatorLight(self):  # noqa: N802
-            return surface
-
-    class _Renderer(ToolStripProfessionalRenderer):
-        def __init__(self):
-            super().__init__(_Colors())
-            self.RoundedEdges = False
-
-        def OnRenderMenuItemBackground(self, e):  # noqa: N802, ANN001
-            """Rounded selection pill rather than a full-width bar."""
-
-            if not e.Item.Selected or not e.Item.Enabled:
-                return
-            g = e.Graphics
-            g.SmoothingMode = SmoothingMode.AntiAlias
-            rect = Rectangle(
-                3, 0, e.Item.Width - 6, e.Item.Height
+            point = POINT()
+            user32.GetCursorPos(ctypes.byref(point))
+            # The documented dance: a popup menu will not dismiss on an
+            # outside click unless its owner window is in the foreground,
+            # and the trailing null message clears the menu state.
+            user32.SetForegroundWindow(wintypes.HWND(hwnd))
+            chosen = user32.TrackPopupMenuEx(
+                menu,
+                TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
+                point.x,
+                point.y,
+                wintypes.HWND(hwnd),
+                None,
             )
-            brush = SolidBrush(hover)
-            try:
-                g.FillRectangle(brush, rect)
-            finally:
-                brush.Dispose()
+            user32.PostMessageW(wintypes.HWND(hwnd), 0x0000, 0, 0)
+        finally:
+            user32.DestroyMenu(menu)
 
-        def OnRenderSeparator(self, e):  # noqa: N802, ANN001
-            g = e.Graphics
-            brush = SolidBrush(line)
+        action = actions.get(int(chosen or 0))
+        if callable(action):
             try:
-                g.FillRectangle(
-                    brush, Rectangle(8, e.Item.Height // 2, e.Item.Width - 16, 1)
-                )
-            finally:
-                brush.Dispose()
-
-    renderer = _Renderer()
-    _TRAY_RENDERER_CACHE[dark] = renderer
-    return renderer
+                action()
+            except Exception:
+                logger.opt(exception=True).debug('tray menu action failed')
 
 
 class _Tray:
@@ -814,17 +797,33 @@ class _Tray:
                 ToolStripSeparator,
             )
 
-            menu = self._build_menu(ToolStripMenuItem, ToolStripSeparator, EventHandler)
             icon = NotifyIcon()
             icon.Icon = _app_icon()
             icon.Text = APP_TITLE
-            icon.ContextMenuStrip = menu
+            # No ContextMenuStrip: the menu is a real Windows one, popped by
+            # hand on right-click so the shell draws it (see _NativeMenu).
+            # Single left click restores, which is what Spotify, Discord and
+            # every other tray app does. Double click kept for habit. The
+            # right button opens the menu, so it must not restore.
+            def _clicked(sender, args):  # noqa: ANN001
+                try:
+                    if args.Button == MouseButtons.Left:
+                        self._api._show_from_tray()
+                except Exception:
+                    pass
+
+            icon.MouseClick += MouseEventHandler(_clicked)
             icon.DoubleClick += EventHandler(lambda s, e: self._api._show_from_tray())
-            icon.MouseUp += MouseEventHandler(
-                lambda s, e: self._api._media('toggle')
-                if e.Button == MouseButtons.Middle
-                else None
-            )
+            def _mouse_up(sender, args):  # noqa: ANN001
+                try:
+                    if args.Button == MouseButtons.Middle:
+                        self._api._media('toggle')
+                    elif args.Button == MouseButtons.Right:
+                        self._popup_menu()
+                except Exception:
+                    logger.opt(exception=True).debug('tray click failed')
+
+            icon.MouseUp += MouseEventHandler(_mouse_up)
             icon.Visible = True
             self._icon = icon
             return True
@@ -832,86 +831,34 @@ class _Tray:
             logger_print('tray icon unavailable:', exc)
             return False
 
-    def _build_menu(self, MenuItem, Separator, EventHandler):  # noqa: N803, ANN001
-        """A menu that looks like it belongs in Windows 11.
+    def _popup_menu(self) -> None:
+        """Right-click: show the real Windows menu."""
 
-        Dark or light to match the system, a comfortable row height, the
-        track title on top in bold, and "Open Dannify" as the default item
-        so a plain click on the icon does the obvious thing.
-        """
-        from System.Drawing import Color, Font, FontStyle, SystemFonts
-        from System.Windows.Forms import (
-            ContextMenuStrip,
-            ToolStripDropDownDirection,
+        menu = _NativeMenu()
+        label = self._track or self.labels['nowPlaying']
+        # The track is context, not a command, so it is a disabled row at the
+        # top exactly as every other player's tray menu does it.
+        menu.add(label[:64], None, enabled=False)
+        menu.add_separator()
+        menu.add(
+            self.labels['pause' if self._playing else 'play'],
+            lambda: self._api._media('toggle'),
+            enabled=self._has_track,
         )
-
-        dark = not _system_uses_light_theme()
-        # Windows 11's own menu surface, not the WinForms grey.
-        if dark:
-            fg = Color.FromArgb(255, 239, 240, 243)
-            bg = Color.FromArgb(255, 44, 44, 47)
-            dim = Color.FromArgb(255, 158, 159, 166)
-        else:
-            fg = Color.FromArgb(255, 26, 28, 32)
-            bg = Color.FromArgb(255, 249, 249, 249)
-            dim = Color.FromArgb(255, 105, 107, 113)
-
-        menu = ContextMenuStrip()
-        menu.Renderer = _tray_renderer(dark)
-        menu.ShowImageMargin = False
-        menu.DropDownDirection = ToolStripDropDownDirection.AboveLeft
-        menu.BackColor = bg
-        menu.ForeColor = fg
-        # Breathing room around the block of items, the way Windows 11 menus
-        # sit off their own edges.
-        menu.Padding = _padding(4, 6, 4, 6)
-        try:
-            base = SystemFonts.MenuFont
-            menu.Font = Font(base.FontFamily, 9.75)
-        except Exception:
-            base = None
-
-        # Rounded corners, once the dropdown actually has a window handle.
-        def _round(sender, event):  # noqa: ANN001
-            try:
-                _round_window_corners(int(menu.Handle.ToInt64()))
-            except Exception:
-                pass
-
-        menu.HandleCreated += EventHandler(_round)
-
-        def item(key, handler=None, bold=False, header=False):
-            entry = MenuItem(self.labels[key])
-            entry.ForeColor = dim if header else fg
-            entry.BackColor = bg
-            # 32px rows: Windows 11 menu metrics, and a tray menu is clicked
-            # in a hurry.
-            entry.Padding = _padding(6, 5, 6, 5)
-            if handler is not None:
-                entry.Click += EventHandler(lambda s, e: handler())
-            else:
-                entry.Enabled = False
-                entry.ForeColor = dim
-            if base is not None:
-                entry.Font = Font(
-                    base.FontFamily,
-                    9.0 if header else 9.75,
-                    FontStyle.Bold if bold else FontStyle.Regular,
-                )
-            self._items[key] = entry
-            return entry
-
-        # The header is the track, not a command: smaller, dimmer, and it
-        # does not pretend to be a disabled menu item you failed to click.
-        menu.Items.Add(item('nowPlaying', None, header=True))
-        menu.Items.Add(Separator())
-        menu.Items.Add(item('play', lambda: self._api._media('toggle')))
-        menu.Items.Add(item('prev', lambda: self._api._media('prev')))
-        menu.Items.Add(item('next', lambda: self._api._media('next')))
-        menu.Items.Add(Separator())
-        menu.Items.Add(item('show', self._api._show_from_tray, bold=True))
-        menu.Items.Add(item('quit', self._api._quit))
-        return menu
+        menu.add(
+            self.labels['prev'],
+            lambda: self._api._media('prev'),
+            enabled=self._has_track,
+        )
+        menu.add(
+            self.labels['next'],
+            lambda: self._api._media('next'),
+            enabled=self._has_track,
+        )
+        menu.add_separator()
+        menu.add(self.labels['show'], self._api._show_from_tray, default=True)
+        menu.add(self.labels['quit'], self._api._quit)
+        menu.show(self._api._hwnd or 0)
 
     def apply_labels(self, labels: dict) -> None:
         for key in self.LABEL_KEYS:
@@ -927,26 +874,20 @@ class _Tray:
         self.refresh()
 
     def refresh(self) -> None:
+        """Only the hover tooltip needs updating now.
+
+        The menu is rebuilt from current state every time it opens, so there
+        are no persistent menu items left to keep in sync.
+        """
+
         if self._icon is None:
             return
         try:
             label = self._track or self.labels['nowPlaying']
-            self._icon.Text = f'{APP_TITLE}\n{label}'[:127]
-            for key in ('nowPlaying', 'play', 'prev', 'next', 'show', 'quit'):
-                entry = self._items.get(key)
-                if entry is None:
-                    continue
-                if key == 'nowPlaying':
-                    entry.Text = label
-                elif key == 'play':
-                    entry.Text = self.labels['pause' if self._playing else 'play']
-                    entry.Enabled = self._has_track
-                elif key in ('prev', 'next'):
-                    entry.Enabled = self._has_track
-                else:
-                    entry.Text = self.labels[key]
+            self._icon.Text = (APP_TITLE + chr(10) + label)[:127]
         except Exception:
             pass
+
 
     def notify_hidden(self) -> None:
         """One balloon, the first time the window vanishes into the tray."""
@@ -1988,6 +1929,62 @@ def _wait_for_parent_exit() -> None:
         kernel32.CloseHandle(handle)
 
 
+# A name the installer can signal to ask us to shut down. Without this the
+# only way to close a running copy is a window message, and close-to-tray
+# swallows those: the app hides instead of exiting and the installer sits
+# there waiting for a process that is never going to leave.
+_QUIT_EVENT_NAME = r'Local\DannifyQuitRequest'
+
+
+def _quit_event_name() -> str:
+    return _QUIT_EVENT_NAME + os.environ.get('DANNIFY_INSTANCE', '')
+
+
+def _watch_for_quit_request(on_quit) -> None:
+    """Quit when something outside asks us to, properly rather than to tray."""
+
+    if not _WIN:
+        return
+
+    def run() -> None:
+        try:
+            _proto(kernel32.CreateEventW, wintypes.HANDLE,
+                   ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR)
+            _proto(kernel32.WaitForSingleObject, wintypes.DWORD,
+                   wintypes.HANDLE, wintypes.DWORD)
+            handle = kernel32.CreateEventW(None, True, False, _quit_event_name())
+            if not handle:
+                return
+            # INFINITE; the thread is a daemon so it dies with the process.
+            if kernel32.WaitForSingleObject(handle, 0xFFFFFFFF) == 0:
+                logger.info('Shutdown requested from outside; closing')
+                on_quit()
+        except Exception:
+            logger.opt(exception=True).debug('quit watcher failed')
+
+    threading.Thread(target=run, name='dannify-quit-watch', daemon=True).start()
+
+
+def _signal_quit_request() -> bool:
+    """Ask a running copy to exit. True if one was there to ask."""
+
+    if not _WIN:
+        return False
+    try:
+        _proto(kernel32.OpenEventW, wintypes.HANDLE,
+               wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR)
+        _proto(kernel32.SetEvent, wintypes.BOOL, wintypes.HANDLE)
+        EVENT_MODIFY_STATE = 0x0002
+        handle = kernel32.OpenEventW(EVENT_MODIFY_STATE, False, _quit_event_name())
+        if not handle:
+            return False
+        kernel32.SetEvent(handle)
+        kernel32.CloseHandle(handle)
+        return True
+    except Exception:
+        return False
+
+
 def _acquire_single_instance() -> bool:
     """Return True if we are the first instance; focus the other otherwise.
 
@@ -2005,34 +2002,89 @@ def _acquire_single_instance() -> bool:
     return True
 
 
-def _focus_existing_window() -> None:
-    """Bring the running instance forward (its title may be a song name)."""
-    try:
-        pid = int(json.loads(_INSTANCE_FILE.read_text(encoding='utf-8')).get('pid', 0))
-    except Exception:
-        pid = 0
-    found = []
+def _running_instance_window() -> int:
+    """The main window of the instance already running, or 0.
 
-    def visit(hwnd, _):  # noqa: ANN001
-        owner_pid = wintypes.DWORD()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner_pid))
-        if (
-            owner_pid.value == pid
-            and user32.IsWindowVisible(hwnd)
-            and not user32.GetWindow(hwnd, GW_OWNER)
-        ):
-            found.append(hwnd)
+    Prefers the handle it wrote down; falls back to walking its windows.
+    Deliberately does not filter on visibility: the whole point is to find
+    the window when it has been hidden into the tray.
+    """
+
+    pid = 0
+    hwnd = 0
+    try:
+        note = json.loads(_INSTANCE_FILE.read_text(encoding='utf-8'))
+        pid = int(note.get('pid', 0) or 0)
+        hwnd = int(note.get('hwnd', 0) or 0)
+    except Exception:
+        pass
+
+    if hwnd and user32.IsWindow(wintypes.HWND(hwnd)):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(wintypes.HWND(hwnd), ctypes.byref(owner))
+        if not pid or owner.value == pid:
+            return hwnd
+
+    if not pid:
+        return 0
+    found: list[int] = []
+
+    def visit(candidate, _):  # noqa: ANN001
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(candidate, ctypes.byref(owner))
+        if owner.value != pid or user32.GetWindow(candidate, GW_OWNER):
+            return True
+        name = ctypes.create_unicode_buffer(128)
+        user32.GetClassNameW(candidate, name, 128)
+        # The app's own frame, not an IME or message-only helper window.
+        if name.value.startswith('WindowsForms10.Window.8'):
+            found.append(candidate)
             return False
         return True
 
     try:
-        if pid:
-            user32.EnumWindows(_EnumWindowsProc(visit), 0)
-        hwnd = found[0] if found else user32.FindWindowW(None, APP_TITLE)
-        if hwnd:
-            if user32.IsIconic(hwnd):
-                user32.ShowWindow(hwnd, SW_RESTORE)
-            user32.SetForegroundWindow(hwnd)
+        user32.EnumWindows(_EnumWindowsProc(visit), 0)
+    except Exception:
+        return 0
+    return found[0] if found else 0
+
+
+def _focus_existing_window() -> None:
+    """Bring the running instance forward, from wherever it is.
+
+    Launching the app again when it is already running should behave like
+    every other Windows application: the window you already have comes
+    back. It used to do nothing at all when the window had been hidden into
+    the tray, which left people with no way to find the app they could hear
+    playing.
+    """
+
+    hwnd = _running_instance_window()
+    if not hwnd:
+        return
+    handle = wintypes.HWND(hwnd)
+    try:
+        # SW_SHOW un-hides; SW_RESTORE un-minimises. A window can need both.
+        if not user32.IsWindowVisible(handle):
+            user32.ShowWindow(handle, SW_SHOW)
+        if user32.IsIconic(handle):
+            user32.ShowWindow(handle, SW_RESTORE)
+        # Windows refuses a foreground steal unless the calling thread is
+        # attached to the one that owns the window. We were just launched by
+        # the user, so we are entitled to it; the attach is what makes the
+        # entitlement transfer.
+        target_thread = user32.GetWindowThreadProcessId(handle, None)
+        our_thread = kernel32.GetCurrentThreadId()
+        attached = False
+        if target_thread and target_thread != our_thread:
+            attached = bool(user32.AttachThreadInput(our_thread, target_thread, True))
+        try:
+            user32.BringWindowToTop(handle)
+            user32.SetForegroundWindow(handle)
+            user32.SetActiveWindow(handle)
+        finally:
+            if attached:
+                user32.AttachThreadInput(our_thread, target_thread, False)
     except Exception:
         pass
 
@@ -2145,11 +2197,21 @@ def _wait_until_up(port: int, timeout: float = 30.0, token: str = '') -> bool:
     return False
 
 
-def _write_instance_file(port: int) -> None:
+def _write_instance_file(port: int, hwnd: int = 0) -> None:
+    """Leave a note for a second launch: how to reach us, and which window
+    to bring forward.
+
+    The handle matters. Finding the window by title does not work (the title
+    is whatever is playing) and finding it by enumerating visible windows
+    does not work either, because a window hidden in the tray is not
+    visible. Writing the handle down removes the guessing.
+    """
+
     try:
-        _INSTANCE_FILE.write_text(
-            json.dumps({'port': port, 'pid': os.getpid()}), encoding='utf-8'
-        )
+        payload = {'port': port, 'pid': os.getpid()}
+        if hwnd:
+            payload['hwnd'] = int(hwnd)
+        _INSTANCE_FILE.write_text(json.dumps(payload), encoding='utf-8')
     except Exception:
         pass
 
@@ -2510,6 +2572,12 @@ def _schedule_media_identity() -> None:
 
 
 def main() -> None:
+    # `--quit` is how the installer asks a running copy to get out of the
+    # way before it replaces the files. It is not a user-facing switch.
+    if '--quit' in sys.argv[1:]:
+        _signal_quit_request()
+        sys.exit(0)
+
     _claim_app_identity()
     if not _acquire_single_instance():
         sys.exit(0)
@@ -2583,6 +2651,12 @@ def main() -> None:
     # pywebview hands the window only to a parameter literally named "window".
     def _before_show(window) -> None:  # noqa: ANN001  (UI thread, before first paint)
         api._attach(window)
+        # Now that there is a real window, record it so a second launch can
+        # bring it back even after it has been hidden into the tray.
+        try:
+            _write_instance_file(port, api._hwnd)
+        except Exception:
+            pass
 
     def _swap_to_app() -> None:
         # Give the media flyout something to call us other than "Unknown app".
@@ -2622,7 +2696,20 @@ def main() -> None:
     def _on_closing():
         # Runs on the UI thread before the window goes away. Returning False
         # cancels the close, which is how "keep playing in the tray" works.
-        if api._close_to_tray and not api._quitting and api._hide_to_tray():
+        #
+        # Except when Windows itself is going down: an app that answers a
+        # shutdown by hiding is an app that blocks the shutdown.
+        shutting_down = False
+        try:
+            shutting_down = bool(user32.GetSystemMetrics(SM_SHUTTINGDOWN))
+        except Exception:
+            pass
+        if (
+            api._close_to_tray
+            and not api._quitting
+            and not shutting_down
+            and api._hide_to_tray()
+        ):
             return False
         # Remember the restored geometry (and whether it was maximized).
         api._closing = True
@@ -2654,6 +2741,10 @@ def main() -> None:
     window.events.minimized += _on_minimized
     window.events.closing += _on_closing
     window.events.closed += _on_closed
+
+    # Let the installer (or anything else) ask us to close properly rather
+    # than hide into the tray.
+    _watch_for_quit_request(api._quit)
 
     # gui='edgechromium' = Edge WebView2 (ships with Windows 10/11).
     webview.start(
