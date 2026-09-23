@@ -243,6 +243,8 @@ export default {
   settings: {
     title: 'Settings',
     subtitle: 'Changes are saved automatically.',
+    paneGeneral: 'General',
+    paneLibrary: 'Library & downloads',
     appearance: 'Appearance',
     theme: 'Theme',
     themeHint: 'Follow Windows, or always use light or dark.',
@@ -540,6 +542,8 @@ export default {
     checkFailed: 'Could not check for updates.',
     downloadAndInstall: 'Update now',
     downloading: 'Downloading update… {percent}%',
+    flowNote: 'Dannify fetches only the parts that changed, so this is usually much smaller than the installer. Keep using the app while it works.',
+    readyNote: 'Ready. It goes in the next time you close Dannify, or restart now to get it straight away.',
     downloadFailed: 'Could not download the update.',
     installNow: 'Install and restart',
     readyToast: 'Dannify {version} is ready. Restart to use it, or it will install when you close the app.',
@@ -565,9 +569,9 @@ export default {
   },
   support: {
     title: 'Support',
-    heading: 'Support Dannify',
-    blurb: 'Dannify is free. If it earns a spot on your taskbar, a tip keeps it growing.',
-    give: 'Support',
+    heading: 'Buy me a coffee',
+    blurb: 'Dannify is free and stays free. Ko-fi is there if you feel like chipping in.',
+    give: 'Open Ko-fi',
   },
   tray: {
     nowPlaying: 'Nothing playing',

@@ -163,6 +163,38 @@ def logger_print(*args) -> None:  # noqa: D401, ANN001
         pass
 
 
+def _fatal() -> None:
+    """Last resort when the app cannot start.
+
+    A packaged app has no console, so anything that escapes main() used to
+    surface as the build tool's own crash box: a Python traceback with file
+    names and line numbers in it. That tells the person nothing they can act
+    on and quite reasonably alarms them. The detail goes to the log; the
+    window says what happened and what to try.
+    """
+
+    import traceback
+
+    try:
+        logger_print('startup failed\n' + traceback.format_exc())
+    except Exception:
+        pass
+    if not _WIN:
+        return
+    try:
+        ctypes.windll.user32.MessageBoxW(
+            None,
+            'Dannify could not start.\n\n'
+            'Close it from the notification area if a copy is still running, '
+            'then open it again. If it keeps happening, install the latest '
+            'version over the top of this one.',
+            APP_TITLE,
+            0x10 | 0x40000,  # MB_ICONERROR | MB_TOPMOST
+        )
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Persisted window preferences (geometry, theme, title-bar style, mini pos)
 # ---------------------------------------------------------------------------
@@ -3176,4 +3208,9 @@ if __name__ == '__main__':
             pass
         sys.exit(0)
 
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException:
+        _fatal()

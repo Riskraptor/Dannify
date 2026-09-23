@@ -245,6 +245,8 @@ export default {
   settings: {
     title: 'Paramètres',
     subtitle: 'Les modifications sont enregistrées automatiquement.',
+    paneGeneral: 'Général',
+    paneLibrary: 'Bibliothèque et téléchargements',
     appearance: 'Apparence',
     theme: 'Thème',
     themeHint: 'Suivre Windows, ou toujours utiliser le mode clair ou sombre.',
@@ -545,6 +547,8 @@ export default {
     checkFailed: 'Impossible de vérifier les mises à jour.',
     downloadAndInstall: 'Mettre à jour',
     downloading: 'Téléchargement de la mise à jour… {percent} %',
+    flowNote: "Dannify ne récupère que ce qui a changé, c'est donc bien plus léger que l'installateur. Continuez à utiliser l'application pendant ce temps.",
+    readyNote: 'Prêt. La mise à jour s’appliquera à la prochaine fermeture, ou redémarrez maintenant.',
     downloadFailed: 'Impossible de télécharger la mise à jour.',
     installNow: 'Installer et redémarrer',
     readyToast: 'Dannify {version} est pret. Redemarrez pour en profiter, sinon il sera installe a la fermeture.',
@@ -570,9 +574,9 @@ export default {
   },
   support: {
     title: 'Soutien',
-    heading: 'Soutenir Dannify',
-    blurb: "Dannify est gratuit. S'il mérite une place dans votre barre des tâches, un pourboire le fait grandir.",
-    give: 'Soutenir',
+    heading: 'Offrez-moi un café',
+    blurb: 'Dannify est gratuit et le restera. Ko-fi est là si vous voulez participer.',
+    give: 'Ouvrir Ko-fi',
   },
   tray: {
     nowPlaying: 'Aucune lecture',

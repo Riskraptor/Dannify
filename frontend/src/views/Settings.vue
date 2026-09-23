@@ -12,8 +12,22 @@
     </ViewHeader>
 
     <div class="settings view-pad">
+      <nav class="set-nav" :aria-label="t('settings.title')">
+        <button
+          v-for="p in panes"
+          :key="p.id"
+          class="set-tab"
+          :class="{ 'is-active': pane === p.id }"
+          @click="pane = p.id"
+        >
+          <Icon :icon="p.icon" class="h-[18px] w-[18px]" />
+          <span>{{ t(p.label) }}</span>
+        </button>
+      </nav>
+
+      <div class="set-pane">
       <!-- Account -->
-      <section>
+      <section v-show="pane === 'general'">
         <h2 class="group-title">{{ t('account.title') }}</h2>
         <div class="row">
           <img
@@ -56,7 +70,7 @@
       </section>
 
       <!-- Appearance -->
-      <section>
+      <section v-show="pane === 'appearance'">
         <h2 class="group-title">{{ t('settings.appearance') }}</h2>
         <div class="row">
           <Icon icon="ph:palette" class="row-icon" />
@@ -151,7 +165,7 @@
       </section>
 
       <!-- Windows integration -->
-      <section v-if="desktop.isDesktop">
+      <section v-if="desktop.isDesktop" v-show="pane === 'general'">
         <h2 class="group-title">{{ t('settings.windowsSection') }}</h2>
         <label class="row">
           <Icon icon="ph:tray" class="row-icon" />
@@ -169,7 +183,7 @@
       </section>
 
       <!-- Playback -->
-      <section>
+      <section v-show="pane === 'playback'">
         <h2 class="group-title">{{ t('settings.playback') }}</h2>
         <label class="row">
           <Icon icon="ph:microphone-stage" class="row-icon" />
@@ -195,7 +209,7 @@
       </section>
 
       <!-- Library -->
-      <section>
+      <section v-show="pane === 'library'">
         <h2 class="group-title">{{ t('settings.librarySection') }}</h2>
         <div class="row">
           <Icon icon="ph:folder" class="row-icon" />
@@ -229,7 +243,7 @@
       </section>
 
       <!-- Downloads -->
-      <section>
+      <section v-show="pane === 'library'">
         <h2 class="group-title">{{ t('settings.downloadsSection') }}</h2>
         <div class="row">
           <Icon icon="ph:file-audio" class="row-icon" />
@@ -292,7 +306,7 @@
       </section>
 
       <!-- Lyrics -->
-      <section>
+      <section v-show="pane === 'lyrics'">
         <h2 class="group-title">{{ t('settings.lyricsGroup') }}</h2>
         <label class="row">
           <Icon icon="ph:text-align-left" class="row-icon" />
@@ -335,35 +349,23 @@
       </section>
 
       <!-- Support -->
-      <section v-if="support.configured">
+      <section v-if="support.configured" v-show="pane === 'about'">
         <h2 class="group-title">{{ t('support.title') }}</h2>
-        <div class="row support-row">
-          <Icon icon="ph:heart-fill" class="row-icon text-accent" />
+        <div class="row">
+          <Icon icon="ph:coffee" class="row-icon text-accent" />
           <div class="row-text">
             <p class="row-label">{{ t('support.heading') }}</p>
             <p class="row-hint">{{ support.message || t('support.blurb') }}</p>
           </div>
-          <div class="flex shrink-0 flex-wrap justify-end gap-2">
-            <template v-if="!support.payment_link">
-              <button
-                v-for="amount in support.amounts"
-                :key="amount"
-                class="btn press"
-                @click="donate(amount)"
-              >
-                {{ support.currency }} {{ amount.toLocaleString() }}
-              </button>
-            </template>
-            <button class="btn-accent btn-pill press px-4" @click="donate(0)">
-              <Icon icon="ph:hand-heart" class="h-4 w-4" />
-              {{ t('support.give') }}
-            </button>
-          </div>
+          <button class="btn-accent btn-pill press shrink-0 px-4" @click="donate()">
+            <Icon icon="ph:coffee" class="h-4 w-4" />
+            {{ t('support.give') }}
+          </button>
         </div>
       </section>
 
       <!-- About -->
-      <section>
+      <section v-show="pane === 'about'">
         <h2 class="group-title">{{ t('settings.about') }}</h2>
         <div class="row">
           <img src="../assets/dannify.svg" alt="" class="row-icon h-6 w-6 drag-none" />
@@ -416,6 +418,22 @@
             </button>
           </div>
         </div>
+
+        <!-- What the update is actually doing. Most of the wait is spent
+             working out which files changed, and a bar on its own at 0%
+             reads as a download that never started. -->
+        <div v-if="updates.downloading.value || updates.ready.value" class="up-flow">
+          <div class="up-line">
+            <span class="up-stage">{{ updates.stage.value || t('update.title') }}</span>
+            <span class="up-pct">{{ Math.round(updates.progress.value) }}%</span>
+          </div>
+          <div class="up-track">
+            <span class="up-fill" :style="{ width: `${Math.max(2, updates.progress.value)}%` }" />
+          </div>
+          <p class="up-note">
+            {{ updates.ready.value ? t('update.readyNote') : t('update.flowNote') }}
+          </p>
+        </div>
         <div class="row">
           <Icon icon="ph:keyboard" class="row-icon" />
           <div class="row-text">
@@ -427,6 +445,7 @@
           </button>
         </div>
       </section>
+      </div>
     </div>
   </div>
 </template>
@@ -459,6 +478,31 @@ const s = computed(() => sm.settings.value)
 
 const version = ref(localStorage.getItem('version') || '')
 
+// One long scroll of nine headings was hard to search by eye, so the groups
+// are panes now and the rail says what is where. The choice is remembered:
+// people come back to Settings for the same thing they came for last time.
+const panes = [
+  { id: 'general', label: 'settings.paneGeneral', icon: 'ph:sliders-horizontal' },
+  { id: 'appearance', label: 'settings.appearance', icon: 'ph:palette' },
+  { id: 'playback', label: 'settings.playback', icon: 'ph:play-circle' },
+  { id: 'library', label: 'settings.paneLibrary', icon: 'ph:folders' },
+  { id: 'lyrics', label: 'settings.lyricsGroup', icon: 'ph:microphone-stage' },
+  { id: 'about', label: 'settings.about', icon: 'ph:info' },
+]
+const PANE_KEY = 'dn.settingsPane'
+const pane = ref(
+  panes.some((p) => p.id === localStorage.getItem(PANE_KEY))
+    ? localStorage.getItem(PANE_KEY)
+    : 'general'
+)
+watch(pane, (id) => {
+  try {
+    localStorage.setItem(PANE_KEY, id)
+  } catch {
+    // storage blocked: the choice just won't survive a restart
+  }
+})
+
 const updateHint = computed(() => {
   if (updates.downloading.value) {
     return t('update.downloading', { percent: Math.round(updates.progress.value) })
@@ -470,33 +514,13 @@ const updateHint = computed(() => {
   return t('update.upToDate', { version: version.value })
 })
 
-// --- Support the app (Paystack; configured by the packager, see support.py)
-const support = reactive({
-  configured: false,
-  currency: 'KES',
-  amounts: [],
-  message: '',
-  payment_link: '',
-  public_key: '',
-  email: '',
-})
+// --- Support the app (one link, see support.py)
+const support = reactive({ configured: false, link: '', message: '' })
 
-function donate(amount) {
-  if (!support.configured) return
-  // A Paystack Payment Page handles the amount itself: just open it.
-  if (support.payment_link) {
-    desktop.openExternal(support.payment_link)
-    return
-  }
-  const value = amount || support.amounts[1] || support.amounts[0] || 0
-  const params = new URLSearchParams({
-    key: support.public_key,
-    amount: String(value),
-    currency: support.currency,
-  })
-  if (support.email) params.set('email', support.email)
-  // Checkout opens in the real browser: card details never touch the app.
-  desktop.openExternal(`${location.origin}/support/checkout?${params}`)
+function donate() {
+  // Straight out to the browser. No card details, no checkout, nothing to
+  // get wrong on our side.
+  if (support.configured) desktop.openExternal(support.link)
 }
 
 const themeOptions = [
@@ -548,10 +572,106 @@ async function setTray(patch) {
 
 <style scoped>
 .settings {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  align-items: start;
+  gap: 28px;
+  max-width: 1040px;
+}
+.up-flow {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgb(var(--c-tint) / 0.05);
+}
+.up-line {
   display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.up-pct {
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--c-fg) / 0.6);
+}
+.up-track {
+  margin-top: 8px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(var(--c-tint) / 0.14);
+  overflow: hidden;
+}
+.up-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: rgb(var(--c-accent));
+  transition: width 0.25s var(--ease-out);
+}
+.up-note {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgb(var(--c-fg) / 0.55);
+}
+.set-pane {
+  display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 28px;
-  max-width: 980px;
+}
+.set-nav {
+  position: sticky;
+  top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.set-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  color: rgb(var(--c-fg) / 0.65);
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+.set-tab:hover {
+  background: rgb(var(--c-tint) / 0.07);
+  color: rgb(var(--c-fg) / 0.9);
+}
+.set-tab.is-active {
+  background: rgb(var(--c-tint) / 0.11);
+  color: rgb(var(--c-fg));
+}
+/* Narrow window: the rail lies down above the pane rather than stealing a
+   third of the width from it. */
+@media (max-width: 860px) {
+  .settings {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+  .set-nav {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .set-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .set-tab {
+    flex: none;
+    padding: 8px 12px;
+  }
 }
 .group-title {
   margin: 0 0 8px 2px;

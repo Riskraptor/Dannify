@@ -180,7 +180,7 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
 def download(
     url: str,
     dest_dir: Path,
-    progress_cb: Optional[Callable[[float], None]] = None,
+    progress_cb: Optional[Callable[..., None]] = None,
 ) -> Path:
     """Download the installer, reporting 0-100 progress."""
 
@@ -201,10 +201,12 @@ def download(
                 handle.write(chunk)
                 done += len(chunk)
                 if progress_cb and total:
-                    progress_cb(min(99.0, done * 100.0 / total))
+                    progress_cb(
+                        min(99.0, done * 100.0 / total), 'Downloading the installer'
+                    )
     partial.replace(target)
     if progress_cb:
-        progress_cb(100.0)
+        progress_cb(100.0, 'Downloaded')
     logger.info('Update downloaded to {}', target)
     return target
 
@@ -213,7 +215,7 @@ def prepare_delta(
     app_dir: Path,
     dest_dir: Path,
     info: dict[str, Any],
-    progress: Optional[Callable[[float], None]] = None,
+    progress: Optional[Callable[..., None]] = None,
 ) -> Optional[Path]:
     """Try to assemble this update from just the files that changed.
 
@@ -230,12 +232,17 @@ def prepare_delta(
         logger.debug('release has no update assets; using the installer')
         return None
 
+    def say(percent: float, label: str) -> None:
+        if progress:
+            progress(percent, label)
+
     try:
+        say(0.0, 'Reading the release')
         manifest = json.loads(_get_text(manifest_url))
         if not isinstance(manifest, dict) or not manifest.get('files'):
             return None
 
-        found = delta.plan(app_dir, manifest)
+        found = delta.plan(app_dir, manifest, say)
         changed, removed, size = found['changed'], found['removed'], found['bytes']
         if not changed and not removed:
             logger.debug('nothing to fetch; already up to date on disk')
@@ -257,8 +264,9 @@ def prepare_delta(
         staging = Path(dest_dir) / f'delta-{manifest.get("version", "next")}'
         if staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
-        delta.fetch(files_url, changed, staging, progress)
+        delta.fetch(files_url, changed, staging, say)
 
+        say(100.0, 'Checking the download')
         if not delta.verify_staged(staging, changed, manifest):
             logger.warning('Partial update failed verification; using the installer')
             shutil.rmtree(staging, ignore_errors=True)

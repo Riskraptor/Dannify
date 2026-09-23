@@ -168,9 +168,13 @@ onBeforeUnmount(() => {
 <style scoped>
 .titlebar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 480px) minmax(0, 1fr);
+  /* The sides take what they need and the search box takes the rest. It used
+     to be the other way round — a 220 px floor under the search box — and in
+     a small window that floor pushed the account and settings buttons out
+     from under it, so they sat on top of the field. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   height: var(--titlebar-h);
   padding-left: 12px;
   background: rgb(var(--c-app));
@@ -213,6 +217,19 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: center;
   min-width: 0;
+}
+.tb-center > * {
+  width: min(100%, 480px);
+  min-width: 0;
+}
+/* Very narrow: the name goes before anything that can be clicked does. */
+@media (max-width: 820px) {
+  .titlebar {
+    gap: 8px;
+  }
+  .tb-name {
+    display: none;
+  }
 }
 .tb-account {
   display: grid;

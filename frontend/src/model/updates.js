@@ -25,6 +25,10 @@ const repoUrl = computed(
 const checking = ref(false)
 const downloading = ref(false)
 const progress = ref(0)
+// What the app is doing right now, in words. Most of an update is spent
+// working out which files changed, and a bar stuck at zero with nothing
+// beside it reads as broken.
+const stage = ref('')
 const installerPath = ref('')
 // 'installer' or 'delta': what `installerPath` actually points at.
 const updateKind = ref('installer')
@@ -54,6 +58,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('dannify:update-progress', (e) => {
     const value = e.detail && e.detail.progress
     if (typeof value === 'number') progress.value = value
+    if (e.detail && typeof e.detail.label === 'string') stage.value = e.detail.label
   })
 }
 
@@ -89,12 +94,14 @@ async function download({ quiet = false } = {}) {
   }
   downloading.value = true
   progress.value = 0
+  stage.value = 'Starting'
   try {
     const res = await API.downloadUpdate(info.value.download_url)
     const data = res.data || {}
     installerPath.value = data.path || ''
     updateKind.value = data.kind || 'installer'
     progress.value = 100
+    stage.value = 'Ready to install'
     // Tell the shell about it so closing the app is enough to apply it. A
     // partial update is a folder of replacement files rather than an
     // installer, and the shell applies it with its own helper.
@@ -222,6 +229,7 @@ export function useUpdates() {
     checking,
     downloading,
     progress,
+    stage,
     lastError,
     check,
     download,

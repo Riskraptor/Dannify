@@ -140,28 +140,13 @@ const offsetVal = computed(() => player.lyricsOffset.value || 0)
 const hasLines = computed(() => player.lyricsLines.value.length > 0)
 const active = computed(() => player.activeLyricIndex.value)
 
-// Karaoke fill: how far through the active line playback is, 0…1. Used as a
-// gradient stop so the line colours in as it is sung.
-const fill = computed(() => {
-  const lines = player.lyricsLines.value
-  const i = active.value
-  if (i < 0 || i >= lines.length) return 0
-  const start = lines[i].time
-  const end = i + 1 < lines.length ? lines[i + 1].time : start + 4
-  const span = Math.max(0.25, end - start)
-  const at = player.currentTime.value - offsetVal.value - start
-  return Math.max(0, Math.min(1, at / span))
-})
-
 // Depth of field. Every line carries how far it is from the one playing, and
 // the stylesheet turns that into blur, dimming and scale, so attention falls
 // on the current line the way it does on a stage: one thing lit, everything
 // else still there. Four steps is as far as it goes; past that the lines are
 // only a texture and grading them further costs paint for nothing.
 function lineStyle(idx) {
-  const distance = Math.min(4, Math.abs(idx - active.value))
-  if (idx !== active.value) return { '--d': distance }
-  return { '--d': 0, '--fill': `${fill.value * 100}%` }
+  return { '--d': Math.min(4, Math.abs(idx - active.value)) }
 }
 
 function stamp(seconds) {
@@ -445,19 +430,6 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
     opacity: 0;
   }
 }
-/* A hairline under the active line, tracking its progress. Quiet enough to
-   ignore, precise enough to sync against. */
-.lyric-line.active::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0.05rem;
-  height: 2px;
-  width: var(--fill, 0%);
-  border-radius: 2px;
-  background: rgb(var(--c-accent) / 0.65);
-  transition: width 0.25s linear;
-}
 @keyframes lyric-land {
   from {
     opacity: 0.45;
@@ -477,9 +449,6 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
 .is-large .lyric-line.active {
   font-size: clamp(1.9rem, 2.9vw, 2.75rem);
   text-shadow: 0 0 44px rgb(var(--c-accent) / 0.28);
-}
-.is-large .lyric-line.active::after {
-  height: 3px;
 }
 .is-large .plain-scroll {
   font-size: 1.25rem;
