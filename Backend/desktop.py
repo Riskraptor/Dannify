@@ -2204,9 +2204,20 @@ def _wait_for_parent_exit() -> None:
 
 
 def _apply_update_folder(staging: Path) -> bool:
-    """Copy a staged update over this installation. Runs in the helper."""
+    """Copy a staged update over this installation. Runs in the helper.
+
+    Nothing may be imported once the first file has moved. This program is a
+    single executable with its own archive of modules inside it, and the
+    importer opens that archive by path, lazily, the first time a module is
+    asked for. Replace the executable and the next lazy import reads the new
+    archive at the old offsets: "Error -3 while decompressing data". That is
+    not hypothetical, it is what happened. Everything the rest of this
+    function and its caller need is loaded up front, by _preload_for_apply().
+    """
 
     import shutil
+
+    from dannify import delta
 
     staging = Path(staging)
     plan_file = staging / 'apply.json'
@@ -2216,13 +2227,20 @@ def _apply_update_folder(staging: Path) -> bool:
         logger_print('no usable apply.json in', staging)
         return False
 
+    exe_name = Path(sys.executable).name.lower()
     target = Path(sys.executable).resolve().parent
     logger_print(f'applying update {plan.get("version", "?")} into {target}')
 
     # Replace first, delete afterwards: a half-copied install that still has
     # its old files is recoverable, one missing them is not.
+    #
+    # Our own executable goes last. Alphabetically it came first, which meant
+    # every other file was copied with the archive already swapped underneath
+    # us. Last is the smallest window in which anything can go wrong, and by
+    # then there is nothing left to read out of it.
+    order = sorted(plan.get('files', {}), key=lambda r: (r.lower() == exe_name, r))
     copied = 0
-    for rel in sorted(plan.get('files', {})):
+    for rel in order:
         source = staging / rel
         if not source.is_file():
             continue  # unchanged file, was never downloaded
@@ -2246,8 +2264,6 @@ def _apply_update_folder(staging: Path) -> bool:
         except Exception as exc:
             logger_print('could not replace', rel, exc)
             return False
-
-    from dannify import delta
 
     for rel in plan.get('removed', []):
         # The plan is written by whichever version downloaded the update, and
@@ -2282,16 +2298,35 @@ def _sweep_old_files(root: Path) -> None:
         pass
 
 
+def _preload_for_apply() -> tuple:
+    """Load everything the update helper needs, before it touches a file.
+
+    See the note in _apply_update_folder: once our own executable has been
+    replaced, importing anything that is not already in memory reads the new
+    archive with the old offsets and fails. So the imports happen here, while
+    the file on disk is still the one we were started from.
+    """
+
+    import shutil
+    import subprocess
+
+    from dannify import delta
+
+    # Touch the attributes too, not just the module objects: a lazy importer
+    # can defer a submodule until first use.
+    _ = (shutil.copy2, shutil.rmtree, subprocess.Popen, delta.is_ours)
+    return shutil, subprocess, delta
+
+
 def _run_update_helper(staging: str) -> int:
     """The --apply-update entry point."""
 
+    shutil, subprocess, _delta = _preload_for_apply()
     _wait_for_parent_exit()
     ok = _apply_update_folder(Path(staging))
     exe = Path(sys.executable).resolve()
     if ok:
         try:
-            import shutil
-
             shutil.rmtree(staging, ignore_errors=True)
         except Exception:
             pass
@@ -2299,8 +2334,6 @@ def _run_update_helper(staging: str) -> int:
     # user with nothing running. A bad copy still has the old files, and the
     # update will simply be offered again.
     try:
-        import subprocess
-
         subprocess.Popen(
             [str(exe)],
             cwd=str(exe.parent),
