@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Dannify">
+  <defs>
+    <linearGradient id="dn-tile" x1="0.08" y1="0" x2="0.92" y2="1">
+      <stop offset="0" stop-color="#3DF58A" />
+      <stop offset="0.52" stop-color="#17C95E" />
+      <stop offset="1" stop-color="#05823A" />
+    </linearGradient>
+    <linearGradient id="dn-sheen" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".30" />
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="dn-mark" x1="0.1" y1="0" x2="0.55" y2="1">
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#DFFCEB" />
+    </linearGradient>
+    <clipPath id="dn-clip">
+      <rect x="12" y="12" width="232" height="232" rx="54" ry="54" />
+    </clipPath>
+    <!-- The counter of the D is a play triangle: one shape that is both the
+         initial and the thing the app does. -->
+    <mask id="dn-counter">
+      <rect x="0" y="0" width="256" height="256" fill="#000" />
+      <path d="M67 62 H123 A66 66 0 0 1 123 194 H67 Z" fill="#fff" />
+      <path d="M104 98 L104 158 L154 128 Z" fill="#000" stroke="#000" stroke-width="9" stroke-linejoin="round" />
+    </mask>
+  </defs>
+
+  <rect x="12" y="12" width="232" height="232" rx="54" ry="54" fill="url(#dn-tile)" />
+  <ellipse cx="62" cy="10" rx="150" ry="120" fill="url(#dn-sheen)" clip-path="url(#dn-clip)" />
+
+  <!-- Soft drop so the mark sits on the tile rather than being painted onto it -->
+  <g clip-path="url(#dn-clip)">
+    <rect x="0" y="0" width="256" height="256" fill="#00351A" opacity="0.28" mask="url(#dn-counter)" transform="translate(0,6)" />
+  </g>
+  <rect x="0" y="0" width="256" height="256" fill="url(#dn-mark)" mask="url(#dn-counter)" />
+
+  <!-- Hairline highlight along the top edge of the tile -->
+  <rect x="12.75" y="12.75" width="230.5" height="230.5" rx="53.25" ry="53.25" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5" />
+</svg>

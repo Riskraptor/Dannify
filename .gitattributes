@@ -1,0 +1,14 @@
+# Normalise line endings so the tree is the same on every machine.
+* text=auto eol=lf
+
+# Windows-only scripts that must keep CRLF to run correctly.
+*.ps1 text eol=crlf
+*.iss text eol=crlf
+*.bat text eol=crlf
+
+# Binaries: never touched.
+*.ico binary
+*.png binary
+*.jpg binary
+*.exe binary
+*.db binary

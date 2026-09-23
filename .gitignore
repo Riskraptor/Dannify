@@ -1,0 +1,47 @@
+# --- Build output ---
+Backend/build/
+Backend/dist/
+frontend/dist/
+packaging/out/
+*.spec.bak
+
+# --- Dependencies ---
+Backend/venv/
+Backend/.venv/
+frontend/node_modules/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# --- Local runtime state ---
+# Settings, caches, the session marker and the playlist database. All of this
+# is per-machine and some of it identifies the person running the app.
+data/
+downloads/
+*.log
+
+# --- Local configuration ---
+# The templates in packaging/config are committed with empty values on
+# purpose. A copy with real keys in it must never be.
+Backend/.env
+.env
+.env.local
+packaging/config/*.local.json
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Bundled third-party binaries ---
+# The media encoder and JS engine are large redistributables fetched at
+# packaging time, not source. See packaging/README.
+packaging/media/
+packaging/jsruntime/
+# The original, unrenamed copies these are built from.
+packaging/ffmpeg/
+
+# Local working backups, not history.
+backups/

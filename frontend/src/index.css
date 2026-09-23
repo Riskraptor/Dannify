@@ -1,0 +1,543 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   Design tokens
+   Every colour is a space-separated RGB triplet so Tailwind opacity
+   modifiers work (`bg-tint/5`). Themes flip via [data-theme] on <html>.
+   ========================================================================== */
+:root,
+[data-theme='dannify-dark'] {
+  color-scheme: dark;
+  --c-app: 8 8 10;
+  --c-panel: 18 18 21;
+  --c-raised: 27 27 32;
+  --c-elev: 37 37 43;
+  --c-fg: 240 240 243;
+  --c-tint: 255 255 255;
+  --c-accent: 26 208 92;
+  --c-accent-hover: 46 224 111;
+  --c-accent-fg: 3 22 10;
+  --c-danger: 242 109 109;
+  --c-warn: 245 184 61;
+  --shadow-pop: 0 14px 44px rgb(0 0 0 / 0.55), 0 2px 10px rgb(0 0 0 / 0.35);
+  --shadow-card: 0 8px 26px rgb(0 0 0 / 0.4);
+  --scroll-thumb: rgb(255 255 255 / 0.17);
+  --scroll-thumb-hover: rgb(255 255 255 / 0.32);
+}
+
+[data-theme='dannify-light'] {
+  color-scheme: light;
+  --c-app: 231 233 237;
+  --c-panel: 255 255 255;
+  --c-raised: 243 244 246;
+  --c-elev: 255 255 255;
+  --c-fg: 20 22 26;
+  --c-tint: 0 0 0;
+  --c-accent: 20 168 74;
+  --c-accent-hover: 17 150 66;
+  --c-accent-fg: 255 255 255;
+  --c-danger: 220 76 76;
+  --c-warn: 200 138 18;
+  --shadow-pop: 0 14px 44px rgb(15 20 30 / 0.16), 0 2px 8px rgb(15 20 30 / 0.08);
+  --shadow-card: 0 8px 26px rgb(15 20 30 / 0.12);
+  --scroll-thumb: rgb(0 0 0 / 0.2);
+  --scroll-thumb-hover: rgb(0 0 0 / 0.36);
+}
+
+:root {
+  --titlebar-h: 44px;
+  --player-h: 84px;
+  --sidebar-w: 248px;
+  --rail-w: 72px;
+  --gap: 8px;
+  --radius-panel: 10px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ==========================================================================
+   Base: a fixed desktop surface: the page itself never scrolls, only the
+   panes inside the shell do.
+   ========================================================================== */
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  html {
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: rgb(var(--c-app));
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: rgb(var(--c-app));
+    color: rgb(var(--c-fg));
+    font-family: theme('fontFamily.sans');
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'tnum' 0;
+    /* Native apps don't let you drag-select the chrome. */
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+  }
+
+  input,
+  textarea,
+  [contenteditable='true'],
+  .selectable {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  img {
+    -webkit-user-drag: none;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+    cursor: default;
+  }
+
+  button,
+  label,
+  select,
+  summary,
+  [role='button'] {
+    cursor: default;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  :focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-accent));
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: rgb(var(--c-accent) / 0.35);
+  }
+
+  /* Scrollbars: thin pills that only appear while the pane is hovered. */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    min-height: 44px;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: transparent;
+  }
+  *:hover::-webkit-scrollbar-thumb {
+    background-color: var(--scroll-thumb);
+  }
+  ::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--scroll-thumb-hover) !important;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: theme('fontFamily.display');
+  }
+}
+
+/* ==========================================================================
+   Components
+   ========================================================================== */
+@layer components {
+  /* ----- Buttons -------------------------------------------------------- */
+  .btn-base {
+    @apply inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[13px] font-semibold transition-[background-color,color,border-color,opacity,transform] duration-100 disabled:pointer-events-none disabled:opacity-40;
+  }
+  .btn {
+    @apply btn-base border border-tint/10 bg-tint/[0.06] text-fg hover:bg-tint/10 active:bg-tint/[0.08];
+  }
+  .btn-accent {
+    @apply btn-base bg-accent text-accent-fg hover:brightness-110 active:brightness-95;
+  }
+  .btn-ghost {
+    @apply btn-base text-fg/75 hover:bg-tint/[0.07] hover:text-fg;
+  }
+  .btn-danger {
+    @apply btn-base bg-danger text-white hover:brightness-110 active:brightness-95;
+  }
+  .btn-lg {
+    @apply h-10 px-4 text-sm;
+  }
+  .btn-pill {
+    @apply rounded-full;
+  }
+
+  .icon-btn {
+    @apply inline-grid h-8 w-8 shrink-0 place-items-center rounded-md text-fg/70 transition-colors duration-100 hover:bg-tint/[0.08] hover:text-fg active:bg-tint/[0.12] disabled:pointer-events-none disabled:opacity-35;
+  }
+  .icon-btn.is-round {
+    @apply rounded-full;
+  }
+  .icon-btn.is-active {
+    @apply text-accent;
+  }
+  .icon-btn.is-active-dot {
+    @apply relative text-accent;
+  }
+  .icon-btn.is-active-dot::after {
+    content: '';
+    @apply absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-accent;
+  }
+
+  /* The big round "play" button used in view headers. */
+  .play-fab {
+    @apply inline-grid h-12 w-12 shrink-0 place-items-center rounded-full bg-accent text-accent-fg shadow-card transition-transform duration-100 hover:scale-105 active:scale-95 disabled:opacity-40;
+  }
+
+  /* ----- Form controls -------------------------------------------------- */
+  .field {
+    @apply h-8 w-full rounded-md border border-tint/10 bg-tint/[0.05] px-3 text-[13px] text-fg outline-none transition-colors placeholder:text-fg/40 hover:border-tint/20 focus:border-accent/70 focus:bg-tint/[0.03];
+  }
+  .field-select {
+    @apply field appearance-none pr-8;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath fill='%23888' d='M213.66 101.66l-80 80a8 8 0 0 1-11.32 0l-80-80a8 8 0 0 1 11.32-11.32L128 164.69l74.34-74.35a8 8 0 0 1 11.32 11.32'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    background-size: 12px;
+  }
+  .field-select option {
+    background: rgb(var(--c-elev));
+    color: rgb(var(--c-fg));
+  }
+
+  .check {
+    @apply relative inline-grid h-4 w-4 shrink-0 appearance-none place-items-center rounded border border-tint/30 bg-transparent transition-colors checked:border-accent checked:bg-accent hover:border-tint/50;
+  }
+  .check:checked::after {
+    content: '';
+    @apply h-2 w-1 -translate-y-px rotate-45 border-b-2 border-r-2 border-accent-fg;
+  }
+  .check:indeterminate {
+    @apply border-accent bg-accent;
+  }
+  .check:indeterminate::after {
+    content: '';
+    @apply h-0.5 w-2 rounded bg-accent-fg;
+  }
+
+  /* Fluent-style toggle switch: <input type="checkbox" class="switch"> */
+  .switch {
+    @apply relative h-5 w-10 shrink-0 appearance-none rounded-full border border-tint/40 bg-transparent transition-colors duration-150 checked:border-accent checked:bg-accent disabled:opacity-40;
+  }
+  .switch::after {
+    content: '';
+    @apply absolute left-[3px] top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-fg/70 transition-all duration-150;
+  }
+  .switch:checked::after {
+    @apply left-[23px] bg-accent-fg;
+  }
+  .switch:not(:disabled):hover::after {
+    @apply h-3.5 w-3.5;
+  }
+
+  /* Segmented control: <div class="seg"><button class="seg-item is-active"> */
+  .seg {
+    @apply inline-flex items-center gap-0.5 rounded-lg bg-tint/[0.06] p-0.5;
+  }
+  .seg-item {
+    @apply inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[13px] font-medium text-fg/65 transition-colors hover:text-fg;
+  }
+  .seg-item.is-active {
+    @apply bg-panel text-fg shadow-sm;
+  }
+  [data-theme='dannify-dark'] .seg-item.is-active {
+    @apply bg-tint/[0.14];
+  }
+
+  /* Filter chips (Spotify-like). */
+  .chip {
+    @apply inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full bg-tint/[0.07] px-3.5 text-[13px] font-medium text-fg/85 transition-colors hover:bg-tint/[0.12];
+  }
+  .chip.is-active {
+    @apply bg-fg text-panel hover:bg-fg/90;
+  }
+
+  /* ----- Text helpers --------------------------------------------------- */
+  .link {
+    cursor: pointer;
+    @apply hover:text-fg hover:underline;
+  }
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-fg/50;
+  }
+  .kbd {
+    @apply inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-tint/15 bg-tint/[0.06] px-1.5 font-sans text-[11px] font-medium text-fg/60;
+  }
+  .badge {
+    @apply inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-fg;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold;
+  }
+  .pill-accent {
+    @apply pill bg-accent/15 text-accent;
+  }
+  .pill-muted {
+    @apply pill bg-tint/[0.08] text-fg/60;
+  }
+  .pill-danger {
+    @apply pill bg-danger/15 text-danger;
+  }
+  .explicit {
+    @apply inline-grid h-4 w-4 shrink-0 place-items-center rounded-[3px] bg-fg/60 text-[9px] font-bold leading-none text-panel;
+  }
+
+  /* ----- Surfaces ------------------------------------------------------- */
+  .card {
+    @apply rounded-lg border border-tint/[0.06] bg-raised;
+  }
+  .menu-surface {
+    @apply rounded-lg border border-tint/10 bg-elev shadow-pop;
+  }
+  [data-theme='dannify-light'] .menu-surface {
+    @apply border-tint/[0.12];
+  }
+
+  /* Fades up rather than slamming in at full strength, so the swap to real
+     content reads as a dissolve instead of a flicker. */
+  .skeleton {
+    @apply block rounded-md bg-tint/[0.07];
+    animation:
+      skeleton-in 0.22s var(--ease-out) both,
+      pulse 2s cubic-bezier(0.4, 0, 0.6, 1) 0.22s infinite;
+  }
+
+  .spinner {
+    @apply inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent align-middle;
+  }
+
+  .progress-track {
+    @apply relative h-1 w-full overflow-hidden rounded-full bg-tint/10;
+  }
+  .progress-fill {
+    @apply absolute inset-y-0 left-0 rounded-full bg-accent transition-[width] duration-300;
+  }
+  /* No byte count yet: sweep instead of sitting at zero. */
+  .progress-track.is-indeterminate .progress-fill {
+    width: 38%;
+    transition: none;
+    animation: progress-sweep 1.15s var(--ease-out) infinite;
+  }
+
+  /* Animated "now playing" bars. */
+  .equalizer {
+    @apply inline-flex h-3.5 items-end gap-[2px];
+  }
+  .equalizer span {
+    @apply block h-full w-[3px] origin-bottom rounded-sm bg-accent;
+    animation: eq 0.9s ease-in-out infinite;
+  }
+  .equalizer span:nth-child(2) {
+    animation-duration: 0.75s;
+    animation-delay: -0.3s;
+  }
+  .equalizer span:nth-child(3) {
+    animation-duration: 1.05s;
+    animation-delay: -0.55s;
+  }
+  .equalizer.is-paused span {
+    animation-play-state: paused;
+  }
+
+  /* Standard content padding inside the main pane. */
+  .view-pad {
+    @apply px-6 lg:px-8;
+  }
+}
+
+/* ==========================================================================
+   Motion
+   Desktop apps answer the mouse instantly. Every control dips a hair when
+   pressed and springs back: small enough to feel mechanical rather than
+   bouncy, and cheap enough (transform only) to stay at 60fps.
+   ========================================================================== */
+@layer components {
+  .btn-base,
+  .icon-btn,
+  .chip,
+  .seg-item,
+  .press {
+    transition-property: background-color, color, border-color, opacity, filter, transform;
+    transition-duration: 110ms;
+    transition-timing-function: var(--ease-out);
+  }
+  .btn-base:active:not(:disabled),
+  .icon-btn:active:not(:disabled),
+  .chip:active,
+  .seg-item:active,
+  .press:active:not(:disabled) {
+    transform: scale(0.94);
+    transition-duration: 40ms;
+  }
+  /* Elements that already own their transform keep it; only the scale dips. */
+  .play-fab:active:not(:disabled) {
+    transform: scale(0.93);
+  }
+
+  /* Views and shelves ease in rather than snapping into place. */
+  .rise-in {
+    animation: rise-in 0.28s var(--ease-out) both;
+  }
+  /* Second and third bands follow the first, so a page of results reads as
+     one movement instead of everything landing at once. */
+  .rise-delay-1 {
+    animation-delay: 0.06s;
+  }
+  .rise-delay-2 {
+    animation-delay: 0.12s;
+  }
+}
+
+/* A loading row shaped like a real one: cover, title, subtitle. Bare bars
+   read as a broken page; this reads as a page that is filling in. */
+.row-ghost {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  height: 60px;
+}
+.row-ghost-cover {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  flex: none;
+}
+.row-ghost-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+/* Rows fade in one after another rather than all at once, so a list that is
+   still loading looks alive instead of frozen. */
+.row-ghost:nth-child(2) { animation-delay: 0.05s; }
+.row-ghost:nth-child(3) { animation-delay: 0.1s; }
+.row-ghost:nth-child(4) { animation-delay: 0.15s; }
+.row-ghost:nth-child(5) { animation-delay: 0.2s; }
+.row-ghost:nth-child(n + 6) { animation-delay: 0.25s; }
+
+@keyframes skeleton-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Router view transition, driven by App.vue's <transition name="view">. */
+.view-enter-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.26s var(--ease-out);
+}
+.view-leave-active {
+  transition: opacity 0.1s ease;
+}
+.view-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.view-leave-to {
+  opacity: 0;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .font-tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  .drag-none {
+    -webkit-user-drag: none;
+  }
+  .cv-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 56px;
+  }
+}
+
+@keyframes progress-sweep {
+  0% {
+    left: -38%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@keyframes eq {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* A fade for small inline bits that come and go, like the search indicator. */
+.soft-enter-active,
+.soft-leave-active {
+  transition: opacity 0.18s ease;
+}
+.soft-enter-from,
+.soft-leave-to {
+  opacity: 0;
+}
