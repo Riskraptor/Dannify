@@ -50,6 +50,10 @@ import webbrowser
 from ctypes import wintypes
 from pathlib import Path
 
+# The shell's own diagnostics. loguru's logger is a singleton, so this is the
+# same sink main.py configures; importing it here is not a second logger.
+from loguru import logger
+
 # ---------------------------------------------------------------------------
 # Paths / environment: must be set BEFORE importing main (it reads env at
 # import time for DOWNLOAD_DIR / DATABASE_DIR defaults).
@@ -626,6 +630,145 @@ class _Taskbar:
 # transport controls, and is the only way back to a window that was closed
 # to tray. Double-click restores, middle-click plays/pauses.
 # ---------------------------------------------------------------------------
+# --- Tray menu appearance -------------------------------------------------
+#
+# WinForms draws menus the way Windows 7 did: a hard 3D border, a grey image
+# gutter, and a blue selection bar. Next to Windows 11's own tray menus that
+# reads as a broken or very old application, which is exactly what it looked
+# like. These two helpers give it flat modern colours and rounded corners.
+
+# DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND. Ignored before Windows 11.
+_DWMWA_WINDOW_CORNER_PREFERENCE = 33
+_DWMWCP_ROUND = 2
+
+
+def _round_window_corners(hwnd: int) -> None:
+    if not _WIN or not hwnd:
+        return
+    try:
+        value = ctypes.c_int(_DWMWCP_ROUND)
+        dwmapi.DwmSetWindowAttribute(
+            wintypes.HWND(hwnd),
+            ctypes.c_uint(_DWMWA_WINDOW_CORNER_PREFERENCE),
+            ctypes.byref(value),
+            ctypes.sizeof(value),
+        )
+    except Exception:
+        logger.opt(exception=True).debug('could not round the menu corners')
+
+
+_TRAY_RENDERER_CACHE: dict = {}
+
+
+def _tray_renderer(dark: bool):
+    """A flat renderer with Windows 11 selection colours.
+
+    Cached per theme: a renderer holds no per-menu state, and building the
+    .NET subclass on every menu rebuild is wasted work.
+    """
+
+    cached = _TRAY_RENDERER_CACHE.get(dark)
+    if cached is not None:
+        return cached
+
+    from System.Drawing import Color, SolidBrush, Rectangle
+    from System.Drawing.Drawing2D import SmoothingMode
+    from System.Windows.Forms import (
+        ProfessionalColorTable,
+        ToolStripProfessionalRenderer,
+    )
+
+    surface = (
+        Color.FromArgb(255, 44, 44, 47) if dark else Color.FromArgb(255, 249, 249, 249)
+    )
+    hover = (
+        Color.FromArgb(255, 60, 60, 64) if dark else Color.FromArgb(255, 236, 236, 238)
+    )
+    line = (
+        Color.FromArgb(255, 62, 62, 66) if dark else Color.FromArgb(255, 226, 226, 229)
+    )
+
+    class _Colors(ProfessionalColorTable):
+        @property
+        def MenuItemSelected(self):  # noqa: N802
+            return hover
+
+        @property
+        def MenuItemSelectedGradientBegin(self):  # noqa: N802
+            return hover
+
+        @property
+        def MenuItemSelectedGradientEnd(self):  # noqa: N802
+            return hover
+
+        @property
+        def MenuItemBorder(self):  # noqa: N802
+            return hover
+
+        @property
+        def MenuBorder(self):  # noqa: N802
+            return line
+
+        @property
+        def ToolStripDropDownBackground(self):  # noqa: N802
+            return surface
+
+        @property
+        def ImageMarginGradientBegin(self):  # noqa: N802
+            return surface
+
+        @property
+        def ImageMarginGradientMiddle(self):  # noqa: N802
+            return surface
+
+        @property
+        def ImageMarginGradientEnd(self):  # noqa: N802
+            return surface
+
+        @property
+        def SeparatorDark(self):  # noqa: N802
+            return line
+
+        @property
+        def SeparatorLight(self):  # noqa: N802
+            return surface
+
+    class _Renderer(ToolStripProfessionalRenderer):
+        def __init__(self):
+            super().__init__(_Colors())
+            self.RoundedEdges = False
+
+        def OnRenderMenuItemBackground(self, e):  # noqa: N802, ANN001
+            """Rounded selection pill rather than a full-width bar."""
+
+            if not e.Item.Selected or not e.Item.Enabled:
+                return
+            g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+            rect = Rectangle(
+                3, 0, e.Item.Width - 6, e.Item.Height
+            )
+            brush = SolidBrush(hover)
+            try:
+                g.FillRectangle(brush, rect)
+            finally:
+                brush.Dispose()
+
+        def OnRenderSeparator(self, e):  # noqa: N802, ANN001
+            g = e.Graphics
+            brush = SolidBrush(line)
+            try:
+                g.FillRectangle(
+                    brush, Rectangle(8, e.Item.Height // 2, e.Item.Width - 16, 1)
+                )
+            finally:
+                brush.Dispose()
+
+    renderer = _Renderer()
+    _TRAY_RENDERER_CACHE[dark] = renderer
+    return renderer
+
+
 class _Tray:
     LABEL_KEYS = ('nowPlaying', 'play', 'pause', 'prev', 'next', 'show', 'quit', 'hidden')
 
@@ -695,52 +838,73 @@ class _Tray:
         from System.Windows.Forms import (
             ContextMenuStrip,
             ToolStripDropDownDirection,
-            ToolStripRenderMode,
         )
 
         dark = not _system_uses_light_theme()
-        fg = Color.FromArgb(255, 240, 240, 243) if dark else Color.FromArgb(255, 26, 28, 32)
-        bg = Color.FromArgb(255, 43, 43, 48) if dark else Color.FromArgb(255, 249, 249, 250)
+        # Windows 11's own menu surface, not the WinForms grey.
+        if dark:
+            fg = Color.FromArgb(255, 239, 240, 243)
+            bg = Color.FromArgb(255, 44, 44, 47)
+            dim = Color.FromArgb(255, 158, 159, 166)
+        else:
+            fg = Color.FromArgb(255, 26, 28, 32)
+            bg = Color.FromArgb(255, 249, 249, 249)
+            dim = Color.FromArgb(255, 105, 107, 113)
 
         menu = ContextMenuStrip()
-        menu.RenderMode = ToolStripRenderMode.System
+        menu.Renderer = _tray_renderer(dark)
         menu.ShowImageMargin = False
         menu.DropDownDirection = ToolStripDropDownDirection.AboveLeft
         menu.BackColor = bg
         menu.ForeColor = fg
+        # Breathing room around the block of items, the way Windows 11 menus
+        # sit off their own edges.
+        menu.Padding = _padding(4, 6, 4, 6)
         try:
             base = SystemFonts.MenuFont
-            menu.Font = Font(base.FontFamily, 9.5)
+            menu.Font = Font(base.FontFamily, 9.75)
         except Exception:
             base = None
 
-        def item(key, handler=None, bold=False, default=False):
+        # Rounded corners, once the dropdown actually has a window handle.
+        def _round(sender, event):  # noqa: ANN001
+            try:
+                _round_window_corners(int(menu.Handle.ToInt64()))
+            except Exception:
+                pass
+
+        menu.HandleCreated += EventHandler(_round)
+
+        def item(key, handler=None, bold=False, header=False):
             entry = MenuItem(self.labels[key])
-            entry.ForeColor = fg
+            entry.ForeColor = dim if header else fg
             entry.BackColor = bg
-            # Roomier than the 22px default: tray menus are clicked in a hurry.
-            entry.Padding = _padding(4, 2, 4, 2)
+            # 32px rows: Windows 11 menu metrics, and a tray menu is clicked
+            # in a hurry.
+            entry.Padding = _padding(6, 5, 6, 5)
             if handler is not None:
                 entry.Click += EventHandler(lambda s, e: handler())
             else:
                 entry.Enabled = False
-                entry.ForeColor = (
-                    Color.FromArgb(255, 170, 170, 178)
-                    if dark
-                    else Color.FromArgb(255, 96, 98, 104)
+                entry.ForeColor = dim
+            if base is not None:
+                entry.Font = Font(
+                    base.FontFamily,
+                    9.0 if header else 9.75,
+                    FontStyle.Bold if bold else FontStyle.Regular,
                 )
-            if bold and base is not None:
-                entry.Font = Font(base.FontFamily, 9.5, FontStyle.Bold)
             self._items[key] = entry
             return entry
 
-        menu.Items.Add(item('nowPlaying', None, bold=True))
+        # The header is the track, not a command: smaller, dimmer, and it
+        # does not pretend to be a disabled menu item you failed to click.
+        menu.Items.Add(item('nowPlaying', None, header=True))
         menu.Items.Add(Separator())
         menu.Items.Add(item('play', lambda: self._api._media('toggle')))
         menu.Items.Add(item('prev', lambda: self._api._media('prev')))
         menu.Items.Add(item('next', lambda: self._api._media('next')))
         menu.Items.Add(Separator())
-        menu.Items.Add(item('show', self._api._show_from_tray, bold=True, default=True))
+        menu.Items.Add(item('show', self._api._show_from_tray, bold=True))
         menu.Items.Add(item('quit', self._api._quit))
         return menu
 
@@ -2056,6 +2220,212 @@ def _claim_app_identity() -> None:
         logger.opt(exception=True).debug('could not set the app identity')
 
 
+# --- The media flyout's "Unknown app" -------------------------------------
+#
+# Windows' now-playing flyout names the app that owns the media session. In a
+# WebView2 app that is not us: Chromium registers the session from
+# msedgewebview2.exe, which has no identity of its own, so Windows shows
+# "Unknown app" over our title and artwork. It is a known WebView2 gap that
+# Microsoft has acknowledged and not fixed (WebView2Feedback #2236).
+#
+# There is one lever available. Windows resolves a window's app identity from
+# its shell property store before falling back to the process, so stamping
+# PKEY_AppUserModel_ID onto the windows Chromium registers from can give the
+# session a name. Strictly a best effort: it touches windows we do not own,
+# only ever inside our own process tree, and every call is allowed to fail.
+
+_PKEY_APPUSERMODEL_ID_FMTID = '{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}'
+_PKEY_APPUSERMODEL_ID_PID = 5
+_IID_IPROPERTYSTORE = '{886d8eeb-8cf2-4446-8d02-cdba1dbdcf99}'
+# WebView2 builds its windows lazily and rebuilds them when the page
+# navigates, so one pass at startup is not enough.
+_TAG_DELAYS = (1.5, 5.0, 12.0, 30.0)
+
+
+class _GUID(ctypes.Structure):
+    _fields_ = [
+        ('a', ctypes.c_uint32),
+        ('b', ctypes.c_uint16),
+        ('c', ctypes.c_uint16),
+        ('d', ctypes.c_ubyte * 8),
+    ]
+
+
+class _PROPERTYKEY(ctypes.Structure):
+    _fields_ = [('fmtid', _GUID), ('pid', ctypes.c_ulong)]
+
+
+class _PROPVARIANT(ctypes.Structure):
+    _fields_ = [
+        ('vt', ctypes.c_ushort),
+        ('r1', ctypes.c_ushort),
+        ('r2', ctypes.c_ushort),
+        ('r3', ctypes.c_ushort),
+        ('data', ctypes.c_byte * 16),
+    ]
+
+
+def _guid(text: str) -> _GUID:
+    value = _GUID()
+    ole32.CLSIDFromString(ctypes.c_wchar_p(text), ctypes.byref(value))
+    return value
+
+
+def _our_process_tree() -> set[int]:
+    """Every pid descended from this one, so we never touch another app's
+    WebView2 (the user may well have several running)."""
+
+    import collections
+
+    TH32CS_SNAPPROCESS = 0x00000002
+
+    class PROCESSENTRY32(ctypes.Structure):
+        _fields_ = [
+            ('dwSize', wintypes.DWORD),
+            ('cntUsage', wintypes.DWORD),
+            ('th32ProcessID', wintypes.DWORD),
+            ('th32DefaultHeapID', ctypes.POINTER(ctypes.c_ulong)),
+            ('th32ModuleID', wintypes.DWORD),
+            ('cntThreads', wintypes.DWORD),
+            ('th32ParentProcessID', wintypes.DWORD),
+            ('pcPriClassBase', ctypes.c_long),
+            ('dwFlags', wintypes.DWORD),
+            ('szExeFile', ctypes.c_char * 260),
+        ]
+
+    children: dict[int, list[int]] = collections.defaultdict(list)
+    # Without these the returned HANDLE is truncated to 32 bits on a 64-bit
+    # build and every snapshot looks like a failure.
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.Process32First.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32)]
+    kernel32.Process32Next.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32)]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if not snapshot or snapshot == wintypes.HANDLE(-1).value:
+        return {os.getpid()}
+    try:
+        entry = PROCESSENTRY32()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
+        ok = kernel32.Process32First(snapshot, ctypes.byref(entry))
+        while ok:
+            children[entry.th32ParentProcessID].append(entry.th32ProcessID)
+            ok = kernel32.Process32Next(snapshot, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snapshot)
+
+    mine = {os.getpid()}
+    queue = [os.getpid()]
+    while queue:
+        for child in children.get(queue.pop(), ()):
+            if child not in mine:
+                mine.add(child)
+                queue.append(child)
+    return mine
+
+
+def _stamp_window_identity(hwnd: int) -> bool:
+    ptr = ctypes.c_void_p()
+    iid = _guid(_IID_IPROPERTYSTORE)
+    if shell32.SHGetPropertyStoreForWindow(
+        wintypes.HWND(hwnd), ctypes.byref(iid), ctypes.byref(ptr)
+    ) != 0 or not ptr:
+        return False
+    try:
+        # VT_LPWSTR: the store takes ownership of a CoTaskMemAlloc'd copy.
+        size = (len(APP_USER_MODEL_ID) + 1) * 2
+        ole32.CoTaskMemAlloc.restype = ctypes.c_void_p
+        ole32.CoTaskMemAlloc.argtypes = [ctypes.c_size_t]
+        mem = ole32.CoTaskMemAlloc(ctypes.c_size_t(size))
+        if not mem:
+            return False
+        ctypes.memmove(mem, ctypes.c_wchar_p(APP_USER_MODEL_ID), size)
+        value = _PROPVARIANT()
+        ctypes.memset(ctypes.byref(value), 0, ctypes.sizeof(value))
+        value.vt = 31
+        ctypes.memmove(
+            ctypes.byref(value, 8),
+            ctypes.byref(ctypes.c_void_p(mem)),
+            ctypes.sizeof(ctypes.c_void_p),
+        )
+        table = ctypes.cast(
+            ptr, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
+        )[0]
+        set_value = ctypes.WINFUNCTYPE(
+            ctypes.c_long,
+            ctypes.c_void_p,
+            ctypes.POINTER(_PROPERTYKEY),
+            ctypes.POINTER(_PROPVARIANT),
+        )(table[6])
+        commit = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)(table[7])
+        key = _PROPERTYKEY(
+            _guid(_PKEY_APPUSERMODEL_ID_FMTID), _PKEY_APPUSERMODEL_ID_PID
+        )
+        ok = set_value(ptr, ctypes.byref(key), ctypes.byref(value)) == 0
+        commit(ptr)
+        return ok
+    finally:
+        table = ctypes.cast(
+            ptr, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
+        )[0]
+        ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(table[2])(ptr)
+
+
+def _tag_media_windows() -> int:
+    """Stamp our identity on every window in our tree that Windows might ask
+    about. Returns how many took it."""
+
+    if not _WIN:
+        return 0
+    try:
+        mine = _our_process_tree()
+        tagged = 0
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def visit(hwnd, _lparam):  # noqa: ANN001
+            nonlocal tagged
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if pid.value not in mine:
+                return True
+            name = ctypes.create_unicode_buffer(64)
+            user32.GetClassNameW(hwnd, name, 64)
+            # Chromium's own top-level windows, plus our real one.
+            if name.value.startswith('Chrome_WidgetWin') or hwnd == _main_hwnd():
+                if _stamp_window_identity(hwnd):
+                    tagged += 1
+            return True
+
+        user32.EnumWindows(visit, 0)
+        return tagged
+    except Exception:
+        logger.opt(exception=True).debug('could not tag the media windows')
+        return 0
+
+
+def _main_hwnd() -> int:
+    try:
+        return int(getattr(api, '_hwnd', 0) or 0)
+    except Exception:
+        return 0
+
+
+def _schedule_media_identity() -> None:
+    """Re-stamp a few times: WebView2 creates and replaces these windows
+    after the app is already up."""
+
+    def run(delay: float) -> None:
+        time.sleep(delay)
+        count = _tag_media_windows()
+        if count:
+            logger.debug('media identity applied to {} window(s)', count)
+
+    for delay in _TAG_DELAYS:
+        threading.Thread(
+            target=run, args=(delay,), name='dannify-media-id', daemon=True
+        ).start()
+
+
 def main() -> None:
     _claim_app_identity()
     if not _acquire_single_instance():
@@ -2132,6 +2502,8 @@ def main() -> None:
         api._attach(window)
 
     def _swap_to_app() -> None:
+        # Give the media flyout something to call us other than "Unknown app".
+        _schedule_media_identity()
         if _wait_until_up(port, token=session_key):
             # Edge WebView2 sometimes deadlocks on load_url() called from a
             # background thread; navigating via JS sidesteps it. The query

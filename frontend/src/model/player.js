@@ -58,8 +58,23 @@ function applyVolume() {
   audio.volume = Math.max(0, Math.min(1, volume.value * trackGain.value))
 }
 const isMuted = ref(false)
-const repeatMode = ref('off') // 'off' | 'all' | 'one'
-const shuffle = ref(false)
+// Shuffle and repeat are a listening preference, not a per-session accident:
+// someone who listens on shuffle expects to still be on shuffle tomorrow.
+const REPEAT_KEY = 'dannify-repeat'
+const SHUFFLE_KEY = 'dannify-shuffle'
+
+function remembered(key, allowed, fallback) {
+  try {
+    const value = localStorage.getItem(key)
+    if (value !== null && allowed.includes(value)) return value
+  } catch {
+    // Blocked storage: the default is fine.
+  }
+  return fallback
+}
+
+const repeatMode = ref(remembered(REPEAT_KEY, ['off', 'all', 'one'], 'off'))
+const shuffle = ref(remembered(SHUFFLE_KEY, ['0', '1'], '0') === '1')
 const playbackRate = ref(1.0)
 // Autoplay: when the queue runs dry, keep going with YouTube Music's endless
 // mix for the last track: the behaviour every streaming app has.
@@ -1120,7 +1135,13 @@ function onEnded() {
 }
 
 function setRepeat(mode) {
-  if (['off', 'all', 'one'].includes(mode)) repeatMode.value = mode
+  if (!['off', 'all', 'one'].includes(mode)) return
+  repeatMode.value = mode
+  try {
+    localStorage.setItem(REPEAT_KEY, mode)
+  } catch {
+    // The choice just will not survive a restart.
+  }
 }
 
 function cycleRepeat() {
@@ -1132,6 +1153,11 @@ function cycleRepeat() {
 function setShuffle(v) {
   shuffle.value = !!v
   if (shuffle.value) buildShuffleOrder()
+  try {
+    localStorage.setItem(SHUFFLE_KEY, shuffle.value ? '1' : '0')
+  } catch {
+    // As above.
+  }
 }
 
 function toggleShuffle() {

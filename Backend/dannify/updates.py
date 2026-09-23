@@ -115,6 +115,9 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         'size': 0,
         'published_at': '',
         'error': '',
+        # Where this build's releases come from. The UI links to it rather
+        # than hard-coding a URL, so a fork only edits updates.json.
+        'repo_url': f'https://github.com/{repo()}',
     }
     try:
         data = _fetch_latest()

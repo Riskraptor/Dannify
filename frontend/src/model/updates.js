@@ -10,7 +10,12 @@ import { t } from '/src/i18n'
 // work; this is the state the UI binds to.
 
 const SKIP_KEY = 'dannify-skipped-update'
-const info = ref({ available: false, version: '', notes: '', url: '', size: 0 })
+const info = ref({ available: false, version: '', notes: '', url: '', size: 0, repo_url: '' })
+// Where this build's source lives. Comes from the backend so a fork
+// changes one config file rather than hunting for a hard-coded URL.
+const repoUrl = computed(
+  () => info.value.repo_url || 'https://github.com/DANIELMWENDWA9451/Dannify'
+)
 const checking = ref(false)
 const downloading = ref(false)
 const progress = ref(0)
@@ -116,6 +121,7 @@ if (typeof window !== 'undefined') {
 export function useUpdates() {
   return {
     info,
+    repoUrl,
     available,
     ready,
     checking,
