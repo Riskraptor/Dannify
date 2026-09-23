@@ -8,10 +8,12 @@
       @click="onSwitchVersion"
     >
       <Icon icon="ph:stack" class="h-4 w-4" />
+      <!-- Both are rendered; which one shows is down to how much room the
+           bar has. See the container queries at the foot of this file. -->
       <span v-if="bar" class="lc-label">
         {{ t('lyrics.versionOf', { n: verIndex, total: verTotal }) }}
       </span>
-      <span v-else class="lc-badge">{{ verIndex }}</span>
+      <span class="lc-badge" :class="{ 'is-fallback': bar }">{{ verIndex }}</span>
     </button>
 
     <!-- Nudge the timing of this song's lyrics -->
@@ -120,6 +122,12 @@ function onContribute() {
   gap: 4px;
   padding: 6px 4px 2px;
   border-top: 1px solid rgb(var(--c-tint) / 0.07);
+  /* A last line of defence: even if a translation runs long, the bar folds
+     instead of running out of the panel. */
+  flex-wrap: wrap;
+}
+.lc-badge.is-fallback {
+  display: none;
 }
 .lc-btn {
   display: inline-flex;
@@ -186,5 +194,29 @@ function onContribute() {
 }
 .lc-contribute.is-primary:hover {
   filter: brightness(1.06);
+}
+/* The labelled bar only fits while the panel is wide. The panel can be
+   dragged down to 300 px and the window itself to 760, at which point four
+   labelled buttons are half again wider than the space they have, and the
+   last of them used to disappear off the edge. Below each threshold the
+   text drops and the icons carry the meaning, which is what the compact
+   form of this same bar has always done.
+
+   Both hosts declare the container: see .spanel and .np-right. */
+@container lyricsbar (max-width: 470px) {
+  .lc.is-bar .lc-label {
+    display: none;
+  }
+  .lc.is-bar .lc-badge.is-fallback {
+    display: inline;
+  }
+  .lc.is-bar {
+    gap: 2px;
+  }
+}
+@container lyricsbar (max-width: 330px) {
+  .lc.is-bar .lc-contribute {
+    padding: 0 8px;
+  }
 }
 </style>

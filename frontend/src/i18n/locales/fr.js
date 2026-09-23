@@ -262,8 +262,6 @@ export default {
     windowsSection: 'Windows',
     closeToTray: 'Continuer la lecture quand je ferme la fenêtre',
     closeToTrayHint: "Fermer masque Dannify dans la zone de notification au lieu de quitter.",
-    minimizeToTray: 'Réduire dans la zone de notification',
-    minimizeToTrayHint: 'Réduire masque aussi le bouton de la barre des tâches.',
     restartTitleBar: 'Le style de la barre de titre change au redémarrage de Dannify.',
     autoplayRadio: 'Ne jamais arrêter la musique',
     autoplayRadioHint:

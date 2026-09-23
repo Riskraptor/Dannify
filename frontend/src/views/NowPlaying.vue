@@ -203,8 +203,19 @@ function onMore(e) {
 }
 .np-cover-wrap {
   position: relative;
-  width: min(100%, 440px, 58vh);
+  /* Square, and as large as the column allows in whichever direction runs
+     out first. Sized from its height rather than its width: in a short
+     window the artwork then shrinks, where before it kept its size and
+     pushed the title and the badge out of the bottom of the column. */
   aspect-ratio: 1;
+  height: min(440px, 58vh);
+  max-height: 100%;
+  max-width: 100%;
+  min-height: 0;
+  flex: 0 1 auto;
+  /* Without this the column stretches it to full width and the square
+     becomes a letterbox. */
+  align-self: flex-start;
 }
 .np-cover {
   width: 100%;
@@ -271,6 +282,8 @@ function onMore(e) {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  /* The lyrics toolbar below sizes itself against this. */
+  container: lyricsbar / inline-size;
 }
 .np-lyrics-tools {
   flex-shrink: 0;
@@ -286,13 +299,25 @@ function onMore(e) {
   border-radius: 12px;
   background: rgb(0 0 0 / 0.22);
 }
+/* Narrow window: artwork above, lyrics or queue below, the whole thing one
+   scroll. */
 @media (max-width: 860px) {
   .np-body {
     grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
     overflow-y: auto;
   }
+  /* The min-height:0 that lets the two columns shrink side by side has to go
+     here: stacked, it let the artwork's row collapse to nothing, and the
+     lyrics were then drawn straight over the cover and the title. */
+  .np-left {
+    min-height: auto;
+  }
+  .np-cover-wrap {
+    height: min(340px, 44vh);
+  }
   .np-right {
-    min-height: 60vh;
+    min-height: 55vh;
   }
 }
 </style>

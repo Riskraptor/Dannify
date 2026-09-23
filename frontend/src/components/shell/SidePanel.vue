@@ -127,6 +127,8 @@ function startResize(e) {
   min-height: 0;
   border-radius: var(--radius-panel);
   background: rgb(var(--c-panel));
+  /* The lyrics toolbar at the foot sizes itself against this. */
+  container: lyricsbar / inline-size;
 }
 .spanel.is-floating {
   position: absolute;
