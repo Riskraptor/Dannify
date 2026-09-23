@@ -26,8 +26,8 @@ a local backend that nothing outside the app can reach.
 ## Install
 
 Download the latest `Dannify-Setup-x.y.z.exe` from
-[Releases](https://github.com/DANIELMWENDWA9451/Dannify/releases) and run it.
-Windows 10 or 11.
+[Releases](https://github.com/DANIELMWENDWA9451/dannify-releases/releases)
+and run it. Windows 10 or 11.
 
 The app checks for new releases on its own and offers to restart into them.
 
@@ -72,7 +72,8 @@ Useful environment variables:
 ## Configuration
 
 `packaging/config/` holds the settings baked into a release: which repository
-to check for updates, and the donation details. Both ship with empty or
+to check for updates (a public, releases-only repository, so the app can
+check without credentials), and the donation details. Both ship with empty or
 placeholder values; fill them in before building a release of your own.
 
 ## License
