@@ -1,10 +1,5 @@
 {
   "enabled": true,
-  "provider": "paystack",
-  "payment_link": "",
-  "public_key": "",
-  "currency": "KES",
-  "amounts": [200, 500, 1000, 2000],
-  "email": "",
+  "link": "https://ko-fi.com/dkavangi",
   "message": ""
 }

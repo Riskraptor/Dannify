@@ -65,7 +65,12 @@ _EOCD64_LOCATOR_SIG = b'PK\x06\x07'
 _EOCD64_SIG = b'PK\x06\x06'
 
 
-def _get(url: str, start: Optional[int] = None, end: Optional[int] = None) -> bytes:
+def _get(
+    url: str,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    on_bytes: Optional[Callable[[int], None]] = None,
+) -> bytes:
     headers = {'User-Agent': _USER_AGENT, 'Accept': '*/*'}
     if start is not None:
         headers['Range'] = f'bytes={start}-' + ('' if end is None else str(end))
@@ -73,7 +78,16 @@ def _get(url: str, start: Optional[int] = None, end: Optional[int] = None) -> by
     with urllib.request.urlopen(request, timeout=30) as response:
         if start is not None and response.status != 206:
             raise RuntimeError(f'range request refused ({response.status})')
-        return response.read()
+        if on_bytes is None:
+            return response.read()
+        out = bytearray()
+        while True:
+            chunk = response.read(256 * 1024)
+            if not chunk:
+                break
+            out += chunk
+            on_bytes(len(chunk))
+        return bytes(out)
 
 
 def _content_length(url: str) -> int:
@@ -176,8 +190,13 @@ class RemoteZip:
     def compressed_size(self, name: str) -> int:
         return self._entries[name][1]
 
-    def read(self, name: str) -> bytes:
-        """Fetch and decompress one entry."""
+    def read(self, name: str, on_bytes: Optional[Callable[[int], None]] = None) -> bytes:
+        """Fetch and decompress one entry.
+
+        *on_bytes* is called with each chunk's size as it arrives. The app
+        executable is thirteen megabytes on its own, so without this the
+        progress bar would sit still for most of the download and then jump.
+        """
 
         method, comp_size, uncomp_size, local_offset = self._entries[name]
         # The local header repeats the name and may carry a different extra
@@ -187,7 +206,11 @@ class RemoteZip:
             raise RuntimeError(f'bad local header for {name}')
         name_len, extra_len = struct.unpack('<HH', header[26:30])
         start = local_offset + 30 + name_len + extra_len
-        raw = _get(self.url, start, start + comp_size - 1) if comp_size else b''
+        raw = (
+            _get(self.url, start, start + comp_size - 1, on_bytes=on_bytes)
+            if comp_size
+            else b''
+        )
         if method == 0:
             data = raw
         elif method == 8:
@@ -228,18 +251,28 @@ def _zip64_extra(
 # ---------------------------------------------------------------------------
 
 
-def plan(app_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+def plan(
+    app_dir: Path,
+    manifest: dict[str, Any],
+    progress: Optional[Callable[..., None]] = None,
+) -> dict[str, Any]:
     """Work out what this installation is missing.
 
     Returns ``{changed, removed, bytes}``. Hashing the whole folder costs a
-    second or two of disk, which is nothing against downloading 50 MB.
+    second or two of disk, which is nothing against downloading 50 MB — but
+    it is a second or two with nothing on screen, so it reports as it goes.
     """
 
     app_dir = Path(app_dir).resolve()
     wanted = manifest.get('files') or {}
     changed: list[str] = []
     total = 0
+    seen = 0
+    count = len(wanted) or 1
     for rel, meta in wanted.items():
+        seen += 1
+        if progress and seen % 16 == 0:
+            progress(seen * 100.0 / count, 'Checking what changed')
         local = app_dir / rel
         try:
             if not local.is_file() or local.stat().st_size != meta['size']:
@@ -266,7 +299,7 @@ def fetch(
     zip_url: str,
     names: list[str],
     into: Path,
-    progress: Optional[Callable[[float], None]] = None,
+    progress: Optional[Callable[..., None]] = None,
 ) -> None:
     """Pull *names* out of the remote zip and write them under *into*."""
 
@@ -279,16 +312,25 @@ def fetch(
 
     done = 0
     total = sum(archive.compressed_size(n) for n in names) or 1
-    for name in names:
-        data = archive.read(name)
+
+    for index, name in enumerate(names, 1):
+        label = f'Downloading {index} of {len(names)}'
+        got = [0]
+
+        def on_bytes(count: int, _got=got) -> None:
+            _got[0] += count
+            if progress:
+                progress(min(99.0, (done + _got[0]) * 100.0 / total), label)
+
+        if progress:
+            progress(min(99.0, done * 100.0 / total), label)
+        data = archive.read(name, on_bytes=on_bytes)
         target = into / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
         done += archive.compressed_size(name)
-        if progress:
-            progress(min(99.0, done * 100.0 / total))
     if progress:
-        progress(100.0)
+        progress(100.0, 'Downloaded')
 
 
 def write_plan(staging: Path, manifest: dict[str, Any], removed: list[str]) -> Path:

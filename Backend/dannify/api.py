@@ -35,7 +35,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from . import account
@@ -1865,18 +1865,11 @@ async def radio_endpoint(
     return {'songs': songs}
 
 # ---------------------------------------------------------------------------
-# Support the app (Paystack) + in-app updates
+# Support the app + in-app updates
 # ---------------------------------------------------------------------------
 @router.get('/api/support')
 def support_config_endpoint() -> dict[str, Any]:
     return support.config()
-
-
-@router.get('/support/checkout')
-def support_checkout_endpoint() -> HTMLResponse:
-    """Paystack Inline checkout page (opened in its own window)."""
-
-    return HTMLResponse(support.CHECKOUT_HTML)
 
 
 @router.get('/api/update/check')
@@ -1899,10 +1892,17 @@ async def update_download_endpoint(
 
     loop = state.loop or asyncio.get_running_loop()
 
-    def _progress(percent: float) -> None:
+    def _progress(percent: float, label: str = '') -> None:
+        # The label matters as much as the number here: most of the wait is
+        # spent working out which files changed, and a bar sitting at zero
+        # with nothing beside it looks like a download that never started.
         asyncio.run_coroutine_threadsafe(
             state.connections.broadcast(
-                {'type': 'update_progress', 'progress': round(percent, 1)}
+                {
+                    'type': 'update_progress',
+                    'progress': round(percent, 1),
+                    'label': label,
+                }
             ),
             loop,
         )
