@@ -21,7 +21,11 @@ from typing import Any, Callable, Optional
 
 from loguru import logger
 
-DEFAULT_REPO = 'DANIELMWENDWA9451/Dannify'
+# Releases live in their own public repository. The source repository is
+# private, and a private one's releases need a token: shipping a token in
+# the app would hand every copy read access to the source, which is worse
+# than publishing it.
+DEFAULT_REPO = 'DANIELMWENDWA9451/dannify-releases'
 CHECK_TTL = 60 * 60 * 6  # re-check at most every 6 hours
 _USER_AGENT = 'Dannify-Updater'
 
