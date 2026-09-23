@@ -1574,12 +1574,12 @@ class DesktopApi:
                 tb.update_buttons()
             if self._tray is not None:
                 self._tray.set_track(title, artist, playing, has_track)
-            # Like other players: the window title shows what's playing.
-            if self._form is not None:
-                if playing and title:
-                    self._form.Text = f'{artist} - {title}' if artist else title
-                else:
-                    self._form.Text = APP_TITLE
+            # The window is called Dannify, full stop. Putting the track in
+            # the title made the caption, the taskbar and alt-tab all read
+            # like a browser tab retitling itself. What is playing belongs in
+            # the player bar and the tray tooltip, which both already show it.
+            if self._form is not None and self._form.Text != APP_TITLE:
+                self._form.Text = APP_TITLE
 
         self._ui(apply)
 
@@ -2591,7 +2591,17 @@ def main() -> None:
 
     prefs = _read_prefs()
     theme = 'light' if prefs.get('theme') == 'light' else 'dark'
-    native_frame = bool(prefs.get('native_frame', False))
+    # Dannify draws its own title bar, always. The Windows caption used to be
+    # optional, and turning it on left two title bars stacked: the system's
+    # with the app name, then ours underneath with the logo and name again,
+    # which reads as one app running inside another. The option is gone and
+    # any saved copy of it is cleared, so an install that had it on fixes
+    # itself on the next launch. A native caption can still appear if the
+    # custom frame fails to install, and the interface drops its own brand
+    # row in that case so there is never a second bar.
+    if prefs.get('native_frame'):
+        _write_prefs({'native_frame': False})
+    native_frame = False
     x, y, w, h, maximized = _load_window_state(prefs)
 
     # Keep WebView data (localStorage: language, volume, layout, history)

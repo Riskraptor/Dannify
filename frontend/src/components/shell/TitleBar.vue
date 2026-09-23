@@ -16,7 +16,10 @@
       >
         <Icon icon="ph:list" class="h-5 w-5" />
       </button>
-      <div class="tb-brand">
+      <!-- Only when we own the caption. If Windows is drawing its own
+           title bar above us, repeating the icon and the name here is what
+           makes the app look like it is running inside another app. -->
+      <div v-if="!win.nativeFrame" class="tb-brand">
         <img src="../../assets/dannify.svg" alt="" class="h-[18px] w-[18px] drag-none" />
         <span class="tb-name">Dannify</span>
       </div>
