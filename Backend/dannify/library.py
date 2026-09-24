@@ -76,18 +76,39 @@ def _read_tags(path: Path) -> dict[str, Any]:
         head = vault.read_header(path) or {}
         name = path.stem
         title = str(head.get('title') or '')
-        artist = str(head.get('artist') or '')
+        raw = str(head.get('artist') or '')
         if not title and ' - ' in name:
-            artist, title = name.split(' - ', 1)
+            raw, title = name.split(' - ', 1)
+
+        # The same shape the plain branch returns, key for key. It used to
+        # hand back album_artist and no artist_display, and to put the whole
+        # credit in as one name, so "Bensoul, Vic West" became an artist of
+        # that name with one song, sitting in the sidebar next to the real
+        # Bensoul. A container written by a current version carries the list
+        # it was sealed with; an older one gets split the same way a plain
+        # file does.
+        stored = head.get('artists')
+        if isinstance(stored, list) and stored:
+            # Sealed by a version that recorded both, so 'artist' here is
+            # already the primary the plain reader worked out, album artist
+            # and all: "Bob Marley & The Wailers" rather than its first name.
+            artists = [str(a) for a in stored if a]
+            primary = raw or artists[0]
+        else:
+            # Older container: all there is to go on is one string, which is
+            # what the filename gave. Split it the way a plain file is split.
+            artists = _split_artists(raw)
+            primary = artists[0] if artists else raw
+        display = artists or ([primary] if primary else [])
         return {
             'title': title or name,
-            'artist': artist,
-            'album_artist': artist,
-            'artists': [a for a in [artist] if a],
+            'artist': primary or 'Unknown Artist',
+            'artists': display,
+            'artist_display': ', '.join(display) or primary or 'Unknown Artist',
             'album': str(head.get('album') or ''),
-            'genre': '',
+            'genre': str(head.get('genre') or ''),
             'duration': int(head.get('duration') or 0),
-            'track_number': 0,
+            'track_number': int(head.get('track_number') or 0),
             'video_id': str(head.get('video_id') or ''),
         }
 

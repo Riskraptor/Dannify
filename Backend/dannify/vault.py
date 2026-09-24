@@ -603,6 +603,50 @@ def _drop_plain_twin(plain: Path, sealed: Path) -> bool:
         return False
 
 
+def _refresh_playlists(root: Path) -> int:
+    """Point generated .m3u files at the tracks they name.
+
+    A playlist written before the conversion lists the filenames the tracks
+    had then, so every line in it names a file that is no longer there. The
+    mapping is the same one for all of them, so rather than carry it around,
+    each line that points at nothing is checked against the container of the
+    same name: if that is there, the line is that.
+    """
+
+    fixed = 0
+    for sheet in root.rglob('*.m3u'):
+        try:
+            lines = sheet.read_text(encoding='utf-8').splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        changed = False
+        out = []
+        for line in lines:
+            entry = line.strip()
+            if not entry or entry.startswith('#'):
+                out.append(line)
+                continue
+            here = (sheet.parent / entry).resolve()
+            if here.is_file():
+                out.append(line)
+                continue
+            sealed = here.with_suffix(SUFFIX)
+            if sealed.is_file():
+                out.append(line[: len(line) - len(entry)] + entry.rsplit('.', 1)[0] + SUFFIX)
+                changed = True
+            else:
+                out.append(line)
+        if changed:
+            try:
+                sheet.write_text('\n'.join(out) + '\n', encoding='utf-8')
+                fixed += 1
+            except OSError:
+                pass
+    if fixed:
+        logger.debug('updated {} playlist file(s)', fixed)
+    return fixed
+
+
 def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
     """Seal music that was downloaded before there were containers.
 
@@ -673,6 +717,7 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
                 changed += 1
 
     if changed:
+        _refresh_playlists(root)
         _tell(on_change, forced=True)
     logger.info(
         'Sealed {}, skipped {}, failed {}', done['sealed'], done['skipped'], done['failed']
