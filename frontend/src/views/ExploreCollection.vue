@@ -196,12 +196,12 @@ const totalDuration = computed(() => {
   return h ? t('common.hoursMinutes', { h, m }) : t('common.minutes', { m })
 })
 
-const playingHere = computed(
-  () => player.isPlaying.value && rows.value.some((r) => isRowCurrent(r))
-)
+const currentHere = computed(() => rows.value.some((r) => isRowCurrent(r)))
+const playingHere = computed(() => currentHere.value && player.isPlaying.value)
 
 function playAll() {
-  if (playingHere.value) return player.toggle()
+  // Resume where it was, rather than starting the collection again.
+  if (currentHere.value) return player.toggle()
   playRows(rows.value, 0)
 }
 

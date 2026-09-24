@@ -83,7 +83,7 @@ const focused = ref(false)
 const active = ref(-1)
 let liveTimer = null
 
-const searching = computed(() => searchState.value.loading)
+const searching = computed(() => !!searchState.value.searching)
 
 const suggestions = computed(() => {
   const needle = (query.value || '').trim().toLowerCase()

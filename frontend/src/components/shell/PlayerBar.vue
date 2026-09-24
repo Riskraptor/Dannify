@@ -400,8 +400,12 @@ function onTrackMenu(e) {
   .pb-volume {
     width: auto;
   }
+  /* A short slider rather than none at all. The window minimum is 760 px, so
+     hiding this below 1000 took the volume away from most real sessions and
+     left a mute button that could only be all or nothing. */
   .pb-vol-slider {
-    display: none;
+    flex: none;
+    width: 58px;
   }
 }
 

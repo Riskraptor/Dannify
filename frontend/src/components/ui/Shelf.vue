@@ -9,14 +9,21 @@
         {{ moreLabel }}
       </button>
     </header>
-    <div class="shelf-row" :class="{ 'is-wrap': wrap }" :style="{ '--card-min': `${minCard}px` }">
+    <div
+      ref="row"
+      class="shelf-row"
+      :class="{ 'is-wrap': wrap }"
+      :style="{ '--card-min': `${minCard}px` }"
+    >
       <slot />
     </div>
   </section>
 </template>
 
 <script setup>
-defineProps({
+import { onBeforeUnmount, onMounted, ref, nextTick } from 'vue'
+
+const props = defineProps({
   title: { type: String, required: true },
   moreLabel: { type: String, default: '' },
   // Show every row instead of a single row that fits the width.
@@ -25,6 +32,35 @@ defineProps({
   clickableTitle: { type: Boolean, default: false },
 })
 defineEmits(['more'])
+
+// A shelf shows one row and clips the rest. Clipped cards are still rendered,
+// just at zero height, and each one is a focusable element: tabbing through
+// the page walked into a run of things nobody can see. Mark anything below
+// the first row as inert so it leaves the tab order and the screen reader.
+const row = ref(null)
+let observer = null
+
+function hideOverflow() {
+  const el = row.value
+  if (!el || props.wrap) return
+  const kids = [...el.children]
+  if (!kids.length) return
+  const firstTop = kids[0].offsetTop
+  kids.forEach((kid) => {
+    const clipped = kid.offsetTop > firstTop
+    if (clipped) kid.setAttribute('inert', '')
+    else kid.removeAttribute('inert')
+  })
+}
+
+onMounted(() => {
+  nextTick(hideOverflow)
+  if (typeof ResizeObserver === 'function') {
+    observer = new ResizeObserver(() => hideOverflow())
+    if (row.value) observer.observe(row.value)
+  }
+})
+onBeforeUnmount(() => observer && observer.disconnect())
 </script>
 
 <style scoped>

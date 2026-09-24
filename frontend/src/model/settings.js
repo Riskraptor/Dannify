@@ -1,6 +1,8 @@
 import { ref, computed } from 'vue'
 
 import API from '/src/model/api'
+import { toast } from '/src/model/toast'
+import { t } from '/src/i18n'
 
 const settings = ref({
   audio_providers: [''],
@@ -90,6 +92,14 @@ export function useSettingsManager() {
 
   // Apply + persist a partial change immediately (the backend merges the
   // patch and echoes the full settings back).
+  //
+  // A save that fails puts the control back where it was. Nothing said so,
+  // so the switch you just flipped simply flipped itself back and you were
+  // left to guess why.
+  function failed() {
+    toast(t('settings.saveError'), { tone: 'error' })
+  }
+
   async function update(patch) {
     const prev = { ...settings.value }
     settings.value = { ...settings.value, ...patch }
@@ -102,10 +112,12 @@ export function useSettingsManager() {
       } else {
         settings.value = prev
         isSaved.value = false
+        failed()
       }
     } catch {
       settings.value = prev
       isSaved.value = false
+      failed()
     }
     setTimeout(() => {
       isSaved.value = null
@@ -124,9 +136,11 @@ export function useSettingsManager() {
         lastSaved.value = Date.now()
       } else {
         isSaved.value = false
+        failed()
       }
     } catch {
       isSaved.value = false
+      failed()
     }
     setTimeout(() => { isSaved.value = null }, 2000)
   }

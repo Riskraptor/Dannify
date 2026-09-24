@@ -8,6 +8,8 @@ import {
   useConnectivity,
   whenOnline,
 } from '/src/model/connectivity'
+import { toast } from '/src/model/toast'
+import { t } from '/src/i18n'
 
 const connectivity = useConnectivity()
 
@@ -300,8 +302,17 @@ function ensureAudio() {
   audio.addEventListener('ended', onEnded)
   audio.addEventListener('error', () => {
     const track = currentTrack.value
-    if (!track || track.type !== 'stream') return
+    if (!track) return
     isBuffering.value = false
+    if (track.type !== 'stream') {
+      // A saved file that will not play. This used to return here and do
+      // nothing at all: no message, no skip, just a track sitting there that
+      // was never going to start.
+      toast(t('player.fileUnplayable'), { tone: 'error' })
+      if (currentIndex.value < playlist.value.length - 1) next()
+      else isPlaying.value = false
+      return
+    }
     const gen = playGen
     const at = currentTime.value
     reportNetworkFailure()

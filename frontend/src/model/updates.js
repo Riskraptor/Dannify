@@ -94,14 +94,14 @@ async function download({ quiet = false } = {}) {
   }
   downloading.value = true
   progress.value = 0
-  stage.value = 'Starting'
+  stage.value = t('update.stageStarting')
   try {
     const res = await API.downloadUpdate(info.value.download_url)
     const data = res.data || {}
     installerPath.value = data.path || ''
     updateKind.value = data.kind || 'installer'
     progress.value = 100
-    stage.value = 'Ready to install'
+    stage.value = t('update.stageReady')
     // Tell the shell about it so closing the app is enough to apply it. A
     // partial update is a folder of replacement files rather than an
     // installer, and the shell applies it with its own helper.

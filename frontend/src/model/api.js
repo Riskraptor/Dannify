@@ -1,5 +1,6 @@
 // small file used as placeholder/settings for API calls via axios to server-side
 import axios from 'axios' // used to connect to server backend in ./server folder
+import { ref } from 'vue'
 import config from '/src/config.js'
 
 import { v4 as uuidv4 } from 'uuid'
@@ -26,21 +27,33 @@ wsConnection.onopen = (event) => {
   console.log('websocket connection opened', event)
 }
 
-function getVersion() {
+// The version, live. It used to be read out of storage once when Settings was
+// set up, so a check that failed at startup wrote "0.0.0" there and About
+// went on showing it for the rest of the session, however many times the
+// request would have succeeded since.
+export const appVersion = ref(localStorage.getItem('version') || '')
+
+function getVersion(attempt = 0) {
   API.get('/api/version')
     .then((res) => {
       const prevItem = localStorage.getItem('version')
       localStorage.setItem('version', res.data)
+      appVersion.value = res.data
       // Reload only after an upgrade (stale cached assets). A first run has
       // nothing stale: reloading would just flash the window.
       if (prevItem && prevItem !== '0.0.0' && prevItem != res.data) {
         location.reload()
       }
     })
-    .catch((error) => {
-      console.error(error)
-      console.log('Error getting version, using 0')
+    .catch(() => {
+      // Try again rather than settling on a number that is not true. The
+      // server is usually just not listening yet.
+      if (attempt < 5) {
+        setTimeout(() => getVersion(attempt + 1), 1000 * (attempt + 1))
+        return
+      }
       localStorage.setItem('version', '0.0.0')
+      appVersion.value = ''
     })
 }
 

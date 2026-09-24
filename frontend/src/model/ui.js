@@ -122,14 +122,3 @@ export function useUi() {
     shortcutsOpen,
   }
 }
-
-// Back-compat for components that predate the shell refactor.
-export function usePanel() {
-  return {
-    panel,
-    lyricsSyncOpen,
-    setPanel,
-    closePanel,
-    forceClose: closePanel,
-  }
-}

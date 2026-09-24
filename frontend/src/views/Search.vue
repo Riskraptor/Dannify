@@ -70,7 +70,7 @@
     </div>
 
     <!-- Error -->
-    <EmptyState v-else-if="error" icon="ph:warning-circle" :title="t('search.error')" :text="error">
+    <EmptyState v-else-if="failed" icon="ph:warning-circle" :title="t('search.error')" :text="detail">
       <button class="btn btn-pill" @click="load(state.query, true)">{{ t('common.retry') }}</button>
     </EmptyState>
 
@@ -243,7 +243,11 @@ const showSkeleton = useDeferred(loading)
 // Same idea for the inline indicator: a 200 ms search should not blink a
 // spinner at anyone.
 const showSearching = useDeferred(searching, { showAfter: 260, keepFor: 260 })
-const error = ref('')
+// Whether it failed, and separately anything the server said about why.
+// These were one ref, so a reply with no detail printed the same sentence
+// as the title and as the body.
+const failed = ref(false)
+const detail = ref('')
 
 const tabs = [
   { id: 'all', label: 'explore.all' },
@@ -378,7 +382,9 @@ async function load(q, force = false) {
   // underneath it. So it is only true when there is nothing to hide.
   loading.value = !refreshing && !hadResults
   searching.value = true
-  error.value = ''
+  state.value.searching = true
+  failed.value = false
+  detail.value = ''
   // Resetting to the "All" tab mid-typing yanks the user out of the tab they
   // chose. Only do it when the results they were looking at are gone anyway.
   if (!refreshing && !hadResults) state.value.activeTab = 'all'
@@ -392,12 +398,13 @@ async function load(q, force = false) {
   } catch (e) {
     if (token !== loadToken) return
     if (!e.response) reportNetworkFailure() // no reply at all: the network
-    error.value =
-      (e.response && e.response.data && e.response.data.detail) || t('search.error')
+    failed.value = true
+    detail.value = (e.response && e.response.data && e.response.data.detail) || ''
   } finally {
     if (token === loadToken) {
       loading.value = false
       searching.value = false
+      state.value.searching = false
     }
   }
 }

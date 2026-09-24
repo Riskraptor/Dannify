@@ -171,12 +171,12 @@ const bioIsLong = computed(() => (artist.value?.description || '').length > 180)
 const songRows = computed(() => (artist.value ? artist.value.songs.map(songRow) : []))
 const visibleRows = computed(() => songRows.value.slice(0, songLimit.value))
 
-const playingHere = computed(
-  () => player.isPlaying.value && songRows.value.some((r) => isRowCurrent(r))
-)
+const currentHere = computed(() => songRows.value.some((r) => isRowCurrent(r)))
+const playingHere = computed(() => currentHere.value && player.isPlaying.value)
 
 function playTop() {
-  if (playingHere.value) return player.toggle()
+  // Resume where it was, rather than starting from the first track again.
+  if (currentHere.value) return player.toggle()
   playRows(songRows.value, 0)
 }
 
