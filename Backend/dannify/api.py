@@ -96,6 +96,14 @@ class ConnectionManager:
     def disconnect(self, client_id: str) -> None:
         self._clients.pop(client_id, None)
 
+    @property
+    def connected(self) -> bool:
+        """Whether a window is listening. Broadcasting to nobody is a no-op,
+        which matters when something has to reach the window and not be lost:
+        a file the shell asked us to open arrives before the page does."""
+
+        return bool(self._clients)
+
     async def send(self, client_id: str, message: dict[str, Any]) -> None:
         ws = self._clients.get(client_id)
         if ws is None:

@@ -759,6 +759,22 @@ function setPlaylist(files, options = {}) {
   }
 }
 
+// A saved track opened from outside the app: double-clicked in Explorer, or
+// passed on the command line. The shell has already worked out how to reach
+// it, so this is a finished track and there is nothing to look up.
+window.addEventListener('dannify:play-file', (e) => {
+  const track = e && e.detail
+  if (!track) return
+  if (track.error === 'other_key') {
+    toast(t('player.fileOtherKey', { name: track.name || '' }), {
+      tone: 'error',
+    })
+    return
+  }
+  if (!track.url) return
+  setPlaylist([track], { startIndex: 0 })
+})
+
 // Queue a list of streamable songs (from preview/search) and start playing.
 function playStreamSongs(songs, startIndex = 0) {
   setPlaylist(songs.map(trackFromSong), { startIndex })

@@ -41,6 +41,10 @@ MAGIC = b'DNF1'
 NONCE_LEN = 16
 BLOCK = 64  # blake2b digest size, and so the keystream block size
 SUFFIX = '.dnf'
+# Header revision, written as 'v'. 1 is implied by its absence: those were
+# sealed by the first version, which threw the tags away and kept a second
+# copy of the artwork. repair() brings them up to date.
+FORMAT = 2
 
 _master: Optional[bytes] = None
 _key_path: Optional[Path] = None
@@ -49,61 +53,121 @@ _key_path: Optional[Path] = None
 # ---------------------------------------------------------------------------
 # The key
 # ---------------------------------------------------------------------------
-def _protect(raw: bytes) -> bytes:
-    """Wrap the key so a copy of the file is useless on another machine.
+def _machine_entropy() -> Optional[bytes]:
+    """Something only this machine knows, mixed into the key's wrapping.
 
-    Windows ties this to the user account. Everywhere else it is stored as it
-    is, which is honest: there is nothing on those platforms that would make
-    the difference without a password the user has to type.
+    DPAPI on its own ties the key to the Windows account. That is already
+    enough that carrying vault.key to another PC achieves nothing, but the
+    same account can exist on two machines, and a roaming or restored profile
+    carries the account's DPAPI material with it. So the machine's own
+    installation id and the serial of the volume the key sits on go in as
+    additional entropy: unwrapping needs the account AND this machine.
+
+    Be honest about the ceiling here. The app has to decrypt to play, on this
+    machine, without asking anybody for anything. So whatever the app can do,
+    somebody signed in as this user on this machine can also do. There is no
+    arrangement of local storage that changes that. What this does is make the
+    key non-portable, which is the part that was actually worth fixing.
+    """
+
+    if os.name != 'nt':
+        return None
+    bits = []
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r'SOFTWARE\Microsoft\Cryptography',
+            0,
+            winreg.KEY_READ | winreg.KEY_WOW64_64KEY,
+        ) as key:
+            bits.append(str(winreg.QueryValueEx(key, 'MachineGuid')[0]).encode())
+    except Exception:
+        pass
+    try:
+        import ctypes
+
+        root = os.environ.get('SystemDrive', 'C:') + '\\'
+        serial = ctypes.c_ulong(0)
+        if ctypes.windll.kernel32.GetVolumeInformationW(
+            ctypes.c_wchar_p(root), None, 0,
+            ctypes.byref(serial), None, None, None, 0,
+        ):
+            bits.append(str(serial.value).encode())
+    except Exception:
+        pass
+    if not bits:
+        return None
+    return hashlib.blake2b(
+        b'|'.join(bits), person=b'dannify-host', digest_size=32,
+    ).digest()
+
+
+def _dpapi(raw: bytes, entropy: Optional[bytes], unwrap: bool) -> bytes:
+    """One call into CryptProtectData / CryptUnprotectData."""
+
+    import ctypes
+    from ctypes import wintypes
+
+    class BLOB(ctypes.Structure):
+        _fields_ = [
+            ('cbData', wintypes.DWORD),
+            ('pbData', ctypes.POINTER(ctypes.c_char)),
+        ]
+
+    def blob(data: bytes) -> BLOB:
+        return BLOB(
+            len(data),
+            ctypes.cast(
+                ctypes.create_string_buffer(data), ctypes.POINTER(ctypes.c_char),
+            ),
+        )
+
+    crypt32 = ctypes.WinDLL('crypt32', use_last_error=True)
+    salt = ctypes.byref(blob(entropy)) if entropy else None
+    out = BLOB()
+    call = crypt32.CryptUnprotectData if unwrap else crypt32.CryptProtectData
+    if not call(
+        ctypes.byref(blob(raw)), None, salt, None, None, 0, ctypes.byref(out),
+    ):
+        raise OSError('DPAPI refused')
+    result = ctypes.string_at(out.pbData, out.cbData)
+    ctypes.windll.kernel32.LocalFree(out.pbData)
+    return result
+
+
+def _protect(raw: bytes) -> bytes:
+    """Wrap the key so a copy of the file is useless anywhere else.
+
+    Everywhere but Windows it is stored as it is, which is honest: there is
+    nothing on those platforms that would make the difference without a
+    password the user has to type.
     """
 
     if os.name != 'nt':
         return b'RAW0' + raw
     try:
-        import ctypes
-        from ctypes import wintypes
-
-        class BLOB(ctypes.Structure):
-            _fields_ = [('cbData', wintypes.DWORD), ('pbData', ctypes.POINTER(ctypes.c_char))]
-
-        crypt32 = ctypes.WinDLL('crypt32', use_last_error=True)
-        blob_in = BLOB(len(raw), ctypes.cast(ctypes.create_string_buffer(raw), ctypes.POINTER(ctypes.c_char)))
-        blob_out = BLOB()
-        ok = crypt32.CryptProtectData(
-            ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)
-        )
-        if not ok:
-            raise OSError('CryptProtectData refused')
-        out = ctypes.string_at(blob_out.pbData, blob_out.cbData)
-        ctypes.windll.kernel32.LocalFree(blob_out.pbData)
-        return b'DPAP' + out
+        salt = _machine_entropy()
+        if salt is not None:
+            return b'DPA2' + _dpapi(raw, salt, unwrap=False)
+        return b'DPAP' + _dpapi(raw, None, unwrap=False)
     except Exception:
         logger.opt(exception=True).debug('could not protect the vault key')
         return b'RAW0' + raw
 
 
 def _unprotect(stored: bytes) -> bytes:
+    """Unwrap a key written by this or any earlier version."""
+
     tag, body = stored[:4], stored[4:]
     if tag == b'RAW0':
         return body
-    if tag != b'DPAP':
-        raise ValueError('unknown key format')
-    import ctypes
-    from ctypes import wintypes
-
-    class BLOB(ctypes.Structure):
-        _fields_ = [('cbData', wintypes.DWORD), ('pbData', ctypes.POINTER(ctypes.c_char))]
-
-    crypt32 = ctypes.WinDLL('crypt32', use_last_error=True)
-    blob_in = BLOB(len(body), ctypes.cast(ctypes.create_string_buffer(body), ctypes.POINTER(ctypes.c_char)))
-    blob_out = BLOB()
-    if not crypt32.CryptUnprotectData(
-        ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)
-    ):
-        raise OSError('CryptUnprotectData refused')
-    out = ctypes.string_at(blob_out.pbData, blob_out.cbData)
-    ctypes.windll.kernel32.LocalFree(blob_out.pbData)
-    return out
+    if tag == b'DPA2':
+        return _dpapi(body, _machine_entropy(), unwrap=True)
+    if tag == b'DPAP':
+        return _dpapi(body, None, unwrap=True)
+    raise ValueError('unknown key format')
 
 
 def init(data_dir: Path) -> None:
@@ -113,7 +177,20 @@ def init(data_dir: Path) -> None:
     _key_path = Path(data_dir) / 'vault.key'
     try:
         if _key_path.is_file():
-            _master = _unprotect(_key_path.read_bytes())
+            stored = _key_path.read_bytes()
+            _master = _unprotect(stored)
+            # An older wrapping still opens, and is tightened on the way past
+            # so a key written before this stops being portable now. Only if
+            # the new wrapping reads back: a key that cannot be unwrapped is
+            # every saved track gone.
+            want = _protect(_master)
+            if stored[:4] != want[:4]:
+                try:
+                    if _unprotect(want) == _master:
+                        _key_path.write_bytes(want)
+                        logger.debug('vault key re-wrapped for this machine')
+                except Exception:
+                    logger.opt(exception=True).debug('left the key wrapping alone')
             return
     except Exception:
         # A key we cannot read is worse than none: say so loudly rather than
@@ -204,17 +281,65 @@ def _cover_of(path: Path) -> Optional[tuple[bytes, str]]:
     return None
 
 
+def _find_in_file(path: Path, needle: bytes) -> int:
+    """Where *needle* starts inside *path*, or -1.
+
+    Used to point the header at the artwork already sitting in the payload
+    instead of keeping a second copy of it.
+    """
+
+    if not needle:
+        return -1
+    span = len(needle)
+    window = max(1 << 20, span * 2)
+    at = 0
+    tail = b''
+    with open(path, 'rb') as f:
+        while True:
+            chunk = f.read(window)
+            if not chunk:
+                return -1
+            blob = tail + chunk
+            found = blob.find(needle)
+            if found >= 0:
+                return at - len(tail) + found
+            at += len(chunk)
+            # Keep enough of the end that a match straddling the seam is seen.
+            keep = span - 1
+            tail = blob[-keep:] if keep > 0 else b''
+
+
 def cover(path: Path) -> Optional[tuple[bytes, str]]:
-    """The artwork of a sealed file, read from its header alone."""
+    """The artwork of a sealed file.
+
+    Normally this is a range of the payload: the artwork is part of the file
+    we sealed, so the header says where it is rather than carrying a second
+    copy. Decrypting it costs the few blocks it spans. Older containers, and
+    the rare file whose artwork mutagen reports in a form that does not appear
+    verbatim on disk, keep the copy, so both are read here.
+    """
 
     head = read_header(path) or {}
+    mime = str(head.get('cover_mime') or 'image/jpeg')
+
+    at = head.get('cover_at')
+    if at is not None:
+        span = int(head.get('cover_len') or 0)
+        if span > 0:
+            try:
+                data = b''.join(open_range(path, int(at), span))
+                if len(data) == span:
+                    return data, mime
+            except Exception:
+                return None
+
     raw = head.get('cover')
     if not raw:
         return None
     try:
         import base64
 
-        return base64.b64decode(raw), str(head.get('cover_mime') or 'image/jpeg')
+        return base64.b64decode(raw), mime
     except Exception:
         return None
 
@@ -229,18 +354,30 @@ def seal(source: Path, target: Path, meta: dict[str, Any]) -> Path:
     key = _file_key(nonce)
 
     head = dict(meta)
+    head['v'] = FORMAT
     head['ext'] = source.suffix.lower()
     head['size'] = source.stat().st_size
-    # The artwork goes in the header, because the header is the only part
-    # anything reads cheaply. Leaving it in the payload would mean decrypting
-    # a whole track every time a list wanted a thumbnail.
-    if 'cover' not in head:
+    # The header says WHERE the artwork is, not what it is. It is already in
+    # the file we are about to seal, and an early version copied it into the
+    # header as base64 as well: a quarter of a megabyte of duplicate on some
+    # tracks, and a third again on top of that for the encoding. A range costs
+    # two numbers, and reading it still only decrypts the blocks it spans.
+    if 'cover' not in head and 'cover_at' not in head:
         art = _cover_of(source)
         if art:
-            import base64
+            at = _find_in_file(source, art[0])
+            if at >= 0:
+                head['cover_at'] = at
+                head['cover_len'] = len(art[0])
+                head['cover_mime'] = art[1]
+            else:
+                # mutagen handed back bytes that are not on disk verbatim
+                # (a re-encoded or reconstructed picture). Rare, and a copy is
+                # better than no artwork.
+                import base64
 
-            head['cover'] = base64.b64encode(art[0]).decode('ascii')
-            head['cover_mime'] = art[1]
+                head['cover'] = base64.b64encode(art[0]).decode('ascii')
+                head['cover_mime'] = art[1]
     blob = _xor(key, nonce, json.dumps(head).encode('utf-8'), 0)
 
     part = target.with_suffix(target.suffix + '.part')
@@ -262,11 +399,23 @@ def seal(source: Path, target: Path, meta: dict[str, Any]) -> Path:
         out.flush()
         os.fsync(out.fileno())
     part.replace(target)
-    # Only once the container is safely on disk.
-    try:
-        source.unlink()
-    except OSError:
-        logger.debug('could not remove {} after sealing', source)
+    # Only once the container is safely on disk. Retried, because the library
+    # scanner may have the file open to read its tags at this exact moment and
+    # Windows will not delete it while anybody does. Leaving the original
+    # behind is the one outcome that defeats the point: a plain copy of the
+    # track, in the music folder, that any player can open. _drop_plain_twin
+    # is the backstop for the case where it is still held after this.
+    for attempt in range(5):
+        try:
+            source.unlink()
+            break
+        except OSError:
+            if attempt == 4:
+                logger.debug('could not remove {} after sealing', source)
+            else:
+                import time
+
+                time.sleep(0.2 * (attempt + 1))
     return target
 
 
@@ -363,13 +512,112 @@ def _note(root: Path, sealed: Path, title: str, artist: str) -> None:
         pass
 
 
-def migrate(root: Path, on_progress=None) -> dict[str, int]:
+def _tags_of(path: Path) -> dict[str, Any]:
+    """Everything the library would read off a plain file.
+
+    The first version of this guessed title and artist from the filename and
+    wrote nothing else, so an album, a duration and a video id that were
+    sitting in the file's own tags went in the bin along with the file. It
+    reads them properly now, using the same reader the library uses so a
+    sealed track carries exactly what an unsealed one did.
+    """
+
+    stem = path.stem
+    artist, _, title = stem.partition(' - ')
+    guess = {
+        'title': title or stem,
+        'artist': artist if title else '',
+        'album': '',
+        'album_artist': '',
+        'genre': '',
+        'duration': 0,
+        'track_number': 0,
+        'video_id': '',
+    }
+    try:
+        from . import library  # noqa: PLC0415  (circular at module level)
+
+        read = library._read_tags(path)
+    except Exception:
+        logger.opt(exception=True).debug('could not read tags off {}', path)
+        return guess
+
+    for field in list(guess):
+        value = read.get(field)
+        if value:
+            guess[field] = value
+    artists = read.get('artists')
+    if artists:
+        guess['artists'] = artists
+    return guess
+
+
+_last_told = 0.0
+
+
+def _tell(on_change, forced: bool = False) -> None:
+    """Let the app know the music folder changed under it.
+
+    Throttled, because every one of these costs the window a full rescan of
+    the folder. Often enough that a list on screen is never wrong for long,
+    rarely enough that a big library is not one rescan per track.
+    """
+
+    global _last_told
+    if on_change is None:
+        return
+    import time
+
+    now = time.monotonic()
+    if not forced and now - _last_told < 1.5:
+        return
+    _last_told = now
+    try:
+        on_change(forced)
+    except Exception:
+        logger.opt(exception=True).debug('library refresh callback failed')
+
+
+def _drop_plain_twin(plain: Path, sealed: Path) -> bool:
+    """Remove a plain file whose sealed twin holds the same audio.
+
+    Both existing is the state this whole thing exists to prevent: an ordinary
+    file any player can open, sitting next to the container. It happens when
+    the original could not be deleted at the time, usually because something
+    had it open. The plain one goes only once the sealed one has been read
+    back and proved to hold exactly the same bytes. Anything less than proof
+    and both stay: nobody's music is worth a guess.
+    """
+
+    try:
+        size = plain.stat().st_size
+        head = read_header(sealed)
+        if head is None or int(head.get('size') or -1) != size:
+            return False
+        if audio_size(sealed) != size:
+            return False
+        plain.unlink()
+        logger.debug('removed the plain copy of {}', sealed.name)
+        return True
+    except OSError:
+        return False
+
+
+def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
     """Seal music that was downloaded before there were containers.
 
     Converted, never deleted. A file that cannot be sealed for any reason is
     left exactly as it was: somebody's music is not the place to be brave.
     Runs on a background thread at startup, so a large library does not hold
     the app closed.
+
+    Which is exactly what made the first version of this so unpleasant. The
+    window had already listed the library by then, with every track pointing
+    at the .mp3 it was loaded from. Renaming those files out from under it
+    left every cover a grey placeholder and every play a toast saying the file
+    had been moved or deleted, and nothing said otherwise until the app was
+    restarted. The whole point was that nobody should notice. So the library
+    is told, as the work goes rather than only at the end.
     """
 
     root = Path(root)
@@ -385,22 +633,20 @@ def migrate(root: Path, on_progress=None) -> dict[str, int]:
         return done
 
     logger.info('Sealing {} file(s) already in the music folder', len(plain))
+    changed = 0
     for index, path in enumerate(plain, 1):
         target = path.with_suffix(SUFFIX)
         if target.exists():
             done['skipped'] += 1
+            if _drop_plain_twin(path, target):
+                changed += 1
             continue
         try:
-            stem = path.stem
-            artist, _, title = stem.partition(' - ')
-            seal(path, target, {
-                'title': title or stem,
-                'artist': artist if title else '',
-                'album': '',
-                'video_id': '',
-            })
+            meta = _tags_of(path)
+            seal(path, target, meta)
             done['sealed'] += 1
-            _note(root, target, title or stem, artist if title else '')
+            changed += 1
+            _note(root, target, meta['title'], meta['artist'])
         except Exception:
             logger.opt(exception=True).warning('Could not seal {}; left alone', path)
             done['failed'] += 1
@@ -414,9 +660,108 @@ def migrate(root: Path, on_progress=None) -> dict[str, int]:
                     pass
         if on_progress:
             on_progress(index, len(plain))
+        if changed:
+            _tell(on_change)
 
+    # Anything whose original was still held when it was sealed. By now the
+    # scanner has long since let go, so this is the pass that catches it.
+    for path in plain:
+        if path.is_file():
+            target = path.with_suffix(SUFFIX)
+            if target.is_file() and _drop_plain_twin(path, target):
+                done['skipped'] += 1
+                changed += 1
+
+    if changed:
+        _tell(on_change, forced=True)
     logger.info(
         'Sealed {}, skipped {}, failed {}', done['sealed'], done['skipped'], done['failed']
+    )
+    return done
+
+
+def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
+    """Bring containers written by the first version up to date.
+
+    Those were sealed with a title and an artist guessed off the filename and
+    nothing else, so albums, durations, track numbers and video ids were lost,
+    and the artwork was copied into the header while still sitting in the
+    payload. None of it is actually gone: the payload is the original file,
+    byte for byte, tags and all. So each one is opened, read properly, and
+    written back with a full header and the artwork left where it already was.
+
+    Every file gets smaller. It is a read and a write per track on a
+    background thread, once, and then never again.
+    """
+
+    root = Path(root)
+    done = {'repaired': 0, 'skipped': 0, 'failed': 0, 'saved': 0}
+    if not ready() or not root.is_dir():
+        return done
+
+    stale = []
+    for path in sorted(root.rglob('*' + SUFFIX)):
+        if not path.is_file():
+            continue
+        head = read_header(path)
+        if head is None:
+            done['skipped'] += 1  # not ours to read; leave it completely alone
+            continue
+        if int(head.get('v') or 1) >= FORMAT:
+            continue
+        stale.append((path, head))
+
+    if not stale:
+        return done
+
+    logger.info('Bringing {} saved track(s) up to date', len(stale))
+    changed = 0
+    for index, (path, head) in enumerate(stale, 1):
+        scratch = path.with_suffix(path.suffix + '.plain')
+        try:
+            before = path.stat().st_size
+            # Put the original back exactly as it was, read it, re-seal it.
+            ext = str(head.get('ext') or '.mp3')
+            scratch = path.with_name(path.stem + '.restore' + ext)
+            with open(scratch, 'wb') as out:
+                for chunk in open_range(path):
+                    out.write(chunk)
+
+            meta = _tags_of(scratch)
+            # The filename is the better source for these: the restored file's
+            # own tags may be blank, and the old header already guessed.
+            for field in ('title', 'artist'):
+                if not meta.get(field) and head.get(field):
+                    meta[field] = head[field]
+            if head.get('video_id') and not meta.get('video_id'):
+                meta['video_id'] = head['video_id']
+
+            fresh = path.with_suffix(path.suffix + '.rebuilt')
+            seal(scratch, fresh, meta)  # seal() removes the scratch file
+            fresh.replace(path)
+            done['repaired'] += 1
+            done['saved'] += max(0, before - path.stat().st_size)
+            changed += 1
+            _note(root, path, meta['title'], meta['artist'])
+        except Exception:
+            logger.opt(exception=True).warning('Could not update {}; left as it was', path)
+            done['failed'] += 1
+            for junk in (scratch, path.with_suffix(path.suffix + '.rebuilt'),
+                         path.with_suffix(path.suffix + '.rebuilt.part')):
+                try:
+                    junk.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        if on_progress:
+            on_progress(index, len(stale))
+        if changed and changed % 5 == 0:
+            _tell(on_change)
+
+    if changed:
+        _tell(on_change, forced=True)
+    logger.info(
+        'Updated {}, failed {}, {:.1f} MB given back',
+        done['repaired'], done['failed'], done['saved'] / (1 << 20),
     )
     return done
 

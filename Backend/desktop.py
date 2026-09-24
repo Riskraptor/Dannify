@@ -3346,6 +3346,73 @@ def _schedule_media_identity() -> None:
         ).start()
 
 
+_OPEN_FILE = _DATA_DIR / 'open.json'
+
+
+def _file_argument() -> str:
+    """The file Explorer handed us, if it did.
+
+    Double-clicking a .dnf runs the app with the path as its only argument,
+    so anything that is not one of our own switches and is a file on disk is
+    that. Checked against the disk rather than by extension so a rename does
+    not make the association stop working.
+    """
+
+    for arg in sys.argv[1:]:
+        if arg.startswith('-'):
+            continue
+        try:
+            if Path(arg).is_file():
+                return str(Path(arg).resolve())
+        except OSError:
+            continue
+    return ''
+
+
+def _hand_file_to_running_instance(path: str) -> None:
+    """Pass the file to the copy already running, then bring it forward."""
+
+    try:
+        _OPEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _OPEN_FILE.write_text(
+            json.dumps({'path': path, 'n': time.time_ns()}), encoding='utf-8',
+        )
+    except OSError:
+        logger_print('could not pass the file to the running copy')
+
+
+def _watch_for_opened_files() -> None:
+    """Play files handed over by a second copy started from Explorer.
+
+    Windows starts a whole new process for every double-click. That copy
+    finds the mutex taken, drops the path here and brings the existing window
+    forward, and this is the end that notices. One stat call every half second
+    costs nothing and works whether or not the window handle can be found.
+    """
+
+    import main as backend
+
+    last = ''
+    while True:
+        time.sleep(0.5)
+        try:
+            if not _OPEN_FILE.is_file():
+                continue
+            note = json.loads(_OPEN_FILE.read_text(encoding='utf-8'))
+            stamp = str(note.get('n') or '')
+            if not stamp or stamp == last:
+                continue
+            last = stamp
+            wanted = str(note.get('path') or '')
+        except Exception:
+            continue
+        if wanted:
+            try:
+                backend.open_external(wanted)
+            except Exception:
+                logger_print('could not open', wanted)
+
+
 def main() -> None:
     # `--quit` is how the installer asks a running copy to get out of the
     # way before it replaces the files. It is not a user-facing switch.
@@ -3369,13 +3436,42 @@ def main() -> None:
     _sweep_old_files(Path(sys.executable).resolve().parent)
 
     _claim_app_identity()
+    opening = _file_argument()
     if not _acquire_single_instance():
+        # Already running, and it has just been brought forward. Explorer
+        # started us only to open a file, so leave it where the running copy
+        # will find it and get out of the way.
+        if opening:
+            _hand_file_to_running_instance(opening)
         sys.exit(0)
 
     port = _pick_port()
     session_key = secrets.token_urlsafe(24)
     server = _start_server(port, session_key)
     _write_instance_file(port)
+
+    threading.Thread(
+        target=_watch_for_opened_files, name='dannify-open', daemon=True,
+    ).start()
+    if opening:
+        # We are the first copy: the window is not up yet and nothing is
+        # listening on the websocket, so wait for it rather than shouting
+        # into an empty room.
+        def _open_when_ready(path: str = opening) -> None:
+            import main as backend
+
+            for _ in range(60):
+                time.sleep(0.5)
+                if getattr(backend.api.state.connections, 'connected', False):
+                    break
+            try:
+                backend.open_external(path)
+            except Exception:
+                logger_print('could not open', path)
+
+        threading.Thread(
+            target=_open_when_ready, name='dannify-open-first', daemon=True,
+        ).start()
 
     import webview
 
