@@ -306,6 +306,8 @@ export default {
   },
   player: {
     fileUnplayable: 'That file would not play. It may have been moved or deleted.',
+    fileOtherKey:
+      '{name} was saved by a different installation of Dannify, so this one cannot open it.',
     title: 'Player',
     empty: 'Nothing to play yet',
     emptyHint: 'Search for music or open your library to start listening.',

@@ -311,6 +311,8 @@ export default {
   },
   player: {
     fileUnplayable: "Ce fichier n'a pas pu être lu. Il a peut-être été déplacé ou supprimé.",
+    fileOtherKey:
+      "{name} a été enregistré par une autre installation de Dannify, celle-ci ne peut pas l'ouvrir.",
     title: 'Lecteur',
     empty: 'Rien à lire pour le moment',
     emptyHint: 'Recherchez de la musique ou ouvrez votre bibliothèque pour commencer.',

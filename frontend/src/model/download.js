@@ -104,6 +104,15 @@ API.ws_onmessage((event) => {
     )
     return
   }
+  // A .dnf was double-clicked in Explorer. The shell worked out how to
+  // reach it and sent the finished track down here, so there is nothing to
+  // look up: play it.
+  if (data && data.type === 'play_file') {
+    window.dispatchEvent(
+      new CustomEvent('dannify:play-file', { detail: data.track })
+    )
+    return
+  }
   // Server-side cache invalidation: a download finished, or the user
   // picked a new folder. Tell the in-memory library map to refresh so
   // search/explorer instantly mark this song as "downloaded" and the

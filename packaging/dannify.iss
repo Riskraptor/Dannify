@@ -4,7 +4,7 @@
 ; Output: packaging\out\Dannify-Setup-<version>.exe
 
 #define MyAppName "Dannify"
-#define MyAppVersion "3.13.0"
+#define MyAppVersion "3.14.0"
 #define MyAppPublisher "Dannify"
 #define MyAppExeName "Dannify.exe"
 #define BuildDir "..\Backend\dist\Dannify"
@@ -53,6 +53,16 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Ship-time settings (update repo, Paystack keys): see config\README.md.
 Source: "config\*.json"; DestDir: "{app}\config"; Flags: ignoreversion
+
+[Registry]
+; Double-clicking a saved track opens it here. Without this a .dnf is a file
+; Windows has never heard of, which is a strange thing to leave in somebody's
+; music folder. HKA so it follows whichever way this was installed.
+Root: HKA; Subkey: "Software\Classes\.dnf"; ValueType: string; ValueName: ""; ValueData: "Dannify.Track"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\Dannify.Track"; ValueType: string; ValueName: ""; ValueData: "Dannify saved track"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Dannify.Track\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKA; Subkey: "Software\Classes\Dannify.Track\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".dnf"; ValueData: ""; Flags: uninsdeletevalue
 
 [InstallDelete]
 ; Folders this build no longer ships. Setup only adds and overwrites, so an
@@ -150,4 +160,21 @@ function InitializeUninstall(): Boolean;
 begin
   StopDannify();
   Result := True;
+end;
+
+// Explorer caches file associations. Without this nudge a .dnf keeps its old
+// blank icon until the next sign-in, which looks like the install did not work.
+procedure SHChangeNotify(wEventId: Integer; uFlags: Cardinal; dwItem1, dwItem2: Integer);
+  external 'SHChangeNotify@shell32.dll stdcall';
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    SHChangeNotify($08000000, 0, 0, 0);  // SHCNE_ASSOCCHANGED
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+    SHChangeNotify($08000000, 0, 0, 0);
 end;

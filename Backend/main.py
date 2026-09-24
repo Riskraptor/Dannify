@@ -17,6 +17,8 @@ import mimetypes
 import os
 import sys
 from pathlib import Path
+from typing import Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -649,18 +651,6 @@ def build_app() -> FastAPI:
     # uninstaller is told to leave it alone (see packaging/dannify.iss).
     from dannify import vault as _vault
     _vault.init(DATABASE_DIR)
-    # Anything downloaded before containers existed gets sealed in the
-    # background. On a thread because a large library is minutes of work and
-    # nobody should wait at a splash screen for it.
-    if _vault.ready():
-        import threading as _th
-
-        _th.Thread(
-            target=_vault.migrate,
-            args=(download_dir,),
-            name='seal-existing',
-            daemon=True,
-        ).start()
     _updates.init(DATABASE_DIR)
     api.state.downloader = Downloader(
         download_dir,
@@ -750,6 +740,39 @@ def build_app() -> FastAPI:
             )
 
         diskwatch.start(_library_base, _announce)
+
+        # Music saved before containers existed gets sealed, and anything
+        # sealed by the first version gets its tags back (see vault.repair).
+        # On a thread: a large library is minutes of work and nobody should
+        # wait at a splash screen for it.
+        #
+        # Both hand back an on_change, and both must. They rename every file
+        # in the music folder while the window is already showing a list built
+        # from the old names. Without this the covers go grey and every play
+        # says the file was moved or deleted, until the app is restarted. The
+        # folder watcher would find it eventually, but it polls on a backoff
+        # and this is a change we are making ourselves and know about.
+        from dannify import library as _library
+
+        def _library_moved(forced: bool = False) -> None:
+            _library.invalidate_cache()
+            _announce()
+
+        def _convert() -> None:
+            base = _library_base() or download_dir
+            try:
+                _vault.migrate(base, on_change=_library_moved)
+            except Exception:
+                logger.opt(exception=True).warning('sealing pass failed')
+            try:
+                _vault.repair(base, on_change=_library_moved)
+            except Exception:
+                logger.opt(exception=True).warning('update pass failed')
+
+        if _vault.ready():
+            import threading as _th
+
+            _th.Thread(target=_convert, name='seal-existing', daemon=True).start()
 
     app.router.lifespan_context = _make_lifespan(_run_startup)
 
@@ -935,6 +958,51 @@ def build_app() -> FastAPI:
             return
         await _FileResponse(str(target))(scope, receive, send)
 
+    async def _opened_app(scope: Scope, receive: Receive, send: Send) -> None:
+        """Serve a file the user opened from Explorer.
+
+        Double-clicking a .dnf hands us a path that can be anywhere, and
+        /downloads only serves what is inside the music folder, which is the
+        guard that stops a crafted URL reading the rest of the disk. So a file
+        opened deliberately gets a one-off ticket instead: open_external()
+        checks it and puts it in a list, and nothing without a ticket is here.
+        """
+
+        if scope['type'] != 'http':
+            return
+        from starlette.requests import Request as _Req
+        from starlette.responses import PlainTextResponse
+
+        ticket = scope['path'].rsplit('/', 1)[-1]
+        target = (getattr(api.state, 'opened', None) or {}).get(ticket)
+        if target is None or not Path(target).is_file():
+            await PlainTextResponse('Not Found', status_code=404)(scope, receive, send)
+            return
+
+        from dannify import vault  # noqa: PLC0415
+
+        target = Path(target)
+        if b'cover=1' in scope.get('query_string', b''):
+            data, mime = _extract_cover(target)
+            if not data:
+                await PlainTextResponse('Not Found', status_code=404)(
+                    scope, receive, send,
+                )
+                return
+            await Response(
+                content=data,
+                media_type=mime or 'image/jpeg',
+                headers={'Cache-Control': 'no-store'},
+            )(scope, receive, send)
+            return
+
+        request = _Req(scope, receive)
+        if vault.is_sealed(target):
+            await _send_sealed(target, request, scope, receive, send)
+            return
+        await _FileResponse(str(target))(scope, receive, send)
+
+    app.mount('/opened', _opened_app, name='opened')
     app.mount('/downloads', _downloads_app, name='downloads')
 
     # A shipped build serves the interface from the packed resource file; a
@@ -963,6 +1031,84 @@ def build_app() -> FastAPI:
             name='static',
         )
     return app
+
+
+def open_external(path: str | Path) -> dict[str, Any] | None:
+    """Work out how to play a file the shell handed us, and tell the window.
+
+    This is what a double-clicked .dnf in Explorer ends up calling. A track
+    already in the music folder plays by its normal URL, so it behaves exactly
+    like clicking it in the library. Anything else gets a one-off ticket, and
+    the file is read but never moved or imported: opening a file is not the
+    same as asking for it to be added.
+    """
+
+    import secrets
+
+    from dannify import vault
+
+    try:
+        target = Path(path).expanduser().resolve()
+    except Exception:
+        return None
+    if not target.is_file():
+        logger.info('asked to open a file that is not there: {}', path)
+        return None
+
+    sealed = vault.is_sealed(target)
+    if sealed and not vault.read_header(target):
+        # Sealed, but not by this installation. Saying so is the only useful
+        # thing here: the alternative is a player that sits at 0:00 forever.
+        logger.warning('cannot open {}: sealed with a different key', target)
+        return {'error': 'other_key', 'name': target.name}
+    if not sealed and target.suffix.lower() not in {
+        '.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus',
+    }:
+        return None
+
+    head = (vault.read_header(target) or {}) if sealed else {}
+    stem = target.stem
+    guess_artist, _, guess_title = stem.partition(' - ')
+
+    url = None
+    rel = None
+    try:
+        # The live folder, not the boot-time one: Settings can move it.
+        base = Path(api.state.download_dir or DOWNLOAD_DIR).resolve()
+        rel = target.relative_to(base).as_posix()
+        url = '/downloads/' + quote(rel)
+    except (ValueError, RuntimeError, OSError):
+        rel = None
+    if url is None:
+        tickets = getattr(api.state, 'opened', None)
+        if tickets is None:
+            tickets = api.state.opened = {}
+        ticket = secrets.token_urlsafe(16)
+        tickets[ticket] = target
+        # A window's worth of tickets is plenty; this is not a library.
+        for old in list(tickets)[:-32]:
+            tickets.pop(old, None)
+        url = '/opened/' + ticket
+
+    track = {
+        'type': 'local',
+        'url': url,
+        'file': rel,
+        'title': str(head.get('title') or (guess_title or stem)),
+        'artist': str(head.get('artist') or (guess_artist if guess_title else '')),
+        'album': str(head.get('album') or ''),
+        'duration': int(head.get('duration') or 0),
+        'cover': ('/cover?file=' + quote(rel)) if rel else (url + '?cover=1'),
+    }
+    if api.state.loop is not None:
+        try:
+            asyncio.run_coroutine_threadsafe(
+                api.state.connections.broadcast({'type': 'play_file', 'track': track}),
+                api.state.loop,
+            )
+        except Exception:
+            logger.opt(exception=True).debug('could not hand the file to the window')
+    return track
 
 
 def _parse_args() -> argparse.Namespace:
