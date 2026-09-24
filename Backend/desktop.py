@@ -155,10 +155,25 @@ if os.name == 'nt':
 
 
 def logger_print(*args) -> None:  # noqa: D401, ANN001
-    """Append a line to the rotating log even before backend logging is wired."""
+    """Append a line to the rotating log even before backend logging is wired.
+
+    Two places, because the first one can be unavailable exactly when there is
+    something worth recording: during an update two copies are briefly alive
+    and the log can be held open, and a line dropped then is a line about the
+    thing that went wrong. The fallback sits beside it and is only written
+    when the main file refuses.
+    """
+
+    line = '[desktop] ' + ' '.join(str(a) for a in args) + '\n'
     try:
         with open(_DATA_DIR / 'dannify.log', 'a', encoding='utf-8') as f:
-            f.write('[desktop] ' + ' '.join(str(a) for a in args) + '\n')
+            f.write(line)
+        return
+    except Exception:
+        pass
+    try:
+        with open(_DATA_DIR / 'dannify-startup.log', 'a', encoding='utf-8') as f:
+            f.write(line)
     except Exception:
         pass
 
@@ -1142,6 +1157,9 @@ class DesktopApi:
         if prefs.get('minimize_to_tray'):
             _write_prefs({'minimize_to_tray': False})
         self._hidden = False
+        # When the browser engine's renderer last died, so a reload loop
+        # cannot get going.
+        self._renderer_failures: list[float] = []
         # Set while the user is genuinely quitting, so close-to-tray steps aside.
         self._quitting = False
         self._login = None  # the Google sign-in window, while it is open
@@ -1182,6 +1200,7 @@ class DesktopApi:
             self._frame._nccalcsize = lambda hwnd, msg, w, l: self._frame._comctl.DefSubclassProc(hwnd, msg, w, l)  # noqa: E731
         ok = self._frame.install()
         self._native_frame = self._native_frame_pref or not ok
+        self._guard_renderer()
 
     def _ui(self, fn, wait: bool = False):  # noqa: ANN001
         """Run *fn* on the window's UI thread."""
@@ -1250,6 +1269,87 @@ class DesktopApi:
             args=(f'window.__dannifyMaxHover && window.__dannifyMaxHover({flag})',),
             daemon=True,
         ).start()
+
+    def _guard_renderer(self) -> None:
+        """Never let the browser engine show its own crash page.
+
+        Lose the renderer, whether to Task Manager, a graphics driver reset or
+        plain memory pressure, and WebView2 paints "This page is having a
+        problem" with a blue Refresh button under it. That is a browser
+        telling somebody their tab died, in the middle of what is meant to be
+        an application: it is the single most website-like thing the window
+        can do. Take the event and put the interface back instead.
+        """
+
+        if not _WIN:
+            return
+
+        def attach():
+            try:
+                view = self._form.browser.webview
+            except Exception:
+                return
+
+            def on_failed(_sender, args):  # noqa: ANN001
+                try:
+                    kind = str(args.ProcessFailedKind)
+                except Exception:
+                    kind = '?'
+                logger_print('renderer failed:', kind)
+                # The browser process itself going is not survivable in place;
+                # everything else is a reload.
+                if 'Browser' in kind:
+                    return
+                self._recover_renderer()
+
+            def subscribe(core) -> bool:
+                if core is None:
+                    return False
+                try:
+                    core.ProcessFailed += on_failed
+                    return True
+                except Exception:
+                    return False
+
+            try:
+                if subscribe(view.CoreWebView2):
+                    return
+            except Exception:
+                pass
+
+            def on_ready(_sender, _args):  # noqa: ANN001
+                try:
+                    subscribe(view.CoreWebView2)
+                except Exception:
+                    pass
+
+            try:
+                view.CoreWebView2InitializationCompleted += on_ready
+            except Exception:
+                pass
+
+        self._ui(attach)
+
+    def _recover_renderer(self) -> None:
+        """Reload after a renderer died, without spinning on it."""
+
+        now = time.time()
+        recent = [t for t in self._renderer_failures if now - t < 60]
+        recent.append(now)
+        self._renderer_failures = recent
+        if len(recent) > 3:
+            # Something is wrong that reloading will not mend. Stop trying
+            # rather than flickering at the user for ever.
+            logger_print('renderer keeps failing; leaving it alone')
+            return
+
+        def go():
+            try:
+                self._form.browser.webview.CoreWebView2.Reload()
+            except Exception as exc:
+                logger_print('could not reload after a renderer failure:', exc)
+
+        self._ui(go)
 
     def _on_taskbar_created(self) -> None:
         if self._taskbar is not None:
@@ -2481,15 +2581,44 @@ def _run_update_helper(staging: str) -> int:
     # Start the app again either way: a failed update must not leave the
     # user with nothing running. A bad copy still has the old files, and the
     # update will simply be offered again.
-    try:
-        subprocess.Popen(
-            [str(exe)],
-            cwd=str(exe.parent),
-            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
-            close_fds=True,
-        )
-    except Exception:
-        logger_print('could not relaunch after the update')
+    #
+    # Not immediately, though, and not only once. Waiting for the old process
+    # to exit is not the same as waiting for it to let go: the browser engine
+    # runs in its own child processes, and they keep the profile folder open
+    # for a moment after their parent is gone. Start inside that moment and
+    # the engine refuses to open the folder at all, which takes the whole
+    # window down with it. That is what put "Dannify could not start" on
+    # screen after an update while the update itself had worked perfectly.
+    for attempt in range(4):
+        time.sleep(2 if attempt == 0 else 3)
+        try:
+            child = subprocess.Popen(
+                [str(exe)],
+                cwd=str(exe.parent),
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                close_fds=True,
+            )
+        except Exception as exc:
+            logger_print('could not relaunch after the update:', exc)
+            return 0 if ok else 1
+
+        # A copy that got the folder stays up. One that did not is gone in
+        # about a second, so a short watch tells the two apart.
+        settled = None
+        for _ in range(12):
+            time.sleep(0.5)
+            settled = child.poll()
+            if settled is not None:
+                break
+        if settled is None:
+            return 0 if ok else 1
+        # Exit code 0 is the single-instance path: something else is already
+        # running, which is a fine place to stop.
+        if settled == 0:
+            return 0 if ok else 1
+        logger_print(f'relaunch {attempt + 1} exited with {settled}; trying again')
+
+    logger_print('gave up relaunching after the update')
     return 0 if ok else 1
 
 
