@@ -311,6 +311,10 @@ export default {
   },
   player: {
     fileUnplayable: "Ce fichier n'a pas pu être lu. Il a peut-être été déplacé ou supprimé.",
+    manyUnplayable:
+      "Plusieurs fichiers enregistrés de suite n'ont pas pu être lus. Arrêt ici.",
+    fileUnreadable:
+      "Ce fichier est bien là mais n'a pas pu être lu. Il est peut-être endommagé.",
     fileOtherKey:
       "{name} a été enregistré par une autre installation de Dannify, celle-ci ne peut pas l'ouvrir.",
     title: 'Lecteur',

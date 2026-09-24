@@ -4,7 +4,7 @@
 ; Output: packaging\out\Dannify-Setup-<version>.exe
 
 #define MyAppName "Dannify"
-#define MyAppVersion "3.14.0"
+#define MyAppVersion "3.15.0"
 #define MyAppPublisher "Dannify"
 #define MyAppExeName "Dannify.exe"
 #define BuildDir "..\Backend\dist\Dannify"

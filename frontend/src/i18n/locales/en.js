@@ -306,6 +306,10 @@ export default {
   },
   player: {
     fileUnplayable: 'That file would not play. It may have been moved or deleted.',
+    manyUnplayable:
+      'Several saved files in a row would not play. Stopped there.',
+    fileUnreadable:
+      'That file is there but could not be read. It may be damaged.',
     fileOtherKey:
       '{name} was saved by a different installation of Dannify, so this one cannot open it.',
     title: 'Player',
