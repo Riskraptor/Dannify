@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import re as _re
@@ -494,9 +495,63 @@ class Downloader:
                             'Central lyrics store failed for {}', final_path
                         )
 
+        # Seal it. Everything above works on an ordinary tagged file, which is
+        # why this is last: the tags, the video id and the lyrics all go in
+        # first, then the whole thing becomes a container that only this
+        # installation can open. If there is no key, the file is left as it
+        # was rather than lost.
+        from . import vault  # noqa: PLC0415
+
+        if vault.ready():
+            try:
+                artists = song.get('artists') or []
+                sealed = vault.seal(
+                    final_path,
+                    final_path.with_suffix(vault.SUFFIX),
+                    {
+                        'title': song.get('name', '') or '',
+                        'artist': artists[0] if artists else '',
+                        'album': song.get('album_name', '') or '',
+                        'video_id': video_id,
+                    },
+                )
+                _remember(target_dir, sealed, song, video_id)
+                final_path = sealed
+            except Exception:
+                logger.opt(exception=True).error(
+                    'Could not seal {}; leaving it as it is', final_path
+                )
+
         if progress_cb:
             progress_cb(100.0, 'Done')
         return f'{rel_prefix}{final_path.name}'
+
+
+def _remember(root: Path, sealed: Path, song: dict, video_id: str) -> None:
+    """Keep a plain note of what each sealed file is.
+
+    The header inside a container is encrypted too, so a lost key would leave
+    a folder of files nobody could even identify. This costs a few hundred
+    bytes and turns that into "download these again".
+    """
+
+    index = Path(root) / 'dannify-library.json'
+    try:
+        existing = json.loads(index.read_text(encoding='utf-8')) if index.is_file() else {}
+        if not isinstance(existing, dict):
+            existing = {}
+    except Exception:
+        existing = {}
+    artists = song.get('artists') or []
+    existing[sealed.name] = {
+        'title': song.get('name', '') or '',
+        'artist': artists[0] if artists else '',
+        'video_id': video_id,
+    }
+    try:
+        index.write_text(json.dumps(existing, indent=1), encoding='utf-8')
+    except OSError:
+        logger.debug('could not update the recovery index')
 
 
 def _download_cover(url: str) -> Optional[bytes]:

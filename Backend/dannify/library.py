@@ -15,7 +15,9 @@ from typing import Any, Optional
 from loguru import logger
 from mutagen import File as MutagenFile
 
-_AUDIO_EXTS = {'.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus'}
+# .dnf is a sealed container holding one of the others. Everything that walks
+# the music folder has to count it as a track, or a sealed library looks empty.
+_AUDIO_EXTS = {'.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus', '.dnf'}
 
 _lock = threading.Lock()
 _cache: dict[str, Any] = {}
@@ -66,6 +68,28 @@ def _split_artists(value: str) -> list[str]:
 
 def _read_tags(path: Path) -> dict[str, Any]:
     """Best-effort tag read; falls back to the ``Artist - Title`` filename."""
+
+    # A sealed container keeps its own header. mutagen would see noise.
+    if path.suffix.lower() == '.dnf':
+        from . import vault
+
+        head = vault.read_header(path) or {}
+        name = path.stem
+        title = str(head.get('title') or '')
+        artist = str(head.get('artist') or '')
+        if not title and ' - ' in name:
+            artist, title = name.split(' - ', 1)
+        return {
+            'title': title or name,
+            'artist': artist,
+            'album_artist': artist,
+            'artists': [a for a in [artist] if a],
+            'album': str(head.get('album') or ''),
+            'genre': '',
+            'duration': int(head.get('duration') or 0),
+            'track_number': 0,
+            'video_id': str(head.get('video_id') or ''),
+        }
 
     title = ''
     artist = ''

@@ -222,7 +222,14 @@ else:
     _DEFAULT_WEB_GUI = (_PROJECT_ROOT / 'frontend' / 'dist').resolve()
 
 DOWNLOAD_DIR = Path(os.getenv('DOWNLOAD_DIR', str(_DEFAULT_DOWNLOADS)))
-DATABASE_DIR = Path(os.getenv('DATABASE_DIR', str(_DEFAULT_DATA)))
+# DANNIFY_DATA_DIR is what the desktop shell uses to put a second copy
+# somewhere of its own. It has to move the backend's data too, or a "separate"
+# copy quietly reads the real settings, finds the real music folder, and acts
+# on it. That is not a hypothetical: it is how a test run ended up converting
+# a real library instead of its own throwaway one.
+DATABASE_DIR = Path(
+    os.getenv('DATABASE_DIR') or os.getenv('DANNIFY_DATA_DIR') or str(_DEFAULT_DATA)
+)
 WEB_GUI_LOCATION = os.getenv('WEB_GUI_LOCATION', str(_DEFAULT_WEB_GUI))
 
 # Frozen builds ship their own ffmpeg: make it win the PATH race so
@@ -284,6 +291,14 @@ def _extract_cover(path: Path) -> tuple[bytes | None, str | None]:
     Reads tags lazily: mutagen format detection handles MP3/FLAC/M4A/OGG/Opus
     without us needing to dispatch on extension.
     """
+
+    # A sealed container carries its artwork in its own header; mutagen would
+    # only see noise.
+    if path.suffix.lower() == '.dnf':
+        from dannify import vault
+
+        found = vault.cover(path)
+        return found if found else (None, None)
 
     try:
         # ID3 (mp3, sometimes wav/aac)
@@ -568,6 +583,22 @@ def build_app() -> FastAPI:
     from dannify import updates as _updates
 
     _support.init(DATABASE_DIR)
+    # The key saved music is encrypted with. Made once, kept for good; the
+    # uninstaller is told to leave it alone (see packaging/dannify.iss).
+    from dannify import vault as _vault
+    _vault.init(DATABASE_DIR)
+    # Anything downloaded before containers existed gets sealed in the
+    # background. On a thread because a large library is minutes of work and
+    # nobody should wait at a splash screen for it.
+    if _vault.ready():
+        import threading as _th
+
+        _th.Thread(
+            target=_vault.migrate,
+            args=(download_dir,),
+            name='seal-existing',
+            daemon=True,
+        ).start()
     _updates.init(DATABASE_DIR)
     api.state.downloader = Downloader(
         download_dir,
@@ -675,7 +706,7 @@ def build_app() -> FastAPI:
 
     @app.get('/list')
     def list_downloads() -> list[str]:
-        audio_exts = {'.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus'}
+        audio_exts = {'.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus', '.dnf'}
         base = _live_download_dir().resolve()
         if not base.exists():
             return []
@@ -740,6 +771,67 @@ def build_app() -> FastAPI:
     from starlette.responses import FileResponse as _FileResponse
     from starlette.types import Receive, Scope, Send
 
+    async def _send_sealed(target, request, scope, receive, send) -> None:
+        """Stream a sealed file back as ordinary audio.
+
+        The browser thinks it is talking to a plain file: it gets a length, it
+        gets Accept-Ranges, and a Range it asks for comes back as a 206 with
+        the bytes it wanted. What it never gets is the file as it sits on disk.
+        """
+
+        from starlette.responses import StreamingResponse
+        from dannify import vault  # noqa: PLC0415
+
+        MIME = {
+            '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.flac': 'audio/flac',
+            '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.wav': 'audio/wav',
+            '.aac': 'audio/aac',
+        }
+        head = vault.read_header(target) or {}
+        media = MIME.get(str(head.get('ext', '')).lower(), 'audio/mpeg')
+        total = vault.audio_size(target)
+
+        start, end = 0, total - 1
+        status = 200
+        raw = request.headers.get('range', '')
+        if raw.startswith('bytes='):
+            piece = raw[6:].split(',')[0].strip()
+            first, _, last = piece.partition('-')
+            try:
+                if first:
+                    start = int(first)
+                    end = int(last) if last else total - 1
+                elif last:  # a suffix range: the final N bytes
+                    start = max(0, total - int(last))
+                if start >= total or start < 0:
+                    from starlette.responses import Response
+
+                    await Response(
+                        status_code=416,
+                        headers={'Content-Range': f'bytes */{total}'},
+                    )(scope, receive, send)
+                    return
+                end = min(end, total - 1)
+                status = 206
+            except ValueError:
+                start, end, status = 0, total - 1, 200
+
+        length = max(0, end - start + 1)
+        headers = {
+            'Accept-Ranges': 'bytes',
+            'Content-Length': str(length),
+            'Cache-Control': 'no-store',
+        }
+        if status == 206:
+            headers['Content-Range'] = f'bytes {start}-{end}/{total}'
+
+        def body():
+            yield from vault.open_range(target, start, length)
+
+        await StreamingResponse(
+            body(), status_code=status, media_type=media, headers=headers,
+        )(scope, receive, send)
+
     async def _downloads_app(scope: Scope, receive: Receive, send: Send) -> None:
         if scope['type'] != 'http':
             return
@@ -769,6 +861,15 @@ def build_app() -> FastAPI:
             await PlainTextResponse('Not Found', status_code=404)(
                 scope, receive, send,
             )
+            return
+
+        # Saved music is written as a sealed container, so it cannot be played
+        # by anything but this app. Decrypt it on the way out, honouring Range
+        # so dragging the seek bar still only reads the part it lands on.
+        from dannify import vault  # noqa: PLC0415
+
+        if vault.is_sealed(target):
+            await _send_sealed(target, request, scope, receive, send)
             return
         await _FileResponse(str(target))(scope, receive, send)
 
