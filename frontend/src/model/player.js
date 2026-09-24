@@ -350,14 +350,21 @@ function ensureAudio() {
         deadRun = 0
         return
       }
-      // MEDIA_ERR_DECODE. The file was found and read, and what came back was
-      // not audio: a damaged container, or one this installation has no key
-      // for. Saying it may have been moved or deleted sends people looking in
-      // the wrong place for a file that is sitting right there.
-      const code = err && err.code
-      toast(t(code === 3 ? 'player.fileUnreadable' : 'player.fileUnplayable'), {
-        tone: 'error',
-      })
+      // Which message depends on why, and the audio element cannot say why:
+      // a 404 and a 409 both reach it as MEDIA_ERR_SRC_NOT_SUPPORTED. So ask
+      // the server. A 409 is the backend's answer for a container this
+      // installation has no key for, and telling that person their file may
+      // have been moved or deleted sends them looking in the wrong place for
+      // a file that is sitting right there.
+      const src = audio.currentSrc
+      const fallback = err && err.code === 3 ? 'fileUnreadable' : 'fileUnplayable'
+      fetch(src, { method: 'HEAD' })
+        .then((probe) =>
+          toast(t(`player.${probe.status === 409 ? 'fileUnreadable' : fallback}`), {
+            tone: 'error',
+          })
+        )
+        .catch(() => toast(t(`player.${fallback}`), { tone: 'error' }))
       if (currentIndex.value < playlist.value.length - 1) next()
       else isPlaying.value = false
       return

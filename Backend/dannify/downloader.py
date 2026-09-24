@@ -502,25 +502,53 @@ class Downloader:
         # was rather than lost.
         from . import vault  # noqa: PLC0415
 
-        if vault.ready():
-            try:
-                artists = song.get('artists') or []
-                sealed = vault.seal(
-                    final_path,
-                    final_path.with_suffix(vault.SUFFIX),
-                    {
-                        'title': song.get('name', '') or '',
-                        'artist': artists[0] if artists else '',
-                        'album': song.get('album_name', '') or '',
-                        'video_id': video_id,
-                    },
-                )
-                _remember(target_dir, sealed, song, video_id)
-                final_path = sealed
-            except Exception:
-                logger.opt(exception=True).error(
-                    'Could not seal {}; leaving it as it is', final_path
-                )
+        # Not optional, and not best effort. Leaving the plain file behind was
+        # the one outcome this whole thing exists to prevent: an ordinary audio
+        # file in the music folder that any player can open, delivered by a
+        # download that reported itself finished. A track that cannot be sealed
+        # does not get saved at all, and the reason is said out loud.
+        if not vault.ready():
+            final_path.unlink(missing_ok=True)
+            raise RuntimeError(
+                'Saved music cannot be locked on this installation, so nothing '
+                'is being saved. See the message at the top of the window.'
+            )
+        try:
+            artists = song.get('artists') or []
+            # Read what is actually in the file. A hand-made four field header
+            # was throwing away the duration, the track number, the genre and
+            # the artist list that embed_metadata had just written, so every
+            # freshly downloaded track came back with no length and no album
+            # in the library, and repair() had no way to tell it was missing
+            # because the header claimed to be current.
+            meta = vault._tags_of(final_path)
+            for field, value in (
+                ('title', song.get('name') or ''),
+                ('artist', artists[0] if artists else ''),
+                ('album', song.get('album_name') or ''),
+                ('video_id', video_id),
+            ):
+                if value and not meta.get(field):
+                    meta[field] = value
+            if artists and len(artists) > len(meta.get('artists') or []):
+                meta['artists'] = list(artists)
+            sealed = vault.seal(
+                final_path, final_path.with_suffix(vault.SUFFIX), meta,
+            )
+            _remember(target_dir, sealed, song, video_id)
+            final_path = sealed
+        except Exception as exc:
+            logger.opt(exception=True).error('Could not seal {}', final_path)
+            final_path.unlink(missing_ok=True)
+            for junk in (
+                final_path.with_suffix(vault.SUFFIX),
+                final_path.with_suffix(vault.SUFFIX + '.part'),
+            ):
+                junk.unlink(missing_ok=True)
+            raise RuntimeError(
+                'That track downloaded but could not be saved securely, so it '
+                'was not kept.'
+            ) from exc
 
         if progress_cb:
             progress_cb(100.0, 'Done')

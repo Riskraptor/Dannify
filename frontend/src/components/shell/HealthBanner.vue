@@ -13,7 +13,7 @@
  * missing, and this puts it where the person it is happening to can read it.
  * It says what is wrong and what it means for them. It never mentions a log.
  */
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import API from '/src/model/api'
 import { t } from '/src/i18n'
 
@@ -23,12 +23,14 @@ const dismissed = ref(false)
 async function check() {
   try {
     const res = await API.health()
-    problems.value = (res && res.data && res.data.problems) || []
+    const found = (res && res.data && res.data.problems) || []
+    // Only clear what was showing once the check has actually succeeded and
+    // come back empty. Clearing on failure would be the silence this whole
+    // component exists to end.
+    problems.value = found
+    if (found.length) dismissed.value = false
   } catch {
-    // The backend not answering is its own kind of broken, but the window
-    // cannot say much about it from here and the rest of the app will make
-    // the failure obvious soon enough.
-    problems.value = []
+    problems.value = [{ code: 'check_failed' }]
   }
 }
 
@@ -39,14 +41,21 @@ function messageFor(p) {
   if (p.code === 'no_key') return t('health.noKey')
   if (p.code === 'folder_missing') return t('health.folderMissing', { path: p.path })
   if (p.code === 'folder_read_only') return t('health.folderReadOnly', { path: p.path })
+  if (p.code === 'check_failed') return t('health.checkFailed')
   if (p.code === 'update_failed') {
     return t('health.updateFailed', { wanted: p.wanted, running: p.running })
   }
   return ''
 }
 
-onMounted(check)
-window.addEventListener('dannify:library-changed', check)
+// Registered on mount and taken off again on unmount. Toggling the mini player
+// unmounts the whole shell, so a listener added at module scope would be added
+// again every time and the check would run once per toggle, for ever.
+onMounted(() => {
+  check()
+  window.addEventListener('dannify:library-changed', check)
+})
+onUnmounted(() => window.removeEventListener('dannify:library-changed', check))
 </script>
 
 <template>

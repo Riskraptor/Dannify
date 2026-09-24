@@ -17,7 +17,7 @@ import mimetypes
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException
@@ -223,14 +223,25 @@ else:
     _DEFAULT_DATA = _PROJECT_ROOT / 'data'
     _DEFAULT_WEB_GUI = (_PROJECT_ROOT / 'frontend' / 'dist').resolve()
 
-DOWNLOAD_DIR = Path(os.getenv('DOWNLOAD_DIR', str(_DEFAULT_DOWNLOADS)))
 # DANNIFY_DATA_DIR is what the desktop shell uses to put a second copy
 # somewhere of its own. It has to move the backend's data too, or a "separate"
 # copy quietly reads the real settings, finds the real music folder, and acts
 # on it. That is not a hypothetical: it is how a test run ended up converting
 # a real library instead of its own throwaway one.
-DATABASE_DIR = Path(
-    os.getenv('DATABASE_DIR') or os.getenv('DANNIFY_DATA_DIR') or str(_DEFAULT_DATA)
+_MOVED = os.getenv('DATABASE_DIR') or os.getenv('DANNIFY_DATA_DIR')
+DATABASE_DIR = Path(_MOVED or str(_DEFAULT_DATA))
+
+# And it has to move the music too. Redirecting only the data folder was half
+# a fix: a second copy started that way found no settings.json in its fresh
+# folder, fell back to the default music folder, which is the real one, made
+# itself a brand new key and began converting somebody else's library with it.
+# That is exactly what happened, twice, and the tracks sealed with the key
+# that was thrown away afterwards could not be opened by anything ever again.
+# A copy told to keep its data somewhere else keeps its music there too,
+# unless it is told otherwise outright.
+DOWNLOAD_DIR = Path(
+    os.getenv('DOWNLOAD_DIR')
+    or (str(Path(_MOVED) / 'Music') if _MOVED else str(_DEFAULT_DOWNLOADS))
 )
 WEB_GUI_LOCATION = os.getenv('WEB_GUI_LOCATION', str(_DEFAULT_WEB_GUI))
 
@@ -295,13 +306,27 @@ class PackedUI:
         self._pack = pack
         self._etag = f'"{pack.stamp}"'
 
-    def _member(self, path: str) -> str:
+    # A path that names a file is a file, not a route. Handing back index.html
+    # with a 200 for a missing script means the browser parses HTML as
+    # JavaScript and the window comes up blank with a syntax error, when a 404
+    # would have said plainly that the file is not there.
+    _FILEY = (
+        '.js', '.mjs', '.css', '.map', '.woff', '.woff2', '.ttf', '.otf',
+        '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.json',
+        '.txt', '.wasm',
+    )
+
+    def _member(self, path: str) -> Optional[str]:
         rel = path.lstrip('/')
         if not rel or rel.endswith('/'):
             rel += 'index.html'
         name = f'ui/{rel}'
+        if name in self._pack:
+            return name
+        if rel.lower().endswith(self._FILEY):
+            return None
         # Anything else is a route the front end handles itself.
-        return name if name in self._pack else 'ui/index.html'
+        return 'ui/index.html'
 
     async def __call__(self, scope, receive, send) -> None:
         from starlette.responses import PlainTextResponse, Response
@@ -315,6 +340,11 @@ class PackedUI:
             return
 
         name = self._member(scope['path'])
+        if name is None:
+            await PlainTextResponse('Not Found', status_code=404)(
+                scope, receive, send,
+            )
+            return
         body = self._pack.read(name)
         media = mimetypes.guess_type(name)[0] or 'application/octet-stream'
 

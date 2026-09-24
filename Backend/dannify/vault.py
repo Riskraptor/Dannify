@@ -76,9 +76,21 @@ def _machine_entropy() -> Optional[bytes]:
     key non-portable, which is the part that was actually worth fixing.
     """
 
-    if os.name != 'nt':
+    parts = _entropy_parts()
+    bits = [v for v in parts if v]
+    if not bits:
         return None
-    bits = []
+    return hashlib.blake2b(
+        b'|'.join(bits), person=b'dannify-host', digest_size=32,
+    ).digest()
+
+
+def _entropy_parts() -> tuple[Optional[bytes], Optional[bytes]]:
+    """The machine's installation id and the volume serial, each or neither."""
+
+    if os.name != 'nt':
+        return (None, None)
+    guid = serial = None
     try:
         import winreg
 
@@ -88,26 +100,49 @@ def _machine_entropy() -> Optional[bytes]:
             0,
             winreg.KEY_READ | winreg.KEY_WOW64_64KEY,
         ) as key:
-            bits.append(str(winreg.QueryValueEx(key, 'MachineGuid')[0]).encode())
+            guid = str(winreg.QueryValueEx(key, 'MachineGuid')[0]).encode()
     except Exception:
         pass
     try:
         import ctypes
 
         root = os.environ.get('SystemDrive', 'C:') + '\\'
-        serial = ctypes.c_ulong(0)
+        number = ctypes.c_ulong(0)
         if ctypes.windll.kernel32.GetVolumeInformationW(
             ctypes.c_wchar_p(root), None, 0,
-            ctypes.byref(serial), None, None, None, 0,
+            ctypes.byref(number), None, None, None, 0,
         ):
-            bits.append(str(serial.value).encode())
+            serial = str(number.value).encode()
     except Exception:
         pass
-    if not bits:
-        return None
-    return hashlib.blake2b(
-        b'|'.join(bits), person=b'dannify-host', digest_size=32,
-    ).digest()
+    return (guid, serial)
+
+
+def _entropy_candidates() -> list[Optional[bytes]]:
+    """Every entropy this machine might have wrapped a key with, best first.
+
+    Both sources are read through a bare except, so the value depended on
+    which ones happened to answer: one transient registry failure produced a
+    different entropy, and unwrapping had no fallback, so a single bad read on
+    one launch locked the whole library away permanently with nothing to be
+    done about it. The combinations are cheap and there are four of them, so
+    unwrapping tries them all before concluding a key is not ours.
+    """
+
+    guid, serial = _entropy_parts()
+    seen: list[Optional[bytes]] = []
+    for bits in ([guid, serial], [guid], [serial], []):
+        kept = [v for v in bits if v]
+        value = (
+            hashlib.blake2b(
+                b'|'.join(kept), person=b'dannify-host', digest_size=32,
+            ).digest()
+            if kept
+            else None
+        )
+        if value not in seen:
+            seen.append(value)
+    return seen
 
 
 def _dpapi(raw: bytes, entropy: Optional[bytes], unwrap: bool) -> bytes:
@@ -169,11 +204,35 @@ def _unprotect(stored: bytes) -> bytes:
     tag, body = stored[:4], stored[4:]
     if tag == b'RAW0':
         return body
-    if tag == b'DPA2':
-        return _dpapi(body, _machine_entropy(), unwrap=True)
     if tag == b'DPAP':
         return _dpapi(body, None, unwrap=True)
+    if tag == b'DPA2':
+        last: Exception = ValueError('no entropy to try')
+        for salt in _entropy_candidates():
+            try:
+                return _dpapi(body, salt, unwrap=True)
+            except Exception as exc:
+                last = exc
+        raise last
     raise ValueError('unknown key format')
+
+
+def _write_key(data: bytes) -> None:
+    """Put the key on disk in a way that cannot half happen.
+
+    write_bytes opens 'wb', which truncates first. Losing power or being killed
+    in the moment between the truncate and the write left a zero length
+    vault.key, and a zero length vault.key is every saved track gone for good.
+    Written to one side and renamed over instead: a rename is atomic, so the
+    file on disk is either the old key or the new one and never neither.
+    """
+
+    tmp = _key_path.with_name(_key_path.name + '.tmp')
+    with open(tmp, 'wb') as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    tmp.replace(_key_path)
 
 
 def init(data_dir: Path) -> None:
@@ -181,10 +240,21 @@ def init(data_dir: Path) -> None:
 
     global _master, _key_path, _state
     _key_path = Path(data_dir) / 'vault.key'
+    spare = _key_path.with_name('vault.key.bak')
     try:
         if _key_path.is_file():
             stored = _key_path.read_bytes()
-            _master = _unprotect(stored)
+            try:
+                _master = _unprotect(stored)
+            except Exception:
+                # The copy kept from before the last re-wrap. This is the whole
+                # reason it is kept: a key that stops unwrapping takes the
+                # library with it, and there is nothing else to fall back on.
+                if not spare.is_file():
+                    raise
+                logger.warning('the saved-music key would not open; using the spare')
+                _master = _unprotect(spare.read_bytes())
+                stored = b''  # force it to be written back below
             _state = 'ready'
             # An older wrapping still opens, and is tightened on the way past
             # so a key written before this stops being portable now. Only if
@@ -194,7 +264,9 @@ def init(data_dir: Path) -> None:
             if stored[:4] != want[:4]:
                 try:
                     if _unprotect(want) == _master:
-                        _key_path.write_bytes(want)
+                        if stored:
+                            spare.write_bytes(stored)  # keep what did work
+                        _write_key(want)
                         logger.debug('vault key re-wrapped for this machine')
                 except Exception:
                     logger.opt(exception=True).debug('left the key wrapping alone')
@@ -213,7 +285,7 @@ def init(data_dir: Path) -> None:
     _master = secrets.token_bytes(32)
     try:
         _key_path.parent.mkdir(parents=True, exist_ok=True)
-        _key_path.write_bytes(_protect(_master))
+        _write_key(_protect(_master))
         _state = 'ready'
     except OSError:
         logger.opt(exception=True).error('Could not write the saved-music key')
@@ -391,6 +463,15 @@ def seal(source: Path, target: Path, meta: dict[str, Any]) -> Path:
     if not ready():
         raise RuntimeError('no key; refusing to seal')
     source, target = Path(source), Path(target)
+    # The last thing seal() does is delete the source. Handed the same path
+    # twice it would write the container and then delete it, and the track
+    # would simply be gone. The download path can produce that: it falls back
+    # to globbing for whatever the encoder actually wrote, and a .dnf sitting
+    # there from a previous attempt matches.
+    if source == target or (
+        source.exists() and target.exists() and source.samefile(target)
+    ):
+        raise ValueError(f'refusing to seal {source.name} onto itself')
     nonce = secrets.token_bytes(NONCE_LEN)
     key = _file_key(nonce)
 
@@ -688,6 +769,69 @@ def _refresh_playlists(root: Path) -> int:
     return fixed
 
 
+def _claim(root: Path):
+    """Take the music folder for the duration of a conversion pass.
+
+    Two copies converting the same folder at once is two processes renaming
+    the same files: one seals a track while the other is halfway through
+    reading it, and what survives is whatever the filesystem happened to do
+    last. A lock file with the owning process id in it settles which copy is
+    doing the work, and a stale one from a run that was killed is taken over
+    rather than honoured for ever.
+    """
+
+    import errno
+
+    lock = Path(root) / '.dannify-converting'
+    try:
+        fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        try:
+            owner = int(lock.read_text(encoding='utf-8').strip() or 0)
+        except Exception:
+            owner = 0
+        if owner and owner != os.getpid() and _process_alive(owner):
+            return None
+        try:  # stale: the copy that wrote it is gone
+            lock.unlink()
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except OSError:
+            return None
+    except OSError as exc:
+        if exc.errno == errno.EACCES:
+            return None
+        raise
+    try:
+        os.write(fd, str(os.getpid()).encode())
+    finally:
+        os.close(fd)
+    return lock
+
+
+def _release(lock) -> None:
+    try:
+        if lock is not None:
+            Path(lock).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _process_alive(pid: int) -> bool:
+    if os.name != 'nt':
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+    import ctypes
+
+    handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+    if not handle:
+        return False
+    ctypes.windll.kernel32.CloseHandle(handle)
+    return True
+
+
 def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
     """Seal music that was downloaded before there were containers.
 
@@ -711,6 +855,31 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
     if not ready() or not root.is_dir():
         return done
 
+    # A folder full of containers this key cannot open belongs to another
+    # installation, and converting anything in it would seal somebody else's
+    # music with a key they do not have. That is not a hypothetical: a second
+    # copy pointed at the wrong folder did exactly this, and the tracks it
+    # wrote could never be opened again by anyone.
+    #
+    # The test is whether ANY of them open, not whether all of them do. A
+    # library of our own can easily hold an orphan or two, left by an install
+    # that went wrong once, and refusing to convert forty tracks because of
+    # one that cannot be read would be a worse bug than the one this prevents.
+    mine = theirs = 0
+    for found in root.rglob('*' + SUFFIX):
+        if read_header(found) is None:
+            theirs += 1
+        else:
+            mine += 1
+            if mine > 2:
+                break  # plainly ours; no need to read the rest
+    if theirs and not mine:
+        logger.error(
+            'Every saved track in the music folder was sealed by a different '
+            'installation of Dannify, so nothing in it will be converted.',
+        )
+        return done
+
     plain = [
         p for p in root.rglob('*')
         if p.is_file() and p.suffix.lower() in PLAIN_EXTS
@@ -718,8 +887,35 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
     if not plain:
         return done
 
+    held = _claim(root)
+    if held is None:
+        logger.info('another copy is already converting this folder; leaving it to it')
+        return done
+
     logger.info('Sealing {} file(s) already in the music folder', len(plain))
     _busy = True
+    try:
+        changed = _seal_pass(root, plain, done, on_progress, on_change)
+    finally:
+        _release(held)
+        # Cleared whatever happens. Left set by an exception it would blind
+        # the health check for the rest of the run, which is the one thing
+        # that check exists to notice.
+        _busy = False
+
+    if changed:
+        _refresh_playlists(root)
+        _tell(on_change, forced=True)
+    logger.info(
+        'Sealed {}, skipped {}, failed {}',
+        done['sealed'], done['skipped'], done['failed'],
+    )
+    return done
+
+
+def _seal_pass(root, plain, done, on_progress, on_change) -> int:
+    """The body of migrate(), so _busy is always cleared."""
+
     changed = 0
     for index, path in enumerate(plain, 1):
         target = path.with_suffix(SUFFIX)
@@ -746,7 +942,10 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
                 except OSError:
                     pass
         if on_progress:
-            on_progress(index, len(plain))
+            try:
+                on_progress(index, len(plain))
+            except Exception:
+                logger.opt(exception=True).debug('progress callback failed')
         if changed:
             _tell(on_change)
 
@@ -759,14 +958,7 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
                 done['skipped'] += 1
                 changed += 1
 
-    _busy = False
-    if changed:
-        _refresh_playlists(root)
-        _tell(on_change, forced=True)
-    logger.info(
-        'Sealed {}, skipped {}, failed {}', done['sealed'], done['skipped'], done['failed']
-    )
-    return done
+    return changed
 
 
 def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
@@ -804,16 +996,55 @@ def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
     if not stale:
         return done
 
+    held = _claim(root)
+    if held is None:
+        logger.info('another copy is already converting this folder; leaving it to it')
+        return done
+
     logger.info('Bringing {} saved track(s) up to date', len(stale))
+    # The decrypted copy this makes on its way is an ordinary playable file.
+    # It used to be written into the music folder as "Artist - Title.restore.mp3",
+    # which is precisely the thing a container exists to stop being there, and
+    # if it could not be deleted afterwards it simply stayed. It goes to a
+    # scratch folder of its own now, outside the library, and is removed in a
+    # finally so no failure can leave one behind.
+    import tempfile
+
+    bench = Path(tempfile.mkdtemp(prefix='dnf-update-'))
     _busy = True
     changed = 0
+    try:
+        _repair_pass(root, stale, bench, done, on_progress, on_change)
+    finally:
+        _busy = False
+        shutil_rmtree(bench)
+        _release(held)
+
+    if done['repaired']:
+        _tell(on_change, forced=True)
+    logger.info(
+        'Updated {}, failed {}, {:.1f} MB given back',
+        done['repaired'], done['failed'], done['saved'] / (1 << 20),
+    )
+    return done
+
+
+def shutil_rmtree(path: Path) -> None:
+    import shutil
+
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def _repair_pass(root, stale, bench, done, on_progress, on_change) -> None:
+    """The body of repair(), so the scratch folder is always cleaned up."""
+
+    changed = 0
     for index, (path, head) in enumerate(stale, 1):
-        scratch = path.with_suffix(path.suffix + '.plain')
+        ext = str(head.get('ext') or '.mp3')
+        scratch = bench / (path.stem + ext)
         try:
             before = path.stat().st_size
             # Put the original back exactly as it was, read it, re-seal it.
-            ext = str(head.get('ext') or '.mp3')
-            scratch = path.with_name(path.stem + '.restore' + ext)
             with open(scratch, 'wb') as out:
                 for chunk in open_range(path):
                     out.write(chunk)
@@ -837,25 +1068,24 @@ def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
         except Exception:
             logger.opt(exception=True).warning('Could not update {}; left as it was', path)
             done['failed'] += 1
-            for junk in (scratch, path.with_suffix(path.suffix + '.rebuilt'),
+            for junk in (path.with_suffix(path.suffix + '.rebuilt'),
                          path.with_suffix(path.suffix + '.rebuilt.part')):
                 try:
                     junk.unlink(missing_ok=True)
                 except OSError:
                     pass
+        finally:
+            try:
+                scratch.unlink(missing_ok=True)
+            except OSError:
+                pass
         if on_progress:
-            on_progress(index, len(stale))
+            try:
+                on_progress(index, len(stale))
+            except Exception:
+                logger.opt(exception=True).debug('progress callback failed')
         if changed and changed % 5 == 0:
             _tell(on_change)
-
-    _busy = False
-    if changed:
-        _tell(on_change, forced=True)
-    logger.info(
-        'Updated {}, failed {}, {:.1f} MB given back',
-        done['repaired'], done['failed'], done['saved'] / (1 << 20),
-    )
-    return done
 
 
 def is_sealed(path: Path) -> bool:

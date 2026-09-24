@@ -1804,7 +1804,6 @@ class DesktopApi:
         if path is None:
             return False
         _staged_update = path
-        _note_update_attempt(_version_from_staging(path))
         logger.info('Update staged for the next exit: {}', path.name)
         return True
 
@@ -1824,7 +1823,6 @@ class DesktopApi:
         except Exception:
             return False
         _staged_delta = path
-        _note_update_attempt(_version_from_staging(path))
         logger.info('Partial update staged for the next exit: {}', path.name)
         return True
 
@@ -2327,18 +2325,40 @@ def _splash_html(theme: str, native_frame: bool, body: str = '') -> str:
 # ---------------------------------------------------------------------------
 # Single instance (Windows named mutex)
 # ---------------------------------------------------------------------------
-def _wait_for_parent_exit() -> None:
-    """A relaunch waits for the old process before claiming the mutex."""
+def _wait_for_parent_exit() -> bool:
+    """A relaunch waits for the old process before claiming the mutex.
+
+    The wait used to be twenty seconds with the result thrown away, so a
+    timeout looked exactly like the parent having exited and the helper went
+    on to replace files underneath a process that was still running. Renaming
+    a running executable succeeds on Windows, which leaves that process
+    executing against an archive that is no longer the one it was started
+    from: the "Error -3 while decompressing data" failure, in the copy the
+    user is still looking at.
+
+    Waiting forever is not the answer either, because a parent that never
+    exits would hang the update for good. Five minutes, and the result is
+    returned so the caller can decline to touch anything.
+    """
+
     pid = os.environ.pop('DANNIFY_WAIT_PID', '')
     if not (_WIN and pid.isdigit()):
-        return
+        return True
     handle = kernel32.OpenProcess(0x00100000, False, int(pid))  # SYNCHRONIZE
     if not handle:
-        return
+        return True  # already gone
     try:
-        kernel32.WaitForSingleObject(handle, 20000)
+        waited = 0
+        while waited < 300_000:
+            if kernel32.WaitForSingleObject(handle, 5000) != 0x102:  # WAIT_TIMEOUT
+                return True
+            waited += 5000
+            if waited % 30_000 == 0:
+                logger_print(f'still waiting for the old copy to exit ({waited // 1000}s)')
     finally:
         kernel32.CloseHandle(handle)
+    logger_print('the old copy is still running; not touching any files')
+    return False
 
 
 # --- Applying a downloaded update -----------------------------------------
@@ -2396,6 +2416,22 @@ def _apply_update_folder(staging: Path) -> bool:
     # Only once every copy has landed do the renames, which are as close to
     # atomic as the filesystem gets and cannot half-write. If one of those
     # fails, put back the ones already done.
+    # Written before a single byte is copied, not after. Written after, the
+    # whole copy phase - a hundred megabytes of it for a delta carrying the
+    # executable and the Python runtime - was unmarked, so another launch in
+    # that window saw a folder with no update in progress, ran the startup
+    # sweep, and deleted every .new file staged so far.
+    marker = target / '.updating'
+    try:
+        marker.write_text(str(plan.get('version', '')), encoding='utf-8')
+    except OSError:
+        pass
+    # Recorded when the apply starts, not when the download finished. An
+    # update can sit downloaded and staged for days waiting for the app to
+    # be closed, and every launch in between would otherwise be told the
+    # update had failed when nothing had been attempted yet.
+    _note_update_attempt(str(plan.get('version', '')))
+
     staged: list[tuple[Path, Path]] = []  # (destination, its .new)
     try:
         for rel in sorted(files):
@@ -2418,17 +2454,15 @@ def _apply_update_folder(staging: Path) -> bool:
                 fresh.unlink()
             except OSError:
                 pass
+        try:
+            marker.unlink()
+        except OSError:
+            pass
         return False
 
     # Our own executable goes last, so the window in which this process is
     # running against a swapped archive is as small as it can be.
     staged.sort(key=lambda p: p[0].name.lower() == exe_name)
-
-    marker = target / '.updating'
-    try:
-        marker.write_text(str(plan.get('version', '')), encoding='utf-8')
-    except OSError:
-        pass
 
     done: list[tuple[Path, Path, bool]] = []  # (dest, its .old, .old exists)
     for dest, fresh in staged:
@@ -2443,15 +2477,23 @@ def _apply_update_folder(staging: Path) -> bool:
                 # A running executable cannot be overwritten, but it can be
                 # renamed out of the way: that includes this very file.
                 dest.rename(stale)
+                # Recorded here, between the two renames, not after both.
+                # Recorded after, an entry whose first rename worked and whose
+                # second failed was not in the list the rollback walks, so the
+                # original stayed parked at <name>.old and nothing put it back.
+                # For the entry sorted last that file is Dannify.exe.
+                done.append((dest, stale, had))
             fresh.rename(dest)
-            done.append((dest, stale, had))
+            if not had:
+                done.append((dest, stale, had))
         except Exception as exc:
             logger_print('could not put', dest.name, 'in place:', exc)
             # Undo, newest first, so the install is exactly as we found it.
             for gone, old, had in reversed(done):
                 try:
-                    gone.rename(gone.with_name(gone.name + '.new'))
-                    if had:
+                    if gone.exists():
+                        gone.rename(gone.with_name(gone.name + '.new'))
+                    if had and old.exists():
                         old.rename(gone)
                 except OSError:
                     logger_print('rollback failed for', gone.name)
@@ -2559,8 +2601,18 @@ def _sweep_old_files(root: Path) -> None:
     empty folder, and one this build needs it makes for itself.
     """
 
+    # A .new file is half of an update in flight. _wait_for_apply_to_finish
+    # gives up after a while and starts anyway, and sweeping then deleted the
+    # replacement files an update helper was still copying, which left the
+    # install with neither the old files nor the new ones. If the marker is
+    # still there the update is still happening, so the .new files are not
+    # rubbish and are left exactly where they are.
+    mid_update = (Path(root) / '.updating').exists()
     try:
-        for stale in list(Path(root).rglob('*.old')) + list(Path(root).rglob('*.new')):
+        stale_files = list(Path(root).rglob('*.old'))
+        if not mid_update:
+            stale_files += list(Path(root).rglob('*.new'))
+        for stale in stale_files:
             try:
                 stale.unlink()
             except OSError:
@@ -2610,7 +2662,11 @@ def _run_update_helper(staging: str) -> int:
     """The --apply-update entry point."""
 
     shutil, subprocess, _delta = _preload_for_apply()
-    _wait_for_parent_exit()
+    if not _wait_for_parent_exit():
+        # Replacing files under a live process is how an install ends up
+        # half old and half new. Leave everything alone; the update is still
+        # staged and the next start will offer it again.
+        return 1
     ok = _apply_update_folder(Path(staging))
     exe = Path(sys.executable).resolve()
     if ok:
@@ -3692,6 +3748,23 @@ def main() -> None:
     time.sleep(0.3)
     _apply_staged_update()
 
+    # Straight out, without running interpreter shutdown. Shutdown joins every
+    # live thread pool worker, and a download still running holds one for as
+    # long as it takes: yt-dlp alone waits thirty seconds on a socket. The
+    # update helper is already waiting on this process, and a parent that
+    # takes minutes to die is a parent the helper gives up on.
+    try:
+        logger.complete()  # the log is written from a queue; let it drain
+    except Exception:
+        pass
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is not None:
+                stream.flush()
+        except Exception:
+            pass
+    os._exit(0)
+
 
 if __name__ == '__main__':
     # PoW solver sub-mode: if this exe was respawned by the lyrics-publish
@@ -3732,3 +3805,9 @@ if __name__ == '__main__':
         raise
     except BaseException:
         _fatal()
+        # Not zero. The update helper relaunches the app and reads the exit
+        # code to tell a working launch from a broken one, and zero is the
+        # single-instance path: "something is already running, all is well".
+        # A crash reporting itself as success made the helper stop retrying
+        # and declare the update finished, with nothing on screen.
+        sys.exit(3)

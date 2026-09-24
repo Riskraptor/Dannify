@@ -319,6 +319,8 @@ export default {
       "Le dossier de musique n'existe plus : {path}. Les téléchargements et la musique enregistrée ne fonctionneront pas tant qu'il n'est pas revenu, ou qu'un autre dossier n'est pas choisi dans les réglages.",
     folderReadOnly:
       "Impossible d'écrire dans le dossier de musique : {path}. Rien ne peut être téléchargé ou converti tant que ce n'est pas corrigé.",
+    checkFailed:
+      "Dannify n'a pas pu se vérifier pour le moment. Si quelque chose ne va pas, fermez-le depuis la zone de notification et rouvrez-le.",
     updateFailed:
       "La version {wanted} a été téléchargée mais ne s'est pas installée : ceci est toujours {running}. Réessayez la mise à jour, et si cela se reproduit, installez {wanted} par-dessus depuis la page des versions.",
   },
