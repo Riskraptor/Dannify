@@ -1,10 +1,12 @@
 # Windows version resource for Dannify.exe (read by dannify.spec).
+# Numbers here are stamped from dannify/__init__.py by packaging/build.ps1:
+# editing them by hand is pointless, the build overwrites them.
 # Without this the exe shows up as a nameless binary in Task Manager and
 # Properties, which is both unhelpful and a SmartScreen liability.
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(3, 5, 0, 0),
-    prodvers=(3, 5, 0, 0),
+    filevers=(3, 13, 0, 0),
+    prodvers=(3, 13, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -17,11 +19,11 @@ VSVersionInfo(
       StringTable('040904B0', [
         StringStruct('CompanyName', 'Dannify'),
         StringStruct('FileDescription', 'Dannify'),
-        StringStruct('FileVersion', '3.5.0'),
+        StringStruct('FileVersion', '3.13.0'),
         StringStruct('InternalName', 'Dannify'),
         StringStruct('OriginalFilename', 'Dannify.exe'),
         StringStruct('ProductName', 'Dannify'),
-        StringStruct('ProductVersion', '3.5.0'),
+        StringStruct('ProductVersion', '3.13.0'),
       ]),
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])]),

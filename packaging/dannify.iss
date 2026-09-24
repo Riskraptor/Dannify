@@ -4,7 +4,7 @@
 ; Output: packaging\out\Dannify-Setup-<version>.exe
 
 #define MyAppName "Dannify"
-#define MyAppVersion "3.12.0"
+#define MyAppVersion "3.13.0"
 #define MyAppPublisher "Dannify"
 #define MyAppExeName "Dannify.exe"
 #define BuildDir "..\Backend\dist\Dannify"
@@ -53,6 +53,16 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Ship-time settings (update repo, Paystack keys): see config\README.md.
 Source: "config\*.json"; DestDir: "{app}\config"; Flags: ignoreversion
+
+[InstallDelete]
+; Folders this build no longer ships. Setup only adds and overwrites, so an
+; upgrade would otherwise leave the old ones behind: the interface as loose
+; HTML and JavaScript, and a pile of message catalogues for languages nothing
+; asks for. This runs before the files go in, so the locale we do ship is put
+; back straight after.
+Type: filesandordirs; Name: "{app}\runtime\frontend"
+Type: filesandordirs; Name: "{app}\runtime\dannify"
+Type: filesandordirs; Name: "{app}\runtime\ytmusicapi\locales"
 
 [Icons]
 ; AppUserModelID must match APP_USER_MODEL_ID in the app, or Windows files

@@ -38,6 +38,26 @@ try {
 } finally { Pop-Location }
 
 Step 'PyInstaller'
+# The exe's version resource is what Properties and Task Manager show. Written
+# from the package version rather than kept by hand, because by hand it drifted:
+# a 3.12 build was still telling anyone who looked that it was 3.5.
+$vparts = ($version -split '[^0-9]+' | Where-Object { $_ }) + @('0', '0', '0', '0')
+$vtuple = ($vparts[0..3] -join ', ')
+$vinfo = Join-Path $backend 'version_info.txt'
+(Get-Content $vinfo -Raw) `
+    -replace 'filevers=\([\d, ]+\)', "filevers=($vtuple)" `
+    -replace 'prodvers=\([\d, ]+\)', "prodvers=($vtuple)" `
+    -replace "StringStruct\('FileVersion', '[^']*'\)", "StringStruct('FileVersion', '$version')" `
+    -replace "StringStruct\('ProductVersion', '[^']*'\)", "StringStruct('ProductVersion', '$version')" |
+    Set-Content $vinfo -NoNewline
+
+# Same for the installer, for the same reason.
+$iss = Join-Path $PSScriptRoot 'dannify.iss'
+(Get-Content $iss -Raw) `
+    -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion `"$version`"" |
+    Set-Content $iss -NoNewline
+Write-Host "  stamped $version into the exe resource and the installer"
+
 Push-Location $backend
 try {
     # A stale build/ cache silently keeps removed data files (ffprobe!) around.
@@ -61,6 +81,18 @@ if (Test-Path $runtime) {
             Write-Host ("  pruned " + $_.Name)
             Remove-Item -Recurse -Force $_.FullName
         }
+
+    # Translated message catalogues for a library we only ever call in English:
+    # nothing passes a language, so every one of these but en is 16 folders of
+    # nothing, sitting in the install folder under a library's name.
+    $locales = Join-Path $runtime 'ytmusicapi\locales'
+    if (Test-Path $locales) {
+        Get-ChildItem $locales -Directory |
+            Where-Object { $_.Name -ne 'en' } |
+            ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
+        Get-ChildItem $locales -File | Remove-Item -Force
+        Write-Host ("  pruned unused locales, kept en")
+    }
 }
 Write-Host ("App folder: " + (Size (Join-Path $backend 'dist\Dannify')))
 

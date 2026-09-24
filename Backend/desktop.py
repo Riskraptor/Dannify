@@ -2481,6 +2481,7 @@ def _apply_update_folder(staging: Path) -> bool:
             logger_print('could not read back', rel, exc)
             return False
 
+    emptied: set[Path] = set()
     for rel in plan.get('removed', []):
         # The plan is written by whichever version downloaded the update, and
         # an older one listed everything the manifest did not mention: the
@@ -2494,8 +2495,22 @@ def _apply_update_folder(staging: Path) -> bool:
             gone.relative_to(target)  # never delete outside the install
             if gone.is_file():
                 gone.unlink()
+                emptied.add(gone.parent)
         except Exception:
             pass
+
+    # A release that drops a whole folder leaves the folder behind, because
+    # the plan lists files. An install that has been updated a few times then
+    # carries a little museum of empty directories, named for things the app
+    # no longer ships. Walk up from each one and take the empty ones with it.
+    for folder in sorted(emptied, key=lambda p: len(p.parts), reverse=True):
+        while folder != target:
+            try:
+                folder.relative_to(target)
+                folder.rmdir()  # refuses if anything is still in there
+            except Exception:
+                break
+            folder = folder.parent
 
     logger_print(f'update applied: {copied} file(s) replaced')
     return True
@@ -2534,6 +2549,12 @@ def _sweep_old_files(root: Path) -> None:
     Reaching here means this build started, so the copies it replaced are
     safe to drop. Half-staged .new files are swept too: an apply that never
     got as far as its renames leaves them, and they are dead weight.
+
+    Empty folders go the same way. An update removes files, not directories,
+    so a release that stops shipping a whole folder leaves the folder there,
+    and an install updated a few times collects a set of empty directories
+    named for things the app no longer has. Nothing in here ever wants an
+    empty folder, and one this build needs it makes for itself.
     """
 
     try:
@@ -2542,6 +2563,23 @@ def _sweep_old_files(root: Path) -> None:
                 stale.unlink()
             except OSError:
                 pass  # still locked; the next launch gets it
+    except Exception:
+        pass
+
+    try:
+        # Deepest first, so clearing a child lets its parent go in the same
+        # pass. rmdir refuses a folder with anything in it, which is the whole
+        # safety check: no listing, no rules about what may go.
+        folders = sorted(
+            (p for p in Path(root).rglob('*') if p.is_dir()),
+            key=lambda p: len(p.parts),
+            reverse=True,
+        )
+        for folder in folders:
+            try:
+                folder.rmdir()
+            except OSError:
+                pass
     except Exception:
         pass
 

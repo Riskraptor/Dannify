@@ -133,11 +133,6 @@ def _load_clients(data_dir: Optional[Path]) -> None:
     if data_dir is not None:
         candidates.append(Path(data_dir) / 'clients.json')
     candidates.append(Path(__file__).with_name('clients.json'))
-    # Frozen build: PyInstaller unpacks datas under _MEIPASS, and a module's
-    # __file__ there is not always a path that exists on disk.
-    meipass = getattr(sys, '_MEIPASS', None)
-    if meipass:
-        candidates.append(Path(meipass) / 'dannify' / 'clients.json')
     for path in candidates:
         try:
             if not path.is_file():
@@ -151,6 +146,27 @@ def _load_clients(data_dir: Optional[Path]) -> None:
                 return
         except Exception:
             logger.opt(exception=True).debug('bad clients.json at {}', path)
+
+    # A shipped build keeps the table in the packed resource file rather than
+    # loose on disk, so the install folder has one less readable config in it.
+    # An override in the data dir still comes first: that is the config push.
+    meipass = getattr(sys, '_MEIPASS', None)
+    if meipass:
+        from dannify import respack
+
+        blob = respack.resource('dannify/clients.json', Path(meipass))
+        if blob:
+            try:
+                loaded = json.loads(blob.decode('utf-8'))
+                if isinstance(loaded, dict) and loaded:
+                    merged = dict(_BUILTIN_CLIENTS)
+                    merged.update(loaded)
+                    _clients = merged
+                    logger.debug('innertube clients loaded from the bundle')
+                    return
+            except Exception:
+                logger.opt(exception=True).debug('bad clients.json in bundle')
+
     _clients = dict(_BUILTIN_CLIENTS)
 
 
