@@ -279,6 +279,68 @@ class SPAStaticFiles(StaticFiles):
             return await super().get_response('index.html', scope)
 
 
+class PackedUI:
+    """Serve the interface out of the shipped resource file.
+
+    A folder of readable HTML, JavaScript and CSS in the install directory made
+    the app look like a web page someone had copied into Program Files, so the
+    built interface ships as one packed file instead (see dannify/respack.py).
+    This is the same thing StaticFiles did, reading from that file: a path, a
+    content type, an ETag, and index.html for anything the router owns.
+    """
+
+    def __init__(self, pack) -> None:
+        self._pack = pack
+        self._etag = f'"{pack.stamp}"'
+
+    def _member(self, path: str) -> str:
+        rel = path.lstrip('/')
+        if not rel or rel.endswith('/'):
+            rel += 'index.html'
+        name = f'ui/{rel}'
+        # Anything else is a route the front end handles itself.
+        return name if name in self._pack else 'ui/index.html'
+
+    async def __call__(self, scope, receive, send) -> None:
+        from starlette.responses import PlainTextResponse, Response
+
+        if scope['type'] != 'http':
+            return
+        if scope['method'] not in ('GET', 'HEAD'):
+            await PlainTextResponse('Method Not Allowed', status_code=405)(
+                scope, receive, send,
+            )
+            return
+
+        name = self._member(scope['path'])
+        body = self._pack.read(name)
+        media = mimetypes.guess_type(name)[0] or 'application/octet-stream'
+
+        # Vite puts a content hash in every asset filename, so those can be
+        # cached for good. index.html is the one file whose name stays the
+        # same across builds, and it names the others.
+        if name == 'ui/index.html':
+            cache = 'no-cache'
+        else:
+            cache = 'public, max-age=31536000, immutable'
+
+        headers = {'Cache-Control': cache, 'ETag': self._etag}
+        asked = b''
+        for key, value in scope.get('headers', ()):
+            if key.lower() == b'if-none-match':
+                asked = value
+                break
+        if self._etag.encode() in (t.strip() for t in asked.split(b',')):
+            await Response(status_code=304, headers=headers)(scope, receive, send)
+            return
+
+        await Response(
+            content=b'' if scope['method'] == 'HEAD' else body,
+            media_type=media,
+            headers={**headers, 'Content-Length': str(len(body))},
+        )(scope, receive, send)
+
+
 def _fix_mime_types() -> None:
     mimetypes.add_type('application/javascript', '.js')
     mimetypes.add_type('application/javascript', '.mjs')
@@ -874,11 +936,32 @@ def build_app() -> FastAPI:
         await _FileResponse(str(target))(scope, receive, send)
 
     app.mount('/downloads', _downloads_app, name='downloads')
-    app.mount(
-        '/',
-        SPAStaticFiles(directory=WEB_GUI_LOCATION, html=True),
-        name='static',
-    )
+
+    # A shipped build serves the interface from the packed resource file; a
+    # source checkout has no pack and serves frontend/dist, so rebuilding the
+    # front end shows up on a refresh. WEB_GUI_LOCATION set by hand wins over
+    # both: that is what it is for.
+    from dannify import respack  # noqa: PLC0415
+
+    packed = None
+    if not os.getenv('WEB_GUI_LOCATION'):
+        packed = respack.bundle(_BUNDLE_DIR if _FROZEN else None)
+    if packed is not None and 'ui/index.html' in packed:
+        app.mount('/', PackedUI(packed), name='static')
+    else:
+        if _FROZEN and not os.getenv('WEB_GUI_LOCATION'):
+            # The pack is part of the install. Missing or unreadable means the
+            # install is damaged, and saying so beats a window that comes up
+            # blank with nothing in the log to explain it.
+            raise RuntimeError(
+                f'the interface file is missing or damaged: '
+                f'{_BUNDLE_DIR / "dannify.res"}',
+            )
+        app.mount(
+            '/',
+            SPAStaticFiles(directory=WEB_GUI_LOCATION, html=True),
+            name='static',
+        )
     return app
 
 
