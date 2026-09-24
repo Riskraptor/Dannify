@@ -3,6 +3,7 @@ export default {
     name: 'Français',
   },
   common: {
+    dismiss: "Ignorer",
     cancel: 'Annuler',
     close: 'Fermer',
     delete: 'Supprimer',
@@ -308,6 +309,18 @@ export default {
     fullscreen: 'Plein écran',
     refresh: 'Actualiser la vue',
     help: 'Afficher cette liste',
+  },
+  health: {
+    musicLocked:
+      "La musique enregistrée ne peut pas être ouverte sur cette installation. {count} titres téléchargés sont concernés : ils apparaîtront sans pochette ni album et ne se liront pas. Vos fichiers ne sont pas endommagés. Cela arrive quand la clé appartient à un autre compte Windows ou à un autre PC. Retélécharger un titre le répare.",
+    noKey:
+      "La musique enregistrée est indisponible : cette installation n'a pas de clé et n'a pas pu en créer une.",
+    folderMissing:
+      "Le dossier de musique n'existe plus : {path}. Les téléchargements et la musique enregistrée ne fonctionneront pas tant qu'il n'est pas revenu, ou qu'un autre dossier n'est pas choisi dans les réglages.",
+    folderReadOnly:
+      "Impossible d'écrire dans le dossier de musique : {path}. Rien ne peut être téléchargé ou converti tant que ce n'est pas corrigé.",
+    updateFailed:
+      "La version {wanted} a été téléchargée mais ne s'est pas installée : ceci est toujours {running}. Réessayez la mise à jour, et si cela se reproduit, installez {wanted} par-dessus depuis la page des versions.",
   },
   player: {
     fileUnplayable: "Ce fichier n'a pas pu être lu. Il a peut-être été déplacé ou supprimé.",

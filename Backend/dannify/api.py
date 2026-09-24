@@ -45,7 +45,7 @@ from . import lyrics_index
 from . import lyrics_offsets
 from . import lyrics_publish
 from . import explorer
-from . import m3u, providers, spotify, streaming, support, updates
+from . import m3u, providers, spotify, streaming, support, updates, vault
 from .downloader import Downloader
 from .monitor import PlaylistMonitorDB, check_playlist
 
@@ -221,6 +221,93 @@ def _coerce_download_dir(value: Any) -> Optional[Path]:
 @router.get('/api/version')
 def get_version() -> str:
     return state.version
+
+
+@router.get('/api/health')
+def health() -> dict[str, Any]:
+    """Anything wrong that the person using the app should be told about.
+
+    Every failure so far has been a silent one. The key could not be read and
+    the app showed a library of grey squares with no album names and no
+    lengths, and a play button that produced a message about a file having been
+    moved or deleted. Nothing anywhere said the real reason, so the same fault
+    was diagnosed from scratch three times, twice by someone who only had a
+    screenshot to go on.
+
+    So the app checks the things it needs and reports what is not there. The
+    window shows it. No log files are mentioned to anybody: what is wrong and
+    what to do about it has to be on screen.
+    """
+
+    problems: list[dict[str, Any]] = []
+    base = Path(state.download_dir) if state.download_dir else None
+
+    # Ask the files, not the key. A key that loads is not the same as a key
+    # that fits: making a fresh one is exactly what happens on a new PC, a new
+    # Windows account, or after the data folder is lost, and every track saved
+    # before then becomes unreadable while the app reports itself healthy.
+    # That is the failure this whole endpoint exists to stop being invisible,
+    # so it is the one it must actually test for.
+    sealed = unreadable = 0
+    # Not while a conversion is running: a track being rewritten is unreadable
+    # for the moment it takes, and telling somebody their library is locked
+    # because the app is in the middle of fixing it would be its own bug.
+    if base is not None and not vault.busy():
+        try:
+            for path in base.rglob('*' + vault.SUFFIX):
+                sealed += 1
+                if vault.read_header(path) is None:
+                    unreadable += 1
+                if sealed >= 4000:  # a library, not a disk scan
+                    break
+        except OSError:
+            pass
+
+    where = vault.state()
+    if unreadable:
+        problems.append({
+            'code': 'music_locked',
+            'tracks': unreadable,
+            'of': sealed,
+            'why': where,
+        })
+    elif where != 'ready':
+        problems.append({'code': 'no_key', 'tracks': 0, 'why': where})
+
+    # An update that did not take. The desktop shell writes down which version
+    # it was about to install; if the app is running something else, the
+    # install was eaten somewhere and nobody would otherwise ever find out.
+    note = Path(state.data_dir) / 'update-result.json' if state.data_dir else None
+    if note is not None and note.is_file():
+        try:
+            wanted = str((json.loads(note.read_text(encoding='utf-8')) or {}).get('version') or '')
+        except Exception:
+            wanted = ''
+        if not wanted or wanted == state.version:
+            with contextlib.suppress(OSError):
+                note.unlink()  # it landed
+        else:
+            problems.append({
+                'code': 'update_failed',
+                'wanted': wanted,
+                'running': state.version,
+            })
+
+    if base is None or not base.is_dir():
+        problems.append({'code': 'folder_missing', 'path': str(base or '')})
+    else:
+        probe = base / '.dannify-write-test'
+        try:
+            probe.write_bytes(b'')
+            probe.unlink()
+        except OSError:
+            problems.append({'code': 'folder_read_only', 'path': str(base)})
+
+    return {
+        'ok': not problems,
+        'problems': problems,
+        'version': state.version,
+    }
 
 
 @router.get('/api/check_update')
