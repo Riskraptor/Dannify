@@ -3234,7 +3234,10 @@ def main() -> None:
         min_size=(MIN_W, MIN_H),
         background_color=_THEME_BG[theme],
         text_select=False,
-        zoomable=True,
+        # Ctrl with the scroll wheel zooming the whole interface is browser
+        # behaviour and makes the app feel like a page in a window. Interface
+        # size is a setting under Appearance instead.
+        zoomable=False,
         maximized=maximized,
         shadow=False,  # the native frame already provides the DWM shadow
     )

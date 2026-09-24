@@ -27,8 +27,10 @@ from loguru import logger
 # the app would hand every copy read access to the source, which is worse
 # than publishing it.
 DEFAULT_REPO = 'DANIELMWENDWA9451/dannify-releases'
-# Where About sends people. The product page, never a repository.
-SITE_URL = 'https://danielmwendwa9451.github.io/dannify-releases/'
+# Where About sends people: the page the builds are on. There is no separate
+# product site, so pointing at one that does not exist would just be a dead
+# button.
+SITE_URL = 'https://github.com/DANIELMWENDWA9451/dannify-releases/releases'
 CHECK_TTL = 60 * 60 * 6  # re-check at most every 6 hours
 _USER_AGENT = 'Dannify-Updater'
 
@@ -175,7 +177,11 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
 
     with _lock:
         _cache['result'] = result
-        _cache['at'] = now
+        # A failure is not an answer. Caching one for the full six hours meant
+        # a single bad moment on the network left the app believing it was
+        # offline until tomorrow, with nothing the user could do about it.
+        # Hold a failure for a minute, then let the next check actually try.
+        _cache['at'] = now if not result['error'] else now - CHECK_TTL + 60
     return result
 
 

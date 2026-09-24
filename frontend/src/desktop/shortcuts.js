@@ -14,27 +14,26 @@ function isTyping(el) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
 }
 
-const ZOOM_KEY = 'dn.zoom'
-const ZOOM_STEPS = [0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75]
+// Interface size. This used to be Ctrl with plus, minus and zero, exactly as
+// a browser does it, and Ctrl with the scroll wheel on top of that. That is
+// the single most website-like thing an app can do: nobody expects a desktop
+// program to reflow because they scrolled with a finger on Ctrl. The keys and
+// the wheel are gone. It is a setting now, under Appearance.
+export const ZOOM_KEY = 'dn.zoom'
+export const ZOOM_STEPS = [0.8, 0.9, 1, 1.1, 1.25, 1.5]
 
-function currentZoom() {
+export function currentZoom() {
   const v = parseFloat(localStorage.getItem(ZOOM_KEY) || '1')
   return ZOOM_STEPS.includes(v) ? v : 1
 }
 
-function setZoom(v) {
+export function setZoom(v) {
   try {
     localStorage.setItem(ZOOM_KEY, String(v))
   } catch {
     // ignore
   }
   desktop.setZoom(v)
-}
-
-function stepZoom(dir) {
-  const i = ZOOM_STEPS.indexOf(currentZoom())
-  const next = ZOOM_STEPS[Math.max(0, Math.min(ZOOM_STEPS.length - 1, i + dir))]
-  setZoom(next)
 }
 
 function onKeyDown(e) {
@@ -68,21 +67,6 @@ function onKeyDown(e) {
   if (key === 'F11' && desktop.isDesktop) {
     e.preventDefault()
     desktop.toggleFullscreen()
-    return
-  }
-  if (desktop.isDesktop && ctrl && !e.altKey && (key === '=' || key === '+')) {
-    e.preventDefault()
-    stepZoom(1)
-    return
-  }
-  if (desktop.isDesktop && ctrl && !e.altKey && key === '-') {
-    e.preventDefault()
-    stepZoom(-1)
-    return
-  }
-  if (desktop.isDesktop && ctrl && !e.altKey && key === '0') {
-    e.preventDefault()
-    setZoom(1)
     return
   }
   if (desktop.isDesktop && (key === 'F5' || (ctrl && key === 'r'))) {

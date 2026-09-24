@@ -91,6 +91,28 @@
             </button>
           </div>
         </div>
+        <!-- Interface size. This was Ctrl with plus and minus, and Ctrl with
+             the scroll wheel, which is how a browser behaves and made the app
+             feel like a page rather than a program. It is a choice you make
+             once, here. -->
+        <div class="row">
+          <Icon icon="ph:text-aa" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('settings.uiScale') }}</p>
+            <p class="row-hint">{{ t('settings.uiScaleHint') }}</p>
+          </div>
+          <div class="seg">
+            <button
+              v-for="step in zoomSteps"
+              :key="step"
+              class="seg-item"
+              :class="{ 'is-active': zoom === step }"
+              @click="pickZoom(step)"
+            >
+              {{ Math.round(step * 100) }}%
+            </button>
+          </div>
+        </div>
         <!-- Palette. Separate from light/dark on purpose: picking a dark
              palette and leaving the mode on "System" should still follow
              Windows, into the palettes chosen for each side. -->
@@ -374,8 +396,8 @@
             <p class="row-hint">{{ t('settings.version', { version }) }}</p>
           </div>
           <button class="btn" @click="desktop.openExternal(updates.siteUrl.value)">
-            <Icon icon="ph:globe-simple" class="h-4 w-4" />
-            {{ t('settings.website') }}
+            <Icon icon="ph:download-simple" class="h-4 w-4" />
+            {{ t('settings.builds') }}
           </button>
         </div>
         <label class="row">
@@ -462,6 +484,7 @@ import { usePlayer } from '/src/model/player'
 import { useAccount } from '/src/model/account'
 import { useUpdates } from '/src/model/updates'
 import { desktop } from '/src/desktop/bridge'
+import { ZOOM_STEPS, currentZoom, setZoom } from '/src/desktop/shortcuts'
 import { toast } from '/src/model/toast'
 import { useI18n } from '/src/i18n'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
@@ -489,6 +512,14 @@ const panes = [
   { id: 'lyrics', label: 'settings.lyricsGroup', icon: 'ph:microphone-stage' },
   { id: 'about', label: 'settings.about', icon: 'ph:info' },
 ]
+// Interface size lives here now, not on Ctrl and the scroll wheel.
+const zoomSteps = ZOOM_STEPS
+const zoom = ref(currentZoom())
+function pickZoom(step) {
+  zoom.value = step
+  setZoom(step)
+}
+
 const PANE_KEY = 'dn.settingsPane'
 const pane = ref(
   panes.some((p) => p.id === localStorage.getItem(PANE_KEY))

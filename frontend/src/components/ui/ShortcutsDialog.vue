@@ -104,7 +104,6 @@ const groups = computed(() => [
           rows: [
             { label: t('shortcuts.miniPlayer'), keys: ['Ctrl', 'Shift', 'M'] },
             { label: t('shortcuts.fullscreen'), keys: ['F11'] },
-            { label: t('shortcuts.zoom'), keys: ['Ctrl', '+/−/0'] },
             { label: t('shortcuts.refresh'), keys: ['F5'] },
             { label: t('shortcuts.help'), keys: ['Ctrl', '/'] },
           ],

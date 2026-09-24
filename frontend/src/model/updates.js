@@ -20,7 +20,7 @@ const info = ref({ available: false, version: '', notes: '', url: '', size: 0, s
 // The product page. Comes from the backend so a rebrand changes one config
 // file rather than a hard-coded URL in here.
 const siteUrl = computed(
-  () => info.value.site_url || 'https://danielmwendwa9451.github.io/dannify-releases/'
+  () => info.value.site_url || 'https://github.com/DANIELMWENDWA9451/dannify-releases/releases'
 )
 const checking = ref(false)
 const downloading = ref(false)

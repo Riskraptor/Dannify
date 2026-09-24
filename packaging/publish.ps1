@@ -44,6 +44,4 @@ foreach ($t in $old) {
     Write-Host "  removed $t"
 }
 
-# The site reads the latest release for its version, date and download link,
-# so publishing is all it takes to bring the page up to date.
-Write-Host "Done. https://danielmwendwa9451.github.io/dannify-releases/" -ForegroundColor Green
+Write-Host "Done. Only $tag is on the releases page now." -ForegroundColor Green
