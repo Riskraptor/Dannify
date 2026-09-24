@@ -48,6 +48,12 @@ FORMAT = 2
 
 _master: Optional[bytes] = None
 _key_path: Optional[Path] = None
+# Why saved music is or is not available: see state().
+_state: str = 'unknown'
+# True while migrate() or repair() is rewriting the folder. A track being
+# replaced is unreadable for the instant it takes, and the health check must
+# not mistake a conversion in progress for a library nobody can open.
+_busy: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -173,12 +179,13 @@ def _unprotect(stored: bytes) -> bytes:
 def init(data_dir: Path) -> None:
     """Load this installation's key, making one the first time."""
 
-    global _master, _key_path
+    global _master, _key_path, _state
     _key_path = Path(data_dir) / 'vault.key'
     try:
         if _key_path.is_file():
             stored = _key_path.read_bytes()
             _master = _unprotect(stored)
+            _state = 'ready'
             # An older wrapping still opens, and is tightened on the way past
             # so a key written before this stops being portable now. Only if
             # the new wrapping reads back: a key that cannot be unwrapped is
@@ -195,21 +202,55 @@ def init(data_dir: Path) -> None:
     except Exception:
         # A key we cannot read is worse than none: say so loudly rather than
         # quietly making a second one and orphaning everything already saved.
-        logger.error('The saved-music key could not be read. Existing downloads stay locked.')
+        logger.opt(exception=True).error(
+            'The saved-music key at {} could not be read. Saved music stays '
+            'locked until this is sorted out.', _key_path,
+        )
         _master = None
+        _state = 'unreadable'
         return
 
     _master = secrets.token_bytes(32)
     try:
         _key_path.parent.mkdir(parents=True, exist_ok=True)
         _key_path.write_bytes(_protect(_master))
+        _state = 'ready'
     except OSError:
         logger.opt(exception=True).error('Could not write the saved-music key')
         _master = None
+        _state = 'unwritable'
 
 
 def ready() -> bool:
     return _master is not None
+
+
+def busy() -> bool:
+    """Whether a conversion is rewriting the music folder right now."""
+
+    return _busy
+
+
+def state() -> str:
+    """Why saved music is or is not available, in one word.
+
+    The app used to have only ready() and nothing else, so a key it could not
+    read looked exactly like a library with no artwork and no album names, and
+    a track that would not play looked like a track someone had deleted. That
+    is three debugging sessions' worth of confusion for the sake of one string,
+    which the window can now show to the person it is actually happening to.
+
+    'unknown'    init() has not run
+    'ready'      the key is loaded
+    'unreadable' there is a key and it is not ours, or it is damaged
+    'unwritable' there is no key and one could not be made
+    """
+
+    return _state
+
+
+def key_path() -> Optional[Path]:
+    return _key_path
 
 
 # ---------------------------------------------------------------------------
@@ -664,6 +705,7 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
     is told, as the work goes rather than only at the end.
     """
 
+    global _busy
     root = Path(root)
     done = {'sealed': 0, 'skipped': 0, 'failed': 0}
     if not ready() or not root.is_dir():
@@ -677,6 +719,7 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
         return done
 
     logger.info('Sealing {} file(s) already in the music folder', len(plain))
+    _busy = True
     changed = 0
     for index, path in enumerate(plain, 1):
         target = path.with_suffix(SUFFIX)
@@ -716,6 +759,7 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
                 done['skipped'] += 1
                 changed += 1
 
+    _busy = False
     if changed:
         _refresh_playlists(root)
         _tell(on_change, forced=True)
@@ -739,6 +783,7 @@ def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
     background thread, once, and then never again.
     """
 
+    global _busy
     root = Path(root)
     done = {'repaired': 0, 'skipped': 0, 'failed': 0, 'saved': 0}
     if not ready() or not root.is_dir():
@@ -760,6 +805,7 @@ def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
         return done
 
     logger.info('Bringing {} saved track(s) up to date', len(stale))
+    _busy = True
     changed = 0
     for index, (path, head) in enumerate(stale, 1):
         scratch = path.with_suffix(path.suffix + '.plain')
@@ -802,6 +848,7 @@ def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
         if changed and changed % 5 == 0:
             _tell(on_change)
 
+    _busy = False
     if changed:
         _tell(on_change, forced=True)
     logger.info(

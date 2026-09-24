@@ -230,6 +230,10 @@ function coverFileURL(fileName) {
   return `/cover?file=${encodeURIComponent(fileName)}`
 }
 
+function health() {
+  return API.get('/api/health')
+}
+
 function listDownloads() {
   return API.get('/list')
 }
@@ -275,6 +279,7 @@ export default {
   open,
   download,
   downloadBatch,
+  health,
   downloadFileURL,
   coverFileURL,
   listDownloads,

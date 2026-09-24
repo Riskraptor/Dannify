@@ -31,6 +31,7 @@
         :class="{ 'is-immersive': isNowPlaying }"
         tabindex="-1"
       >
+        <HealthBanner />
         <router-view v-slot="{ Component, route: r }">
           <!-- Views cross-fade instead of snapping in. `out-in` keeps the
                scroll container from having two children at once, which would
@@ -62,6 +63,7 @@
 import { ref, computed, provide, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TitleBar from './components/shell/TitleBar.vue'
+import HealthBanner from '/src/components/shell/HealthBanner.vue'
 import Sidebar from './components/shell/Sidebar.vue'
 import PlayerBar from './components/shell/PlayerBar.vue'
 import SidePanel from './components/shell/SidePanel.vue'

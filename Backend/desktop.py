@@ -1804,6 +1804,7 @@ class DesktopApi:
         if path is None:
             return False
         _staged_update = path
+        _note_update_attempt(_version_from_staging(path))
         logger.info('Update staged for the next exit: {}', path.name)
         return True
 
@@ -1823,6 +1824,7 @@ class DesktopApi:
         except Exception:
             return False
         _staged_delta = path
+        _note_update_attempt(_version_from_staging(path))
         logger.info('Partial update staged for the next exit: {}', path.name)
         return True
 
@@ -2954,6 +2956,41 @@ def _wait_until_up(port: int, timeout: float = 30.0, token: str = '') -> bool:
             pass
         time.sleep(0.05)
     return False
+
+
+_UPDATE_NOTE = _DATA_DIR / 'update-result.json'
+
+
+def _note_update_attempt(version: str) -> None:
+    """Write down which version we are about to install.
+
+    An update that fails used to do so in complete silence: the files were not
+    replaced, nothing said why, and the same update was offered again on the
+    next check, forever. From the outside that is an app whose updates simply
+    never work.
+
+    The next start compares this against the version actually running. If they
+    match the update landed and the note goes. If they do not, something ate
+    it, and the app says so instead of quietly offering it again.
+    """
+
+    try:
+        _UPDATE_NOTE.write_text(
+            json.dumps({'version': str(version or '')}), encoding='utf-8',
+        )
+    except OSError:
+        pass
+
+
+def _version_from_staging(path) -> str:
+    """The version a staging folder or installer is carrying."""
+
+    name = Path(path).name
+    match = _re_version.search(name)
+    return match.group(0) if match else ''
+
+
+_re_version = __import__('re').compile(r'\d+\.\d+\.\d+')
 
 
 def _write_instance_file(port: int, hwnd: int = 0) -> None:

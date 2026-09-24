@@ -3,6 +3,7 @@ export default {
     name: 'English',
   },
   common: {
+    dismiss: 'Dismiss',
     cancel: 'Cancel',
     close: 'Close',
     delete: 'Delete',
@@ -303,6 +304,18 @@ export default {
     fullscreen: 'Full screen',
     refresh: 'Refresh view',
     help: 'Show this list',
+  },
+  health: {
+    musicLocked:
+      'Saved music cannot be opened on this installation. {count} downloaded tracks are affected: they will show without artwork or album details and will not play. Your files are not damaged. This happens when the key belongs to a different Windows account or a different PC. Re-downloading a track fixes that track.',
+    noKey:
+      'Saved music is unavailable: this installation has no key and could not create one.',
+    folderMissing:
+      'The music folder is not there any more: {path}. Downloads and saved music will not work until it is back, or you pick another folder in Settings.',
+    folderReadOnly:
+      'The music folder cannot be written to: {path}. Nothing can be downloaded or converted until that is fixed.',
+    updateFailed:
+      'Version {wanted} was downloaded but did not install: this is still {running}. Try the update again, and if it keeps happening, install {wanted} over the top from the releases page.',
   },
   player: {
     fileUnplayable: 'That file would not play. It may have been moved or deleted.',
