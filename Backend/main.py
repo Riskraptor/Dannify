@@ -879,6 +879,12 @@ def build_app() -> FastAPI:
     from starlette.responses import FileResponse as _FileResponse
     from starlette.types import Receive, Scope, Send
 
+    try:
+        from starlette._utils import get_route_path as _route_path
+    except ImportError:  # older Starlette rewrote scope['path'] itself
+        def _route_path(scope):
+            return scope['path']
+
     async def _send_sealed(target, request, scope, receive, send) -> None:
         """Stream a sealed file back as ordinary audio.
 
@@ -986,11 +992,13 @@ def build_app() -> FastAPI:
         from starlette.requests import Request as _Req
 
         request = _Req(scope, receive)
-        # scope['path'] has already been decoded once, by the server. Decoding
-        # it again turned a percent sign in a filename into the start of an
-        # escape and resolved to something else entirely, which for a track
-        # called "100% Love" meant a 404 nobody could explain.
-        rel = scope['path'].lstrip('/')
+        # The path is already decoded once, by the server. Decoding it a
+        # second time turned a per cent sign in a filename into the start of
+        # an escape and resolved to something else entirely, which for a track
+        # called "100% Love" was a 404 nobody could explain. A mount no longer
+        # rewrites scope['path'] either, it sets root_path, so the part after
+        # the mount has to be taken rather than assumed.
+        rel = _route_path(scope).lstrip('/')
         try:
             base = _live_download_dir().resolve()
             target = (base / rel).resolve()

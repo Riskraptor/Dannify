@@ -84,6 +84,11 @@ const AUTOPLAY_KEY = 'dannify-autoplay-radio'
 const autoplayRadio = ref(localStorage.getItem(AUTOPLAY_KEY) !== '0')
 let radioSeed = ''
 
+// Consecutive saved files that would not play, reset by the first that
+// does. Stops one click walking a whole queue of dead tracks.
+let deadRun = 0
+const DEAD_RUN_LIMIT = 3
+
 // --- Session restore ---
 //
 // Closing a music player and reopening it to silence and an empty queue is
@@ -112,7 +117,14 @@ function saveSession() {
     localStorage.setItem(
       SESSION_KEY,
       JSON.stringify({
-        tracks: list.slice(0, SESSION_MAX_TRACKS),
+        // A saved track keeps its path, not its URL. The URL names a file
+        // that can be renamed between one run and the next, and converting
+        // the library to containers renames all of them, so a queue written
+        // before that came back pointing at files that no longer existed.
+        // The path survives it; the URL is rebuilt on the way back in.
+        tracks: list.slice(0, SESSION_MAX_TRACKS).map((t) =>
+          t && t.type === 'local' && t.file ? { ...t, url: '', cover: '' } : t
+        ),
         index: Math.min(currentIndex.value, SESSION_MAX_TRACKS - 1),
         time: Math.max(0, Math.floor(currentTime.value || 0)),
         ts: Date.now(),
@@ -145,6 +157,14 @@ function readSession() {
     if (blob.tracks.some((t) => !t || typeof t.url !== 'string' || /^https?:/i.test(t.url))) {
       return null
     }
+    // Rebuild the URL of every saved track from its path. Entries written by
+    // an older build still carry the url the file had then, and that is the
+    // one thing here that is allowed to be out of date.
+    blob.tracks = blob.tracks.map((t) =>
+      t && t.type === 'local' && t.file
+        ? { ...t, url: API.downloadFileURL(t.file), cover: API.coverFileURL(t.file) }
+        : t
+    )
     return blob
   } catch {
     return null
@@ -295,6 +315,7 @@ function ensureAudio() {
   })
   audio.addEventListener('playing', () => {
     isBuffering.value = false
+    deadRun = 0
   })
   audio.addEventListener('canplay', () => {
     isBuffering.value = false
@@ -308,7 +329,35 @@ function ensureAudio() {
       // A saved file that will not play. This used to return here and do
       // nothing at all: no message, no skip, just a track sitting there that
       // was never going to start.
-      toast(t('player.fileUnplayable'), { tone: 'error' })
+      //
+      // Then it said so and skipped, which is right for one bad file and
+      // wrong for a folder of them: skipping raises the next error, which
+      // skips again, so one click walked the whole queue and stacked a toast
+      // for every track in it. What looked like three failures was one, three
+      // deep. So it stops after a few in a row, and says that instead.
+      const err = audio.error
+      console.error('[player] audio error', {
+        code: err && err.code,
+        message: err && err.message,
+        networkState: audio.networkState,
+        readyState: audio.readyState,
+        src: audio.currentSrc,
+      })
+      deadRun += 1
+      if (deadRun >= DEAD_RUN_LIMIT) {
+        toast(t('player.manyUnplayable'), { tone: 'error' })
+        isPlaying.value = false
+        deadRun = 0
+        return
+      }
+      // MEDIA_ERR_DECODE. The file was found and read, and what came back was
+      // not audio: a damaged container, or one this installation has no key
+      // for. Saying it may have been moved or deleted sends people looking in
+      // the wrong place for a file that is sitting right there.
+      const code = err && err.code
+      toast(t(code === 3 ? 'player.fileUnreadable' : 'player.fileUnplayable'), {
+        tone: 'error',
+      })
       if (currentIndex.value < playlist.value.length - 1) next()
       else isPlaying.value = false
       return
@@ -337,13 +386,12 @@ function ensureAudio() {
   return audio
 }
 
-function fileUrl(file) {
-  return `/downloads/${encodeURIComponent(file)}`
-}
-
-function coverUrl(file) {
-  return `/cover?file=${encodeURIComponent(file)}`
-}
+// One implementation of the path encoding, in api.js. There were three, and
+// this one encoded the whole path with encodeURIComponent, so the separators
+// came out as %2F and a track in a subfolder asked for a file that was not
+// there.
+const fileUrl = (file) => API.downloadFileURL(file)
+const coverUrl = (file) => API.coverFileURL(file)
 
 function trackFromFile(file) {
   const noExt = file.replace(/\.[^.]+$/, '')
@@ -406,8 +454,8 @@ function trackFromSong(song) {
       return {
         type: 'local',
         file: localFile,
-        url: `/downloads/${localFile.split('/').map(encodeURIComponent).join('/')}`,
-        cover: `/cover?file=${encodeURIComponent(localFile)}`,
+        url: API.downloadFileURL(localFile),
+        cover: API.coverFileURL(localFile),
         title: song.name || guessedTitle,
         artist:
           (Array.isArray(artists) ? artists.join(', ') : String(artists || '')) ||
