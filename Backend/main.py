@@ -455,10 +455,33 @@ def build_app() -> FastAPI:
     )
     # Search and home payloads run to tens of KB of JSON. Compressing them
     # costs a millisecond and pays for itself on every phone on the LAN.
-    # The 2 KB floor keeps small replies and audio ranges untouched.
+    #
+    # Audio must be left alone, and the size floor does not do that. The floor
+    # only applies to a response that arrives in one piece; a streamed one goes
+    # down the other branch and is compressed whatever its size, which drops
+    # Content-Length and switches to chunked. A track then has no length for
+    # the player to read, so the bar sits at 0:00 forever, and a range reply is
+    # worse than that: Content-Range still describes the bytes that were asked
+    # for while the body is a gzip stream of them. A thousand-byte range came
+    # back as 504 bytes with a header promising 1024.
     from fastapi.middleware.gzip import GZipMiddleware
 
-    app.add_middleware(GZipMiddleware, minimum_size=2048, compresslevel=5)
+    _NEVER_GZIP = ('/downloads/', '/opened/', '/cover', '/api/stream')
+
+    class _GzipTextOnly:
+        """Compression for the JSON and the interface, never for media."""
+
+        def __init__(self, inner):
+            self.inner = inner
+            self.gzip = GZipMiddleware(inner, minimum_size=2048, compresslevel=5)
+
+        async def __call__(self, scope, receive, send):
+            if scope['type'] == 'http' and not scope['path'].startswith(_NEVER_GZIP):
+                await self.gzip(scope, receive, send)
+                return
+            await self.inner(scope, receive, send)
+
+    app.add_middleware(_GzipTextOnly)
 
     # --- Private by default -------------------------------------------------
     # Dannify is a desktop app that happens to talk to itself over HTTP. The
@@ -864,6 +887,7 @@ def build_app() -> FastAPI:
         the bytes it wanted. What it never gets is the file as it sits on disk.
         """
 
+        from starlette.responses import Response as _Resp
         from starlette.responses import StreamingResponse
         from dannify import vault  # noqa: PLC0415
 
@@ -872,43 +896,82 @@ def build_app() -> FastAPI:
             '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.wav': 'audio/wav',
             '.aac': 'audio/aac',
         }
-        head = vault.read_header(target) or {}
+
+        # A header we cannot read means the wrong key, and the old code took
+        # `or {}` and carried on: it then streamed the payload through a
+        # keystream that does not fit and answered with a flawless 206 full of
+        # noise. The player got a response that looked perfect and sounded
+        # like nothing, which is not a state anybody can debug.
+        head = vault.read_header(target)
+        if head is None:
+            logger.error(
+                'cannot read {}: the wrong key for it, or it is damaged',
+                target.name,
+            )
+            await _Resp(status_code=409)(scope, receive, send)
+            return
+
         media = MIME.get(str(head.get('ext', '')).lower(), 'audio/mpeg')
         total = vault.audio_size(target)
+        stat = target.stat()
 
         start, end = 0, total - 1
         status = 200
         raw = request.headers.get('range', '')
+
+        async def unsatisfiable() -> None:
+            await _Resp(
+                status_code=416, headers={'Content-Range': f'bytes */{total}'},
+            )(scope, receive, send)
+
         if raw.startswith('bytes='):
-            piece = raw[6:].split(',')[0].strip()
-            first, _, last = piece.partition('-')
+            spec = raw[6:].strip()
+            if ',' in spec:
+                # More than one range. Answering the first and describing it as
+                # if it were the whole request is a lie the player cannot
+                # detect, so decline and let it ask again.
+                await unsatisfiable()
+                return
+            first, sep, last = spec.partition('-')
+            if not sep:
+                await unsatisfiable()
+                return
             try:
                 if first:
                     start = int(first)
                     end = int(last) if last else total - 1
                 elif last:  # a suffix range: the final N bytes
                     start = max(0, total - int(last))
-                if start >= total or start < 0:
-                    from starlette.responses import Response
-
-                    await Response(
-                        status_code=416,
-                        headers={'Content-Range': f'bytes */{total}'},
-                    )(scope, receive, send)
-                    return
-                end = min(end, total - 1)
-                status = 206
+                else:
+                    raise ValueError('empty range')
             except ValueError:
-                start, end, status = 0, total - 1, 200
+                await unsatisfiable()
+                return
+            end = min(end, total - 1)
+            if start < 0 or start >= total or end < start:
+                await unsatisfiable()
+                return
+            status = 206
 
         length = max(0, end - start + 1)
+        # Both parts are known without decrypting anything, and both change
+        # whenever the file does. Without them every backward seek was a fresh
+        # read and a fresh decrypt of everything before the point seeked to.
         headers = {
             'Accept-Ranges': 'bytes',
             'Content-Length': str(length),
-            'Cache-Control': 'no-store',
+            'Cache-Control': 'private, no-cache',
+            'ETag': f'"{int(stat.st_mtime)}-{total}"',
+            'Content-Type': media,
         }
         if status == 206:
             headers['Content-Range'] = f'bytes {start}-{end}/{total}'
+
+        # A HEAD asks what is there, not for it. Streaming the answer meant
+        # decrypting a whole track to throw it away.
+        if request.method.upper() == 'HEAD':
+            await _Resp(status_code=status, headers=headers)(scope, receive, send)
+            return
 
         def body():
             yield from vault.open_range(target, start, length)
@@ -923,15 +986,14 @@ def build_app() -> FastAPI:
         from starlette.requests import Request as _Req
 
         request = _Req(scope, receive)
-        rel = request.path_params.get('path') or request.url.path.split(
-            '/downloads/', 1,
-        )[-1]
-        # URL-decode safely; reject traversal.
-        from urllib.parse import unquote
-
+        # scope['path'] has already been decoded once, by the server. Decoding
+        # it again turned a percent sign in a filename into the start of an
+        # escape and resolved to something else entirely, which for a track
+        # called "100% Love" meant a 404 nobody could explain.
+        rel = scope['path'].lstrip('/')
         try:
             base = _live_download_dir().resolve()
-            target = (base / unquote(rel)).resolve()
+            target = (base / rel).resolve()
             target.relative_to(base)
         except (ValueError, RuntimeError):
             from starlette.responses import PlainTextResponse
