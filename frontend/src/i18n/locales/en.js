@@ -314,6 +314,8 @@ export default {
       'The music folder is not there any more: {path}. Downloads and saved music will not work until it is back, or you pick another folder in Settings.',
     folderReadOnly:
       'The music folder cannot be written to: {path}. Nothing can be downloaded or converted until that is fixed.',
+    checkFailed:
+      'Dannify could not check itself just now. If anything looks wrong, close it from the notification area and open it again.',
     updateFailed:
       'Version {wanted} was downloaded but did not install: this is still {running}. Try the update again, and if it keeps happening, install {wanted} over the top from the releases page.',
   },

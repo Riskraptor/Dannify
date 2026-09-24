@@ -255,6 +255,23 @@ def _zip64_extra(
 # ---------------------------------------------------------------------------
 
 
+def _inside(root: Path, rel: str) -> bool:
+    """Whether *rel* names something within *root*, and nothing else."""
+
+    text = str(rel or '')
+    if not text or text != text.strip():
+        return False
+    if text.startswith(('/', '\\')) or ':' in text:
+        return False
+    if any(part in ('..', '') for part in text.replace('\\', '/').split('/')):
+        return False
+    try:
+        (Path(root) / text).resolve().relative_to(Path(root).resolve())
+    except (ValueError, OSError):
+        return False
+    return True
+
+
 def plan(
     app_dir: Path,
     manifest: dict[str, Any],
@@ -274,6 +291,16 @@ def plan(
 
     app_dir = Path(app_dir).resolve()
     wanted = manifest.get('files') or {}
+    # Every name here came off the network, and every one of them is about to
+    # be used as a path to write to. Path('C:/app') / 'C:/Windows/x.dll' is
+    # 'C:/Windows/x.dll' on Windows: an absolute right-hand side wins outright,
+    # and '..' walks out just as easily. So a manifest is checked before it is
+    # believed, and one that is not entirely inside the install folder is not
+    # partially applied, it is refused.
+    for rel in wanted:
+        if not _inside(app_dir, rel):
+            raise ValueError(f'manifest entry outside the install folder: {rel!r}')
+
     changed: list[str] = []
     total = 0
     read = 0
@@ -336,6 +363,11 @@ def fetch(
         if progress:
             progress(done / total, f'Downloading, {_mb(done)} of {_mb(total)}')
         data = archive.read(name, on_bytes=on_bytes)
+        # Checked again here, because the names come from the zip's own
+        # directory this time rather than the manifest, and that is a second
+        # piece of downloaded data being used as a path.
+        if not _inside(into, name):
+            raise ValueError(f'archive entry outside the staging folder: {name!r}')
         target = into / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)

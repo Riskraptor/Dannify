@@ -104,8 +104,11 @@ Type: files; Name: "{localappdata}\Dannify\instance.json"
 Type: files; Name: "{localappdata}\Dannify\lyrics_cache.json"
 Type: files; Name: "{localappdata}\Dannify\port.json"
 Type: files; Name: "{localappdata}\Dannify\session.json"
-Type: files; Name: "{localappdata}\Dannify\settings.json"
 Type: files; Name: "{localappdata}\Dannify\window.json"
+; settings.json deliberately stays, for the same reason vault.key does. It
+; holds which folder the music is in. Delete it and a reinstall looks in the
+; default folder instead, finds nothing, and the library appears to be gone
+; while it sits untouched wherever the person actually put it.
 
 [Code]
 // Closing a running Dannify before its files are replaced.
