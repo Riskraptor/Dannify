@@ -20,7 +20,12 @@ function isTyping(el) {
 // program to reflow because they scrolled with a finger on Ctrl. The keys and
 // the wheel are gone. It is a setting now, under Appearance.
 export const ZOOM_KEY = 'dn.zoom'
-export const ZOOM_STEPS = [0.8, 0.9, 1, 1.1, 1.25, 1.5]
+// Kept deliberately short. The window can be as narrow as 760 physical
+// pixels, and zooming divides that: at 150 per cent the interface saw 507
+// pixels of room, dropped into the narrow layout meant for a phone browser,
+// and started overlapping itself. The shell widens the window minimum to
+// match whatever is picked here, so none of these can collapse the layout.
+export const ZOOM_STEPS = [0.9, 1, 1.1, 1.25]
 
 export function currentZoom() {
   const v = parseFloat(localStorage.getItem(ZOOM_KEY) || '1')

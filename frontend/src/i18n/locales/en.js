@@ -602,7 +602,7 @@ export default {
     readMore: 'Read more',
     showLess: 'Show less',
     play: 'Play',
-    downloadTop: 'Download popular songs',
+    downloadChosen: 'Download {count} selected',
     downloadAll: 'Download all',
     downloadRemaining: 'Download {count} more',
     allInLibrary: 'All in your library',

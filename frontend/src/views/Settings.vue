@@ -101,17 +101,15 @@
             <p class="row-label">{{ t('settings.uiScale') }}</p>
             <p class="row-hint">{{ t('settings.uiScaleHint') }}</p>
           </div>
-          <div class="seg">
-            <button
-              v-for="step in zoomSteps"
-              :key="step"
-              class="seg-item"
-              :class="{ 'is-active': zoom === step }"
-              @click="pickZoom(step)"
-            >
+          <select
+            class="field-select w-32"
+            :value="zoom"
+            @change="pickZoom(Number($event.target.value))"
+          >
+            <option v-for="step in zoomSteps" :key="step" :value="step">
               {{ Math.round(step * 100) }}%
-            </button>
-          </div>
+            </option>
+          </select>
         </div>
         <!-- Palette. Separate from light/dark on purpose: picking a dark
              palette and leaving the mode on "System" should still follow
@@ -441,6 +439,15 @@
           </div>
         </div>
 
+        <!-- What is in the new version, here, rather than behind a link to
+             a page on the internet. -->
+        <div v-if="updates.available.value && noteLines.length" class="up-notes">
+          <p class="up-notes-head">
+            {{ t('update.releaseNotes') }} &middot; {{ updates.info.value.version }}
+          </p>
+          <p v-for="(line, i) in noteLines" :key="i">{{ line }}</p>
+        </div>
+
         <!-- What the update is actually doing. Most of the wait is spent
              working out which files changed, and a bar on its own at 0%
              reads as a download that never started. -->
@@ -519,6 +526,16 @@ function pickZoom(step) {
   zoom.value = step
   setZoom(step)
 }
+
+// The notes come back as one block of text. Split it for reading, and never
+// render it as markup: it arrives over the network.
+const noteLines = computed(() =>
+  String(updates.info.value.notes || '')
+    .split(/\r?\n+/)
+    .map((l) => l.replace(/^[#*\-\s]+/, '').trim())
+    .filter(Boolean)
+    .slice(0, 12)
+)
 
 const PANE_KEY = 'dn.settingsPane'
 const pane = ref(
@@ -609,6 +626,25 @@ async function setTray(patch) {
   gap: 28px;
   max-width: 1040px;
 }
+.up-notes {
+  margin-top: 8px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--c-tint) / 0.1);
+  background: rgb(var(--c-tint) / 0.04);
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgb(var(--c-fg) / 0.72);
+}
+.up-notes-head {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(var(--c-fg) / 0.5);
+}
 .up-flow {
   margin-top: 8px;
   padding: 12px 14px;
@@ -689,15 +725,15 @@ async function setTray(patch) {
     grid-template-columns: minmax(0, 1fr);
     gap: 18px;
   }
+  /* Wrap rather than scroll. This was a single row that overflowed with its
+     scrollbar hidden, so at the smallest window the last tab sat past the
+     right edge with nothing to show it was there and no way to reach it. */
   .set-nav {
     position: static;
     flex-direction: row;
-    overflow-x: auto;
-    scrollbar-width: none;
+    flex-wrap: wrap;
+    gap: 6px;
     padding-bottom: 2px;
-  }
-  .set-nav::-webkit-scrollbar {
-    display: none;
   }
   .set-tab {
     flex: none;

@@ -28,6 +28,11 @@
       <button class="btn btn-pill" @click="router.back()">{{ t('explore.back') }}</button>
     </EmptyState>
 
+    <!-- Loading, but not for long enough to have earned a skeleton yet.
+         Without this the v-else below matched while the data was still null
+         and the render threw reading a name off nothing. -->
+    <div v-else-if="!album" class="view-pad pt-10" aria-busy="true" />
+
     <template v-else>
       <CollectionHero
         :title="album.name"

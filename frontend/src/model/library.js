@@ -24,6 +24,10 @@ async function refresh() {
     })
     .catch(() => {
       error.value = true
+      // Finished, badly, but finished. Leaving this false held the view on
+      // its skeleton rows for ever: nothing reads the error, and every
+      // retry path only asks whether it had loaded.
+      loaded.value = true
     })
     .finally(() => {
       loading.value = false

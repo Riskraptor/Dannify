@@ -1506,13 +1506,55 @@ class DesktopApi:
         self._ui(resize, wait=True)
 
     def win_set_zoom(self, factor: float) -> None:
+        """Interface size, and the smallest window that size still fits in.
+
+        Zoom divides the room the interface has: at 125 per cent a 760 pixel
+        window gives it 608, which is under the width the desktop layout needs
+        and drops it into the narrow one meant for a phone browser. Things
+        overlapped and the whole thing stopped looking like an application.
+
+        So the minimum grows with the zoom, and a window already smaller than
+        the new minimum is nudged up to it. Whatever size is picked, the
+        layout it gets is the real one.
+        """
+
         try:
             value = max(0.5, min(2.0, float(factor)))
         except (TypeError, ValueError):
             return
+        if self._form is None or not self._hwnd:
+            return
+
+        from System.Drawing import Size
+
+        form = self._form
+        hwnd = self._hwnd
+        scale = _window_scale(hwnd)
+        fx, fy = _frame_thickness(hwnd)
+        floor_w = int(MIN_W * value * scale) + 2 * fx
+        floor_h = int(MIN_H * value * scale) + fy
 
         def apply():
-            self._form.browser.webview.ZoomFactor = value
+            form.browser.webview.ZoomFactor = value
+            if self._mini or self._fullscreen:
+                return
+            form.MinimumSize = Size(floor_w, floor_h)
+            rect = RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return
+            width = rect.right - rect.left
+            height = rect.bottom - rect.top
+            if width >= floor_w and height >= floor_h:
+                return
+            # Grow from where it is, and keep it on the screen it is on.
+            _, _, work_right, work_bottom = _work_area_for(hwnd)
+            want_w, want_h = max(width, floor_w), max(height, floor_h)
+            left = min(rect.left, max(0, work_right - want_w))
+            top = min(rect.top, max(0, work_bottom - want_h))
+            user32.SetWindowPos(
+                hwnd, None, left, top, want_w, want_h,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            )
 
         self._ui(apply)
 
