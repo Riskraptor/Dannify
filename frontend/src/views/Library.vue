@@ -182,13 +182,17 @@ const totalDuration = computed(() => {
   return h ? t('common.hoursMinutes', { h, m }) : t('common.minutes', { m })
 })
 
-const playingHere = computed(() => {
+// The mirror of the bug the other pages had: this was true for any local
+// file at all, so the button showed pause while something opened from a
+// different page was playing.
+const currentHere = computed(() => {
   const cur = player.currentTrack.value
-  return !!cur && cur.type === 'local' && player.isPlaying.value
+  return !!cur && rows.value.some((r) => r.file && r.file === cur.file)
 })
+const playingHere = computed(() => currentHere.value && player.isPlaying.value)
 
 function playAll() {
-  if (playingHere.value) {
+  if (currentHere.value) {
     player.toggle()
     return
   }

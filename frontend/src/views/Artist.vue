@@ -96,17 +96,17 @@ const albums = computed(() =>
 )
 const allRows = computed(() => albums.value.flatMap((al) => al.rows))
 
-const playingHere = computed(() => {
+// Whether what is playing belongs to this page, and separately whether it is
+// actually running. Both used to be one flag, so a paused collection looked
+// unplayed and the same button that paused it started it again from the top.
+const currentHere = computed(() => {
   const cur = player.currentTrack.value
-  return (
-    !!cur &&
-    player.isPlaying.value &&
-    allRows.value.some((r) => r.file && r.file === cur.file)
-  )
+  return !!cur && allRows.value.some((r) => r.file && r.file === cur.file)
 })
+const playingHere = computed(() => currentHere.value && player.isPlaying.value)
 
 function playAll() {
-  if (playingHere.value) return player.toggle()
+  if (currentHere.value) return player.toggle()
   player.setShuffle(false)
   playRows(allRows.value, 0)
 }

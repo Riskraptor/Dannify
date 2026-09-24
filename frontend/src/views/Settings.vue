@@ -482,7 +482,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import API from '/src/model/api'
+import API, { appVersion } from '/src/model/api'
 import { useSettingsManager } from '/src/model/settings'
 import { useTheme } from '/src/model/theme'
 import { useFonts } from '/src/model/fonts'
@@ -506,7 +506,7 @@ const account = useAccount()
 const updates = useUpdates()
 const s = computed(() => sm.settings.value)
 
-const version = ref(localStorage.getItem('version') || '')
+const version = appVersion
 
 // One long scroll of nine headings was hard to search by eye, so the groups
 // are panes now and the rail says what is where. The choice is remembered:

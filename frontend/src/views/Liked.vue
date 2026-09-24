@@ -125,12 +125,13 @@ const totalDuration = computed(() => {
   return h ? t('common.hoursMinutes', { h, m }) : t('common.minutes', { m })
 })
 
-const playingHere = computed(
-  () => player.isPlaying.value && rows.value.some((r) => isRowCurrent(r))
-)
+// Playing from here, and playing at all, are different questions. Answering
+// only the second meant pausing and pressing play again started from the top.
+const currentHere = computed(() => rows.value.some((r) => isRowCurrent(r)))
+const playingHere = computed(() => currentHere.value && player.isPlaying.value)
 
 function playAll() {
-  if (playingHere.value) return player.toggle()
+  if (currentHere.value) return player.toggle()
   playRows(rows.value, 0)
 }
 
