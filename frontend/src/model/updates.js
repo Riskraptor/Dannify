@@ -86,9 +86,9 @@ async function check(force = false, { quiet = true } = {}) {
 
 async function download({ quiet = false } = {}) {
   if (downloading.value || !info.value.download_url) {
+    // Nothing to fetch. Say so rather than opening a page somewhere.
     if (!info.value.download_url && !quiet) {
-      // No installer asset on the release: send them to the release page.
-      desktop.openExternal(info.value.url || '')
+      toast(t('update.downloadFailed'), { tone: 'error' })
     }
     return false
   }

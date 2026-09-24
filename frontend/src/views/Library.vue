@@ -60,6 +60,19 @@
         <div v-for="n in 8" :key="n" class="skeleton h-12" />
       </div>
 
+      <!-- The load failed. Before this the view just kept its skeleton rows
+           and there was nothing to press. -->
+      <EmptyState
+        v-else-if="lib.error.value && !lib.tracks.value.length"
+        icon="ph:cloud-warning"
+        :title="t('library.failedLoad')"
+      >
+        <button class="btn-accent btn-pill press" @click="lib.refresh()">
+          <Icon icon="ph:arrows-clockwise" class="h-4 w-4" />
+          {{ t('common.retry') }}
+        </button>
+      </EmptyState>
+
       <EmptyState
         v-else-if="!lib.tracks.value.length"
         icon="ph:music-notes"

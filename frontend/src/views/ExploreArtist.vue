@@ -24,6 +24,11 @@
       <button class="btn btn-pill" @click="router.back()">{{ t('explore.back') }}</button>
     </EmptyState>
 
+    <!-- Loading, but not for long enough to have earned a skeleton yet.
+         Without this the v-else below matched while the data was still null
+         and the render threw reading a name off nothing. -->
+    <div v-else-if="!artist" class="view-pad pt-10" aria-busy="true" />
+
     <template v-else>
       <CollectionHero
         :title="artist.name"
@@ -60,16 +65,26 @@
           >
             <Icon icon="ph:shuffle" class="h-6 w-6" />
           </button>
-          <button v-if="songRows.length" class="btn btn-pill" @click="downloadRows(songRows)">
+          <button
+            v-if="chosen.length"
+            class="btn-accent btn-pill press"
+            @click="downloadChosen"
+          >
             <Icon icon="ph:download-simple" class="h-4 w-4" />
-            {{ t('explore.downloadTop') }}
+            {{ t('explore.downloadChosen', { count: chosen.length }) }}
           </button>
         </template>
       </CollectionHero>
 
       <section v-if="songRows.length" class="view-pad mb-10">
         <h2 class="section-title">{{ t('explore.topSongs') }}</h2>
-        <TrackTable :rows="visibleRows" :sticky-offset="56" :on-play="(i) => playRows(songRows, i)" />
+        <TrackTable
+          :rows="visibleRows"
+          :sticky-offset="56"
+          selectable
+          :on-play="(i) => playRows(songRows, i)"
+          @selection-change="chosen = $event"
+        />
         <button
           v-if="songRows.length > songLimit"
           class="more-btn"
@@ -131,6 +146,13 @@ const player = usePlayer()
 
 const artist = ref(null)
 const loading = ref(false)
+// Whatever is ticked in the list. There used to be one button that grabbed a
+// fixed bundle of "popular" tracks, which is rarely the set anybody wanted.
+const chosen = ref([])
+
+function downloadChosen() {
+  if (chosen.value.length) downloadRows(chosen.value)
+}
 // Fast pages should not flash a skeleton on their way in.
 const showSkeleton = useDeferred(loading)
 

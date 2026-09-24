@@ -47,22 +47,17 @@
         </template>
       </CollectionHero>
 
-      <section v-for="album in albums" :key="album.name" class="view-pad mb-8">
-        <div class="album-head">
-          <CoverImage :src="API.coverFileURL(album.cover)" kind="album" radius="sm" class="h-12 w-12" />
-          <div class="min-w-0">
-            <h2 class="truncate text-[17px] font-bold">{{ album.name === 'Singles' ? t('artist.singles') : album.name }}</h2>
-            <p class="text-xs text-fg/50">{{ t('artists.trackCount', { count: album.rows.length }) }}</p>
-          </div>
-        </div>
+      <!-- One list, with the album on the row. It used to be a heading per
+           album, which meant a library that is mostly singles turned into a
+           column of headings with one track under each. The online artist
+           page has always been a plain list; this is the same thing. -->
+      <section class="view-pad mb-8">
         <TrackTable
-          :rows="album.rows"
-          :header="false"
-          :show-cover="false"
-          :show-album="false"
-          use-track-numbers
+          :rows="allRows"
+          :sticky-offset="56"
+          show-album
           deletable
-          :on-play="(i) => playFromAlbum(album, i)"
+          :on-play="(i) => playRows(allRows, i)"
         />
       </section>
     </template>
@@ -80,7 +75,6 @@ import { onRefresh, onLibraryChanged } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
 import CollectionHero from '/src/components/ui/CollectionHero.vue'
 import TrackTable from '/src/components/ui/TrackTable.vue'
-import CoverImage from '/src/components/ui/CoverImage.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
 
 const { t } = useI18n()
@@ -117,11 +111,6 @@ function playAll() {
   playRows(allRows.value, 0)
 }
 
-function playFromAlbum(album, i) {
-  const target = album.rows[i]
-  playRows(allRows.value, Math.max(0, allRows.value.indexOf(target)))
-}
-
 async function load() {
   const name = route.params.name
   if (!name) return
@@ -141,12 +130,3 @@ onRefresh(load)
 onLibraryChanged(() => setTimeout(load, 800))
 </script>
 
-<style scoped>
-.album-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  padding: 0 12px;
-}
-</style>

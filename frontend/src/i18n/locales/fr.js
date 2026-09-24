@@ -607,7 +607,7 @@ export default {
     readMore: 'Lire la suite',
     showLess: 'Afficher moins',
     play: 'Lire',
-    downloadTop: 'Télécharger les titres populaires',
+    downloadChosen: 'Télécharger {count} sélectionnés',
     downloadAll: 'Tout télécharger',
     downloadRemaining: 'Télécharger les {count} restants',
     allInLibrary: 'Tout est dans votre bibliothèque',

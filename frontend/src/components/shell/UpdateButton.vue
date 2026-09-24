@@ -58,11 +58,6 @@ function onClick(e) {
         icon: 'ph:download-simple',
         action: () => updates.downloadAndInstall(),
       },
-      updates.info.value.url && {
-        label: t('update.releaseNotes'),
-        icon: 'ph:note',
-        action: () => desktop.openExternal(updates.info.value.url),
-      },
       { divider: true },
       { label: t('update.skip'), icon: 'ph:x', action: () => updates.skipVersion() },
     ],

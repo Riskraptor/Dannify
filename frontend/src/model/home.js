@@ -111,6 +111,9 @@ async function load(force = false) {
       // Offline with a restored feed is not an error the user needs to see:
       // the shelves on screen are still playable.
       if (sections.value.length) error.value = ''
+      // Say it is done either way, or the page sits on a greeting and
+      // nothing else with no way to ask again.
+      loaded.value = true
       return sections.value
     })
     .finally(() => {
