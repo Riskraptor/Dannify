@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import re as _re
+import threading
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -53,9 +54,73 @@ def _env(name: str, default: str = '') -> str:
 
 
 
+# Names Windows keeps for devices. A folder or file called any of these (with
+# any extension) cannot be created at all, so an artist named "Aux" failed
+# every download.
+_RESERVED_NAMES = frozenset(
+    ['CON', 'PRN', 'AUX', 'NUL']
+    + [f'COM{i}' for i in range(1, 10)]
+    + [f'LPT{i}' for i in range(1, 10)]
+)
+
+
 def _sanitize(text: str) -> str:
-    safe = _INVALID_FS_CHARS.sub('', text or '').strip().strip('.')
+    safe = _INVALID_FS_CHARS.sub('', text or '').strip().strip('.').strip()
+    if safe.split('.')[0].strip().upper() in _RESERVED_NAMES:
+        safe += '_'
     return safe or 'unknown'
+
+
+class DownloadStopped(Exception):
+    """The download was taken off the queue while it ran."""
+
+
+def _drop_partials(target_dir: Path, basename: str) -> None:
+    """What a stopped download left under its name. A saved song stays, and so
+    does a lyrics file, which may belong to one."""
+
+    import glob as _glob
+
+    for leftover in target_dir.glob(f'{_glob.escape(basename)}.*'):
+        name = leftover.name.lower()
+        if name.endswith('.dnf') or name.endswith('.lrc') or not leftover.is_file():
+            continue
+        try:
+            leftover.unlink()
+        except OSError:
+            pass
+
+
+_target_locks: dict[str, threading.Lock] = {}
+_target_locks_guard = threading.Lock()
+
+
+def _lock_for(target: Path) -> threading.Lock:
+    """The lock for one output name (a folder and a file name without its extension)."""
+
+    key = str(target).lower()
+    with _target_locks_guard:
+        lock = _target_locks.get(key)
+        if lock is None:
+            lock = _target_locks[key] = threading.Lock()
+        return lock
+
+
+def _already_saved(target_dir: Path, basename: str, video_id: str) -> Optional[Path]:
+    """A saved copy of this very song under this name, if one is there and plays."""
+
+    from . import vault  # noqa: PLC0415
+
+    sealed = target_dir / f'{basename}{vault.SUFFIX}'
+    if not sealed.is_file():
+        return None
+    try:
+        head, problem = vault.inspect(sealed)
+    except Exception:
+        return None
+    if problem or not head or not video_id or head.get('video_id') != video_id:
+        return None
+    return sealed
 
 
 # Order matters: yt-dlp tries clients top-to-bottom and uses the first one
@@ -241,6 +306,7 @@ class Downloader:
         song: dict[str, Any],
         progress_cb: Optional[ProgressCallback] = None,
         subdir: Optional[str] = None,
+        cancel: Optional[threading.Event] = None,
     ) -> str:
         """Download ``song`` and return the resulting file name.
 
@@ -294,9 +360,50 @@ class Downloader:
         )
         target_dir, rel_prefix = self._resolve_target_dir(effective_subdir)
         target_dir.mkdir(parents=True, exist_ok=True)
+
+        # One download at a time per file name. Two downloads of the same song
+        # (a double click, a playlist that lists it twice, a monitored
+        # playlist catching up while the user saves it by hand) used to write
+        # the same files at the same time, and the one that lost the race
+        # cleaned up after itself by deleting the song the other had just
+        # saved. The second now waits, and then finds the song already there.
+        with _lock_for(target_dir / basename):
+            already = _already_saved(target_dir, basename, video_id)
+            if already is not None:
+                stage(100.0, 'Done')
+                return f'{rel_prefix}{already.name}'
+            if cancel is not None and cancel.is_set():
+                raise DownloadStopped()
+            try:
+                return self._fetch_and_seal(
+                    song, video_id, target_dir, rel_prefix, basename, stage, progress_cb, cancel,
+                )
+            except BaseException:
+                if cancel is not None and cancel.is_set():
+                    _drop_partials(target_dir, basename)
+                    raise DownloadStopped() from None
+                raise
+
+    def _fetch_and_seal(  # noqa: PLR0913, PLR0914, PLR0915
+        self,
+        song: dict[str, Any],
+        video_id: str,
+        target_dir: Path,
+        rel_prefix: str,
+        basename: str,
+        stage: Callable[[float, str], None],
+        progress_cb: Optional[ProgressCallback],
+        cancel: Optional[threading.Event] = None,
+    ) -> str:
+        """Download, tag and seal one song. Called with its file name locked."""
+
         out_template = str(target_dir / f'{basename}.%(ext)s')
 
         def hook(data: dict[str, Any]) -> None:
+            # Raised outside the try below on purpose: yt-dlp stops the
+            # transfer when a progress hook raises this.
+            if cancel is not None and cancel.is_set():
+                raise yt_dlp.utils.DownloadCancelled('stopped from the queue')
             if progress_cb is None:
                 return
             try:
@@ -331,6 +438,9 @@ class Downloader:
             'noplaylist': True,
             'nocheckcertificate': True,
             'overwrites': True,
+            # A partial file from an earlier attempt is not resumed: a retry
+            # can match a different video, and the two would be spliced.
+            'continuedl': False,
             'progress_hooks': [hook],
             # Resilience against flaky DNS/network in containers.
             # googlevideo.com CDN hosts are short-lived shards and a single
@@ -423,6 +533,8 @@ class Downloader:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             stage(3.0, 'Connecting')
             ydl.download([url])
+        if cancel is not None and cancel.is_set():
+            raise DownloadStopped()
 
         final_path = target_dir / f'{basename}.{self.audio_format}'
         if not final_path.exists():
@@ -501,6 +613,9 @@ class Downloader:
         # was rather than lost.
         from . import vault  # noqa: PLC0415
 
+        if cancel is not None and cancel.is_set():
+            raise DownloadStopped()
+
         # Not optional, and not best effort. Leaving the plain file behind was
         # the one outcome this whole thing exists to prevent: an ordinary audio
         # file in the music folder that any player can open, delivered by a
@@ -529,24 +644,31 @@ class Downloader:
             ):
                 if value and not meta.get(field):
                     meta[field] = value
-            if artists and len(artists) > len(meta.get('artists') or []):
+            # The list the song came with is the right one. Reading it back
+            # from the file's own tags goes through a split on separators
+            # that can cut a name in two ("X Ambassadors"), so it only fills
+            # in when the song had none.
+            if artists:
                 meta['artists'] = list(artists)
             sealed = vault.seal(
                 final_path, final_path.with_suffix(vault.SUFFIX), meta,
             )
-            _remember(self.download_dir, sealed, song, video_id)
-            final_path = sealed
         except Exception as exc:
             logger.opt(exception=True).error('Could not seal {}', final_path)
+            # Only what this attempt wrote. seal() puts a finished container
+            # in place with one rename at the very end, so a .dnf already
+            # there is an earlier, good copy of this song and it stays.
             final_path.unlink(missing_ok=True)
-            for junk in (
-                final_path.with_suffix(vault.SUFFIX),
-                final_path.with_suffix(vault.SUFFIX + '.part'),
-            ):
-                junk.unlink(missing_ok=True)
+            final_path.with_suffix(vault.SUFFIX + '.part').unlink(missing_ok=True)
             raise RuntimeError(
                 'This song downloaded but could not be saved, so it was not kept.'
             ) from exc
+        try:
+            _remember(self.download_dir, sealed, song, video_id)
+        except Exception:
+            # The song is saved; the note of what it is can be rebuilt.
+            logger.opt(exception=True).warning('Could not note {} in the index', sealed)
+        final_path = sealed
 
         if progress_cb:
             progress_cb(100.0, 'Done')

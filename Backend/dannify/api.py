@@ -22,7 +22,7 @@ import asyncio
 import contextlib
 import json
 import re
-import sys
+import threading
 from pathlib import Path
 from typing import Any, Optional
 
@@ -45,7 +45,7 @@ from . import lyrics_index
 from . import lyrics_offsets
 from . import lyrics_publish
 from . import explorer
-from . import m3u, providers, repair, spotify, streaming, support, updates, vault
+from . import layout, m3u, providers, repair, spotify, streaming, support, updates, vault
 from .downloader import Downloader
 from .monitor import PlaylistMonitorDB, check_playlist
 
@@ -278,24 +278,14 @@ def health() -> dict[str, Any]:
             'repairable': state.downloader is not None,
         })
 
-    # An update that did not take. The desktop shell writes down which version
-    # it was about to install; if the app is running something else, the
-    # install was eaten somewhere and nobody would otherwise ever find out.
+    # Dannify 3.x wrote down each update it was about to apply and compared
+    # it on the next start. The launcher applies updates now, and puts the
+    # old version back itself if a new one cannot start, so a note left over
+    # from then could only ever raise a false alarm.
     note = Path(state.data_dir) / 'update-result.json' if state.data_dir else None
     if note is not None and note.is_file():
-        try:
-            wanted = str((json.loads(note.read_text(encoding='utf-8')) or {}).get('version') or '')
-        except Exception:
-            wanted = ''
-        if not wanted or wanted == state.version:
-            with contextlib.suppress(OSError):
-                note.unlink()  # it landed
-        else:
-            problems.append({
-                'code': 'update_failed',
-                'wanted': wanted,
-                'running': state.version,
-            })
+        with contextlib.suppress(OSError):
+            note.unlink()
 
     if base is None or not base.is_dir():
         problems.append({'code': 'folder_missing', 'path': str(base or '')})
@@ -410,8 +400,22 @@ def _song_for_download(url: str) -> dict[str, Any]:
     raise HTTPException(status_code=400, detail='Unsupported URL')
 
 
+# A stop switch per download, set when its row is taken off the queue. The
+# row used to vanish from the list while the download carried on to the end
+# and saved the song anyway.
+_cancels: dict[str, threading.Event] = {}
+# Finished rows are kept for the queue view, but not for ever: a session
+# left open for a week of playlists used to hold every one of them.
+_MAX_JOBS = 400
+
+
 def _register_job(song: dict[str, Any], status: str = 'queued') -> str:
     song_id = str(song.get('song_id') or song.get('url') or id(song))
+    if len(state.download_jobs) >= _MAX_JOBS:
+        finished = [k for k, j in state.download_jobs.items() if j.get('status') in ('done', 'error')]
+        for key in finished[: max(1, len(finished) // 2)]:
+            state.download_jobs.pop(key, None)
+    _cancels[song_id] = threading.Event()
     state.download_jobs[song_id] = {
         'song': song,
         'status': status,
@@ -433,12 +437,16 @@ async def _run_download(
         raise RuntimeError('Downloader not ready')
 
     loop = state.loop or asyncio.get_running_loop()
+    cancel = _cancels.get(song_id)
+    if cancel is not None and cancel.is_set():
+        return None  # taken off the queue before it started
     job = state.download_jobs.get(song_id)
     if job is None:
         song_id = _register_job(song, status='downloading')
         job = state.download_jobs[song_id]
     else:
         job['status'] = 'downloading'
+    cancel = _cancels.setdefault(song_id, threading.Event())
 
     await state.connections.broadcast({
         'song': song,
@@ -465,13 +473,21 @@ async def _run_download(
     sem = state.download_semaphore
     try:
         async with sem if sem is not None else contextlib.nullcontext():
+            if cancel.is_set():
+                return None  # removed while it waited for a free slot
             filename = await loop.run_in_executor(
                 None,
                 lambda: state.downloader.download(
-                    song, progress, subdir=subdir
+                    song, progress, subdir=subdir, cancel=cancel
                 ),
             )
     except Exception as exc:
+        if cancel.is_set():
+            logger.info('Download stopped: {}', song_id)
+            state.download_jobs.pop(song_id, None)
+            _cancels.pop(song_id, None)
+            return None
+        _cancels.pop(song_id, None)
         logger.exception('Download failed for {}', song_id)
         job['status'] = 'error'
         job['message'] = f'Error: {exc}'
@@ -483,6 +499,7 @@ async def _run_download(
         })
         raise
 
+    _cancels.pop(song_id, None)
     job['status'] = 'done'
     job['filename'] = filename
     job['progress'] = 100
@@ -666,12 +683,18 @@ def get_queue() -> list[dict[str, Any]]:
 
 @router.delete('/api/queue')
 def clear_queue() -> dict:
+    # Clearing the list stops what is on it, as removing one row does.
+    for ev in list(_cancels.values()):
+        ev.set()
     state.download_jobs.clear()
     return {'cleared': True}
 
 
 @router.delete('/api/queue/item')
 def remove_queue_item(song_id: str = Query(...)) -> dict:
+    ev = _cancels.get(song_id)
+    if ev is not None:
+        ev.set()
     if song_id in state.download_jobs:
         del state.download_jobs[song_id]
         return {'removed': True}
@@ -2057,59 +2080,84 @@ async def update_check_endpoint(force: int = Query(0)) -> dict[str, Any]:
 async def update_download_endpoint(
     payload: dict[str, Any] = Body(default={})
 ) -> dict[str, Any]:
-    """Fetch the installer, streaming progress over the websocket."""
+    """Get the new version ready, streaming progress over the websocket.
+
+    An installed copy builds the new version beside itself and the launcher
+    swaps it in at the next start ('staged'). Anything else downloads the
+    installer ('installer').
+    """
 
     info = await asyncio.to_thread(updates.check, state.version or '0.0.0', False)
-    url = str(payload.get('url') or info.get('download_url') or '')
-    if not url:
-        raise HTTPException(status_code=404, detail='No installer in the latest release')
-
     loop = state.loop or asyncio.get_running_loop()
 
-    def _progress(percent: float, label: str = '') -> None:
-        # The label matters as much as the number here: most of the wait is
-        # spent working out which files changed, and a bar sitting at zero
-        # with nothing beside it looks like a download that never started.
+    def _progress(percent: float, stage: str = '', done: int = 0, total: int = 0) -> None:
+        # A stage name and byte counts, not a sentence: the interface says it
+        # in the user's language.
         asyncio.run_coroutine_threadsafe(
             state.connections.broadcast(
                 {
                     'type': 'update_progress',
                     'progress': round(percent, 1),
-                    'label': label,
+                    'stage': stage,
+                    'done': int(done or 0),
+                    'total': int(total or 0),
                 }
             ),
             loop,
         )
 
-    dest = Path(state.data_dir or Path.home()) / 'updates'
-
-    # Try to build this update out of just the files that changed. Between
-    # two releases most of the 145 MB on disk is byte for byte identical, so
-    # this is usually a fraction of the installer. It returns None whenever
-    # it cannot be trusted, and then the installer runs as before.
-    app_dir = Path(sys.executable).resolve().parent
-    if getattr(sys, 'frozen', False):
+    if layout.managed() and info.get('package_url'):
         try:
-            staged = await asyncio.to_thread(
-                updates.prepare_delta, app_dir, dest, info, _progress
-            )
-        except Exception:
-            logger.opt(exception=True).info('partial update failed')
-            staged = None
-        if staged is not None:
-            return {
-                'path': str(staged),
-                'version': info.get('version', ''),
-                'kind': 'delta',
-            }
+            staged = await asyncio.to_thread(updates.stage, info, _progress)
+        except Exception as exc:
+            logger.opt(exception=True).info('update could not be prepared')
+            raise HTTPException(status_code=502, detail='update_failed') from exc
+        return {'path': str(staged), 'version': info.get('version', ''), 'kind': 'staged'}
 
+    url = str(payload.get('url') or info.get('download_url') or '')
+    if not url:
+        raise HTTPException(status_code=404, detail='no_download')
+    dest = Path(state.data_dir or Path.home()) / 'updates'
     try:
         path = await asyncio.to_thread(updates.download, url, dest, _progress)
     except Exception as exc:
         logger.opt(exception=True).info('update download failed')
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail='update_failed') from exc
     return {
         'path': str(path),
         'version': info.get('version', ''),
         'kind': 'installer',
     }
+
+
+@router.get('/api/update/status')
+def update_status_endpoint() -> dict[str, Any]:
+    """What the launcher and the last update left for the interface to say."""
+
+    waiting = layout.pending()
+    fresh = layout.just_updated()
+    return {
+        'managed': layout.managed(),
+        'pending': {'version': str(waiting.get('version') or '')} if waiting else None,
+        'just_updated': (
+            {'version': state.version, 'notes': str(fresh.get('notes') or '')[:4000]}
+            if fresh
+            else None
+        ),
+    }
+
+
+@router.post('/api/update/acknowledge')
+def update_acknowledge_endpoint() -> dict[str, Any]:
+    """The "what is new" note was seen: do not show it again."""
+
+    layout.acknowledge_update()
+    return {'ok': True}
+
+
+@router.post('/api/update/discard')
+def update_discard_endpoint() -> dict[str, Any]:
+    """Skipping a version also drops it if it was already waiting."""
+
+    updates.discard_staged()
+    return {'ok': True}

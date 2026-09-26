@@ -3,6 +3,8 @@ Backend/build/
 Backend/dist/
 frontend/dist/
 packaging/out/
+installer/bin/
+installer/obj/
 *.spec.bak
 
 # --- Dependencies ---

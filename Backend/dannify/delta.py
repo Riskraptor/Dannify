@@ -1,64 +1,36 @@
-"""Updates that download only what changed.
+"""Fetching just the files that changed out of a release's package archive.
 
 A release is about 145 MB on disk and roughly 50 MB packed, but between two
 versions almost none of it moves: Python itself, the WebView2 loader, the
 media encoder and every third-party package stay byte for byte identical.
 What actually changes is our own code, the built interface and the
-executable, which together come to a couple of megabytes.
+executable.
 
-So rather than shipping the whole installer every time, each release also
-carries two small things: a manifest listing every file with its hash, and
-a zip of the complete app. The client reads the manifest, works out which
-files it does not already have, and then pulls just those entries out of
-the zip using HTTP range requests. GitHub serves ranges on release assets,
-so this needs no special hosting and no per-version-pair patch files: a copy
-five versions old fetches exactly the same way a copy one version old does.
-
-The full installer is still published and still used when this path cannot
-be trusted, which keeps a bad delta from ever being the only way forward.
+So each release carries a list of every file with its hash
+(package-<version>.json) and a zip of the whole app (package-<version>.zip).
+The updater compares the list against the running copy and pulls only the
+entries it lacks out of the zip with HTTP range requests. GitHub serves
+ranges on release assets, so this needs no special hosting and no
+per-version-pair patch files: a copy five versions old fetches exactly the
+same way a copy one version old does.
 """
 
 from __future__ import annotations
 
 import hashlib
-import io
-import json
-import re
 import struct
 import urllib.request
 import zlib
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from loguru import logger
-
 _USER_AGENT = 'Dannify-Updater'
-# Past this there is nothing to gain over just fetching the installer, and a
-# long series of range requests is more to go wrong.
-MAX_DELTA_BYTES = 40 * 1024 * 1024
 # Zip end-of-central-directory lives in the last 64 KB at worst (it can carry
 # a comment), and the central directory itself is a few hundred KB here.
 _EOCD_SEARCH = 66 * 1024
-
-# An installed copy holds more than our build produces. Setup writes its own
-# uninstaller next to the app and copies the ship-time settings into config/.
-# Neither is in the manifest, which is built from the app folder alone, so a
-# plain "anything the manifest does not list is stale" rule would take the
-# uninstaller away and reset settings the installer owns, on the first
-# partial update. Those files are not ours to remove, whatever is missing
-# from the manifest.
-_INSTALLER_OWNED_DIRS = ('config/',)
-_INSTALLER_OWNED_NAMES = re.compile(r'^unins\d*\.(exe|dat|msg)$', re.IGNORECASE)
-
-
-def is_ours(rel: str) -> bool:
-    """True when *rel* is a file this build produces, and may remove."""
-
-    rel = rel.replace('\\', '/').lstrip('/').lower()
-    if any(rel.startswith(d) for d in _INSTALLER_OWNED_DIRS):
-        return False
-    return not _INSTALLER_OWNED_NAMES.match(rel)
-
+# Two wanted files closer together than this are fetched in one request, gap
+# and all: a round trip costs more than half a megabyte of bytes.
+_JOIN_GAP = 512 * 1024
 
 _EOCD_SIG = b'PK\x05\x06'
 _EOCD64_LOCATOR_SIG = b'PK\x06\x07'
@@ -97,10 +69,6 @@ def _content_length(url: str) -> int:
         return int(response.headers.get('Content-Length') or 0)
 
 
-def _mb(size: int) -> str:
-    return f'{size / 1048576:.1f} MB'
-
-
 def sha256_of(path: Path) -> str:
     digest = hashlib.sha256()
     with open(path, 'rb') as handle:
@@ -123,7 +91,7 @@ def build_manifest(root: Path, version: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Reading single entries out of a remote zip
+# Reading entries out of a remote zip
 # ---------------------------------------------------------------------------
 
 
@@ -140,7 +108,9 @@ class RemoteZip:
         self.size = _content_length(url)
         if self.size <= 0:
             raise RuntimeError('could not size the archive')
-        self._entries: dict[str, tuple[int, int, int, int]] = {}
+        # name -> (method, compressed size, size, local header offset)
+        self.entries: dict[str, tuple[int, int, int, int]] = {}
+        self.dir_offset = 0
         self._read_directory()
 
     def _read_directory(self) -> None:
@@ -162,6 +132,7 @@ class RemoteZip:
                 raise RuntimeError('bad zip64 end record')
             count = struct.unpack('<Q', head[32:40])[0]
             dir_size, dir_offset = struct.unpack('<QQ', head[40:56])
+        self.dir_offset = dir_offset
 
         blob = _get(self.url, dir_offset, dir_offset + dir_size - 1)
         pos = 0
@@ -185,45 +156,8 @@ class RemoteZip:
                 comp_size, uncomp_size, local_offset = _zip64_extra(
                     extra, comp_size, uncomp_size, local_offset
                 )
-            self._entries[name] = (method, comp_size, uncomp_size, local_offset)
+            self.entries[name] = (method, comp_size, uncomp_size, local_offset)
             pos += 46 + name_len + extra_len + comment_len
-
-    def names(self) -> list[str]:
-        return list(self._entries)
-
-    def compressed_size(self, name: str) -> int:
-        return self._entries[name][1]
-
-    def read(self, name: str, on_bytes: Optional[Callable[[int], None]] = None) -> bytes:
-        """Fetch and decompress one entry.
-
-        *on_bytes* is called with each chunk's size as it arrives. The app
-        executable is thirteen megabytes on its own, so without this the
-        progress bar would sit still for most of the download and then jump.
-        """
-
-        method, comp_size, uncomp_size, local_offset = self._entries[name]
-        # The local header repeats the name and may carry a different extra
-        # field, so read it to learn where the data actually starts.
-        header = _get(self.url, local_offset, local_offset + 29)
-        if header[:4] != b'PK\x03\x04':
-            raise RuntimeError(f'bad local header for {name}')
-        name_len, extra_len = struct.unpack('<HH', header[26:30])
-        start = local_offset + 30 + name_len + extra_len
-        raw = (
-            _get(self.url, start, start + comp_size - 1, on_bytes=on_bytes)
-            if comp_size
-            else b''
-        )
-        if method == 0:
-            data = raw
-        elif method == 8:
-            data = zlib.decompress(raw, -15)
-        else:
-            raise RuntimeError(f'unsupported compression ({method}) for {name}')
-        if uncomp_size and len(data) != uncomp_size:
-            raise RuntimeError(f'short read for {name}')
-        return data
 
 
 def _zip64_extra(
@@ -250,20 +184,21 @@ def _zip64_extra(
     return comp, uncomp, offset
 
 
-# ---------------------------------------------------------------------------
-# Planning and fetching
-# ---------------------------------------------------------------------------
+def inside(root: Path, rel: str) -> bool:
+    """Whether *rel* names something within *root*, and nothing else.
 
-
-def _inside(root: Path, rel: str) -> bool:
-    """Whether *rel* names something within *root*, and nothing else."""
+    Every name here came off the network and is about to be used as a path to
+    write to. Path('C:/app') / 'C:/Windows/x.dll' is 'C:/Windows/x.dll' on
+    Windows: an absolute right-hand side wins outright, and '..' walks out
+    just as easily.
+    """
 
     text = str(rel or '')
     if not text or text != text.strip():
         return False
     if text.startswith(('/', '\\')) or ':' in text:
         return False
-    if any(part in ('..', '') for part in text.replace('\\', '/').split('/')):
+    if any(part in ('..', '.', '') for part in text.replace('\\', '/').split('/')):
         return False
     try:
         (Path(root) / text).resolve().relative_to(Path(root).resolve())
@@ -272,141 +207,77 @@ def _inside(root: Path, rel: str) -> bool:
     return True
 
 
-def plan(
-    app_dir: Path,
-    manifest: dict[str, Any],
-    progress: Optional[Callable[..., None]] = None,
-) -> dict[str, Any]:
-    """Work out what this installation is missing.
-
-    Returns ``{changed, removed, bytes}``. Hashing the folder costs a second
-    or two of disk, which is nothing against downloading fifty megabytes, but
-    it is a second or two with nothing on screen, so it reports as it goes.
-
-    Progress is counted in bytes, not in files. Of the couple of hundred
-    files here one is ninety six megabytes and most of the rest are tiny, so
-    counting files put the bar at ninety percent while nine tenths of the
-    work was still to come.
-    """
-
-    app_dir = Path(app_dir).resolve()
-    wanted = manifest.get('files') or {}
-    # Every name here came off the network, and every one of them is about to
-    # be used as a path to write to. Path('C:/app') / 'C:/Windows/x.dll' is
-    # 'C:/Windows/x.dll' on Windows: an absolute right-hand side wins outright,
-    # and '..' walks out just as easily. So a manifest is checked before it is
-    # believed, and one that is not entirely inside the install folder is not
-    # partially applied, it is refused.
-    for rel in wanted:
-        if not _inside(app_dir, rel):
-            raise ValueError(f'manifest entry outside the install folder: {rel!r}')
-
-    changed: list[str] = []
-    total = 0
-    read = 0
-    to_read = sum(int(m.get('size') or 0) for m in wanted.values()) or 1
-    for rel, meta in wanted.items():
-        local = app_dir / rel
-        read += int(meta.get('size') or 0)
-        # A fraction of this stage, not of the whole update: the caller owns
-        # the scale and decides how much of the bar this part is worth.
-        if progress:
-            progress(read / to_read)
-        try:
-            if not local.is_file() or local.stat().st_size != meta['size']:
-                changed.append(rel)
-                total += int(meta['size'])
-                continue
-            if sha256_of(local) != meta['sha256']:
-                changed.append(rel)
-                total += int(meta['size'])
-        except OSError:
-            changed.append(rel)
-            total += int(meta.get('size') or 0)
-
-    have = {
-        p.relative_to(app_dir).as_posix()
-        for p in app_dir.rglob('*')
-        if p.is_file()
-    }
-    removed = sorted(rel for rel in have - set(wanted) if is_ours(rel))
-    return {'changed': changed, 'removed': removed, 'bytes': total}
-
-
 def fetch(
     zip_url: str,
     names: list[str],
     into: Path,
     progress: Optional[Callable[..., None]] = None,
 ) -> None:
-    """Pull *names* out of the remote zip and write them under *into*."""
+    """Pull *names* out of the remote zip and write them under *into*.
+
+    Entries sit back to back in the archive, so wanted ones that are close
+    together are fetched in one request: a whole update is usually a handful
+    of requests rather than two for every file.
+    """
 
     into = Path(into)
     into.mkdir(parents=True, exist_ok=True)
     archive = RemoteZip(zip_url)
-    missing = [n for n in names if n not in archive.names()]
+    missing = [n for n in names if n not in archive.entries]
     if missing:
         raise RuntimeError(f'{len(missing)} file(s) not in the archive')
-
-    done = 0
-    total = sum(archive.compressed_size(n) for n in names) or 1
-
     for name in names:
-        got = [0]
-
-        def on_bytes(count: int, _got=got, _done=done) -> None:
-            _got[0] += count
-            if progress:
-                moved = _done + _got[0]
-                progress(moved / total, f'Downloading, {_mb(moved)} of {_mb(total)}')
-
-        if progress:
-            progress(done / total, f'Downloading, {_mb(done)} of {_mb(total)}')
-        data = archive.read(name, on_bytes=on_bytes)
-        # Checked again here, because the names come from the zip's own
-        # directory this time rather than the manifest, and that is a second
-        # piece of downloaded data being used as a path.
-        if not _inside(into, name):
+        if not inside(into, name):
             raise ValueError(f'archive entry outside the staging folder: {name!r}')
-        target = into / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
-        done += archive.compressed_size(name)
+
+    # Each entry runs from its local header to the next entry's.
+    order = sorted((meta[3], name) for name, meta in archive.entries.items())
+    ends: dict[str, int] = {}
+    for index, (offset, name) in enumerate(order):
+        ends[name] = order[index + 1][0] if index + 1 < len(order) else archive.dir_offset
+
+    groups: list[list[Any]] = []
+    for name in sorted(names, key=lambda n: archive.entries[n][3]):
+        start, end = archive.entries[name][3], ends[name]
+        if groups and start - groups[-1][1] <= _JOIN_GAP:
+            groups[-1][1] = max(groups[-1][1], end)
+            groups[-1][2].append(name)
+        else:
+            groups.append([start, end, [name]])
+
+    total = sum(end - start for start, end, _ in groups) or 1
+    moved = [0]
+
+    def on_bytes(count: int) -> None:
+        moved[0] += count
+        if progress:
+            progress(min(1.0, moved[0] / total), moved[0], total)
+
+    for start, end, members in groups:
+        blob = _get(zip_url, start, end - 1, on_bytes=on_bytes)
+        if len(blob) != end - start:
+            raise RuntimeError('short read from the archive')
+        for name in members:
+            method, comp_size, uncomp_size, offset = archive.entries[name]
+            at = offset - start
+            header = blob[at : at + 30]
+            if header[:4] != b'PK\x03\x04':
+                raise RuntimeError(f'bad local header for {name}')
+            name_len, extra_len = struct.unpack('<HH', header[26:30])
+            data_at = at + 30 + name_len + extra_len
+            raw = blob[data_at : data_at + comp_size]
+            if len(raw) != comp_size:
+                raise RuntimeError(f'short entry {name}')
+            if method == 0:
+                data = raw
+            elif method == 8:
+                data = zlib.decompress(raw, -15)
+            else:
+                raise RuntimeError(f'unsupported compression ({method}) for {name}')
+            if len(data) != uncomp_size:
+                raise RuntimeError(f'wrong size for {name}')
+            target = into / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
     if progress:
-        progress(1.0, f'Downloaded {_mb(total)}')
-
-
-def write_plan(staging: Path, manifest: dict[str, Any], removed: list[str]) -> Path:
-    """Leave instructions the applier can follow after we have exited."""
-
-    staging = Path(staging)
-    staging.mkdir(parents=True, exist_ok=True)
-    path = staging / 'apply.json'
-    path.write_text(
-        json.dumps(
-            {
-                'version': manifest.get('version', ''),
-                'removed': removed,
-                'files': manifest.get('files', {}),
-            },
-            indent=2,
-        ),
-        encoding='utf-8',
-    )
-    return path
-
-
-def verify_staged(staging: Path, changed: list[str], manifest: dict[str, Any]) -> bool:
-    """Every downloaded file must match the manifest before anything moves."""
-
-    files = manifest.get('files') or {}
-    for rel in changed:
-        meta = files.get(rel)
-        local = Path(staging) / rel
-        if meta is None or not local.is_file():
-            logger.debug('staged file missing: {}', rel)
-            return False
-        if local.stat().st_size != meta['size'] or sha256_of(local) != meta['sha256']:
-            logger.debug('staged file does not match the manifest: {}', rel)
-            return False
-    return True
+        progress(1.0, total, total)

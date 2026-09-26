@@ -1,8 +1,16 @@
-"""Update checks against GitHub releases.
+"""Update checks against GitHub releases, and getting a new version ready.
 
-The app asks GitHub for the latest release, compares it with the running
-version and: when the user agrees. Downloads the Windows installer and
-hands it to the desktop shell, which runs it and relaunches the app.
+An installed Dannify (see layout.py) updates without ever touching a file
+that is in use. The new version is assembled next to the running one, in
+app-next: every file that did not change is hard-linked from the running
+copy (no download, no extra disk space), and only the files that changed are
+pulled out of the release's package archive with HTTP range requests. Once
+every file checks out against the release's list, a marker is written and
+the folder is renamed into place in one step. The launcher swaps it in at
+the next start, or straight away for "restart to update".
+
+A copy that is not installed that way (run from source, or copied somewhere
+by hand) cannot do that, and downloads the installer instead.
 
 Point it at your repository with ``DANNIFY_UPDATE_REPO=owner/name`` (or edit
 ``DEFAULT_REPO``). Nothing here needs a token: public releases only.
@@ -10,6 +18,7 @@ Point it at your repository with ``DANNIFY_UPDATE_REPO=owner/name`` (or edit
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -17,19 +26,20 @@ import shutil
 import threading
 import time
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from loguru import logger
+
+from . import layout
 
 # Releases live in their own public repository. The source repository is
 # private, and a private one's releases need a token: shipping a token in
 # the app would hand every copy read access to the source, which is worse
 # than publishing it.
 DEFAULT_REPO = 'DANIELMWENDWA9451/dannify-releases'
-# Where About sends people: the page the builds are on. There is no separate
-# product site, so pointing at one that does not exist would just be a dead
-# button.
+# Where About sends people: the page the builds are on.
 SITE_URL = 'https://github.com/DANIELMWENDWA9451/dannify-releases/releases'
 CHECK_TTL = 60 * 60 * 6  # re-check at most every 6 hours
 _USER_AGENT = 'Dannify-Updater'
@@ -37,6 +47,7 @@ _USER_AGENT = 'Dannify-Updater'
 _lock = threading.Lock()
 _cache: dict[str, Any] = {'at': 0.0, 'result': None}
 _settings: dict[str, Any] = {'repo': '', 'channel': 'stable'}
+_stage_lock = threading.Lock()
 
 
 def init(data_dir: Path) -> None:
@@ -73,6 +84,15 @@ def repo() -> str:
     ).strip('/ ')
 
 
+def _api_base() -> str:
+    # Tests point the updater at a release server on this machine. Nothing
+    # else is accepted, so the variable cannot send a real copy anywhere.
+    override = os.getenv('DANNIFY_UPDATE_API', '').strip().rstrip('/')
+    if re.match(r'^http://(127\.0\.0\.1|localhost)(:\d+)?(/|$)', override):
+        return override
+    return 'https://api.github.com'
+
+
 def _version_tuple(value: str) -> tuple[int, ...]:
     parts = re.findall(r'\d+', str(value or ''))
     return tuple(int(p) for p in parts[:4]) or (0,)
@@ -94,8 +114,14 @@ def _get(url: str) -> Any:
         return json.loads(response.read().decode('utf-8'))
 
 
+def _get_text(url: str) -> str:
+    request = urllib.request.Request(url, headers={'User-Agent': _USER_AGENT})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read().decode('utf-8')
+
+
 def _fetch_latest() -> dict[str, Any]:
-    base = f'https://api.github.com/repos/{repo()}/releases'
+    base = f'{_api_base()}/repos/{repo()}/releases'
     if _settings['channel'] == 'prerelease':
         # /latest skips pre-releases, so early adopters read the full list.
         for release in _get(f'{base}?per_page=10') or []:
@@ -116,7 +142,7 @@ def _asset(assets: list, prefix: str, suffix: str) -> str:
 
 
 def check(current_version: str, force: bool = False) -> dict[str, Any]:
-    """Return ``{available, version, notes, url, download_url, size}``."""
+    """Return ``{available, version, notes, url, download_url, size, ...}``."""
 
     now = time.time()
     with _lock:
@@ -137,10 +163,11 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         # The product page. About links here rather than at a repository:
         # nothing in the app should send anyone looking for source code.
         'site_url': SITE_URL,
-        # The pieces a partial update needs. Absent on older releases, in
-        # which case the installer is the only route and that is fine.
-        'manifest_url': '',
-        'files_url': '',
+        # What an installed copy updates from: every file's hash, and an
+        # archive to take the changed ones out of.
+        'package_manifest_url': '',
+        'package_url': '',
+        'managed': layout.managed(),
     }
     try:
         data = _fetch_latest()
@@ -153,22 +180,24 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
                 if str(a.get('name', '')).lower().endswith('.exe')
                 and 'setup' in str(a.get('name', '')).lower()
             ),
-            next(
-                (a for a in assets if str(a.get('name', '')).lower().endswith('.exe')),
-                None,
-            ),
+            None,
         )
+        available = bool(tag) and is_newer(tag, current_version)
+        # A version that could not start on this PC was rolled back by the
+        # launcher; offering it again would only go round in circles.
+        if available and tag == layout.skipped_version():
+            available = False
         result.update(
             {
-                'available': bool(tag) and is_newer(tag, current_version),
+                'available': available,
                 'version': tag,
                 'notes': (data.get('body') or '')[:4000],
                 'url': data.get('html_url') or '',
                 'download_url': (installer or {}).get('browser_download_url', ''),
                 'size': int((installer or {}).get('size') or 0),
                 'published_at': data.get('published_at') or '',
-                'manifest_url': _asset(assets, 'manifest-', '.json'),
-                'files_url': _asset(assets, 'files-', '.zip'),
+                'package_manifest_url': _asset(assets, 'package-', '.json'),
+                'package_url': _asset(assets, 'package-', '.zip'),
             }
         )
     except Exception as exc:  # offline, rate-limited, no releases yet…
@@ -188,47 +217,37 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
 class Progress:
     """One honest 0 to 100 for a whole update, not one per stage.
 
-    Each stage used to report its own percentage into the same bar, so the
-    number ran to a hundred, dropped back to nothing and climbed again. Worse,
-    the download stage only reported once a file had finished, and the app
-    executable is twelve megabytes of a fourteen megabyte update: the bar sat
-    at zero for the entire download and then jumped to ninety something.
-
-    Stages get a slice of the bar here, sized roughly by how long they take.
-    The number only ever goes up, and it is never sent more than a few times
-    a second, because a thousand websocket messages help nobody.
+    Stages get a slice of the bar, sized roughly by how long they take. The
+    number only ever goes up, and is never sent more often than it moves by a
+    fifth of a percent: a thousand websocket messages help nobody. What is
+    sent is a stage name, not a sentence, so the interface can say it in the
+    user's language.
     """
 
     def __init__(self, send: Optional[Callable[..., None]]) -> None:
         self._send = send
         self._low = 0.0
         self._high = 1.0
-        self._label = ''
+        self._stage = ''
         self._last = -1.0
 
-    def stage(self, label: str, low: float, high: float) -> None:
-        self._label, self._low, self._high = label, low, high
+    def stage(self, name: str, low: float, high: float) -> None:
+        self._stage, self._low, self._high = name, low, high
         self(0.0)
 
-    def __call__(self, fraction: float, detail: str = '') -> None:
+    def __call__(self, fraction: float, done: int = 0, total: int = 0) -> None:
         if self._send is None:
             return
         fraction = max(0.0, min(1.0, fraction))
         value = (self._low + (self._high - self._low) * fraction) * 100.0
-        # Never backwards, and never more than one step of a fifth of a
-        # percent: the bar animates between points on its own.
         if value < self._last + 0.2 and fraction < 1.0:
             return
         self._last = value
-        self._send(round(value, 1), detail or self._label)
+        self._send(round(value, 1), self._stage, done, total)
 
     def done(self) -> None:
         self._last = -1.0
         self.__call__(1.0)
-
-
-def _megabytes(done: int, total: int) -> str:
-    return f'{done / 1048576:.1f} of {total / 1048576:.1f} MB'
 
 
 def download(
@@ -236,7 +255,7 @@ def download(
     dest_dir: Path,
     progress_cb: Optional[Callable[..., None]] = None,
 ) -> Path:
-    """Download the installer, reporting 0-100 progress."""
+    """Download the installer (for a copy that cannot update in place)."""
 
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -244,7 +263,7 @@ def download(
     target = dest_dir / name
     partial = target.with_suffix(target.suffix + '.part')
     bar = Progress(progress_cb)
-    bar.stage('Downloading the installer', 0.0, 0.98)
+    bar.stage('downloading', 0.0, 0.98)
     request = urllib.request.Request(url, headers={'User-Agent': _USER_AGENT})
     with urllib.request.urlopen(request, timeout=30) as response:
         total = int(response.headers.get('Content-Length') or 0)
@@ -257,89 +276,144 @@ def download(
                 handle.write(chunk)
                 done += len(chunk)
                 if total:
-                    bar(done / total, f'Downloading the installer, {_megabytes(done, total)}')
-    bar.stage('Ready to install', 0.98, 1.0)
+                    bar(done / total, done, total)
+    # A connection that closes early ends the loop just like a finished one
+    # does. A setup that is short is no use to anyone, so say so here rather
+    # than hand it over as ready.
+    if total and done != total:
+        partial.unlink(missing_ok=True)
+        raise RuntimeError(f'download stopped early ({done} of {total} bytes)')
     partial.replace(target)
     bar.done()
     logger.info('Update downloaded to {}', target)
     return target
 
 
-def prepare_delta(
-    app_dir: Path,
-    dest_dir: Path,
-    info: dict[str, Any],
-    progress: Optional[Callable[..., None]] = None,
-) -> Optional[Path]:
-    """Try to assemble this update from just the files that changed.
+# ---------------------------------------------------------------------------
+# Getting the next version ready beside this one
+# ---------------------------------------------------------------------------
 
-    Returns the staging folder when it worked, or None to say "use the
-    installer". Every failure returns None rather than raising: a partial
-    update is an optimisation, and the full path is always there.
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, 'rb') as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _link_or_copy(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # Same file, second name: no copy, no extra space. The running copy
+        # never writes to its own files, so sharing them is safe.
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
+
+def stage(info: dict[str, Any], progress: Optional[Callable[..., None]] = None) -> Path:
+    """Build the new version in <root>\\app-next and mark it ready.
+
+    Raises on anything that goes wrong; a half-made folder is removed and
+    nothing the running copy uses is ever touched.
     """
 
     from . import delta
 
-    manifest_url = str(info.get('manifest_url') or '')
-    files_url = str(info.get('files_url') or '')
-    if not manifest_url or not files_url:
-        logger.debug('release has no update assets; using the installer')
-        return None
+    base, here = layout.root(), layout.app_dir()
+    if base is None or here is None:
+        raise RuntimeError('this copy cannot update in place')
+    manifest_url = str(info.get('package_manifest_url') or '')
+    zip_url = str(info.get('package_url') or '')
+    if not manifest_url or not zip_url:
+        raise RuntimeError('the release has no package')
 
-    # Shares of the bar, sized by how long each part actually takes. Reading
-    # the release is one small request; checking is a second of hashing; the
-    # download is everything else.
-    bar = Progress(progress)
-    staging: Optional[Path] = None
-
-    try:
-        bar.stage('Reading the release', 0.0, 0.04)
+    with _stage_lock:
+        bar = Progress(progress)
+        bar.stage('reading', 0.0, 0.03)
         manifest = json.loads(_get_text(manifest_url))
-        if not isinstance(manifest, dict) or not manifest.get('files'):
-            return None
+        files: dict[str, Any] = manifest.get('files') or {}
+        version = str(manifest.get('version') or info.get('version') or '')
+        if not files or not version:
+            raise RuntimeError('the release package list is empty')
 
-        bar.stage('Checking what changed', 0.04, 0.14)
-        found = delta.plan(app_dir, manifest, bar)
-        changed, removed, size = found['changed'], found['removed'], found['bytes']
-        if not changed and not removed:
-            logger.debug('nothing to fetch; already up to date on disk')
-            return None
-        if size > delta.MAX_DELTA_BYTES:
+        tmp = base / f'app-next.tmp-{os.urandom(4).hex()}'
+        for rel in files:
+            if not delta.inside(tmp, rel):
+                raise ValueError(f'package entry outside the app folder: {rel!r}')
+
+        try:
+            bar.stage('checking', 0.03, 0.12)
+            keep: list[str] = []
+            fetch: list[str] = []
+            total_bytes = sum(int(m.get('size') or 0) for m in files.values()) or 1
+            seen = 0
+            for rel, meta in files.items():
+                local = here / rel
+                seen += int(meta.get('size') or 0)
+                bar(seen / total_bytes)
+                try:
+                    if local.is_file() and local.stat().st_size == meta['size'] and _sha256(local) == meta['sha256']:
+                        keep.append(rel)
+                        continue
+                except OSError:
+                    pass
+                fetch.append(rel)
+
+            fetch_bytes = sum(int(files[rel]['size']) for rel in fetch)
             logger.info(
-                'Partial update would be {:.0f} MB; taking the installer instead',
-                size / 1048576,
+                'Update {}: {} file(s) to fetch ({:.1f} MB), {} unchanged',
+                version, len(fetch), fetch_bytes / 1048576, len(keep),
             )
-            return None
 
-        logger.info(
-            'Partial update: {} file(s), {:.1f} MB of {:.1f} MB total',
-            len(changed),
-            size / 1048576,
-            sum(f['size'] for f in manifest['files'].values()) / 1048576,
-        )
+            bar.stage('downloading', 0.12, 0.92)
+            if fetch:
+                delta.fetch(zip_url, fetch, tmp, bar)
+            for rel in keep:
+                _link_or_copy(here / rel, tmp / rel)
 
-        staging = Path(dest_dir) / f'delta-{manifest.get("version", "next")}'
-        if staging.exists():
-            shutil.rmtree(staging, ignore_errors=True)
-        bar.stage('Downloading', 0.14, 0.93)
-        delta.fetch(files_url, changed, staging, bar)
+            bar.stage('verifying', 0.92, 0.99)
+            for index, rel in enumerate(fetch):
+                meta = files[rel]
+                target = tmp / rel
+                if not target.is_file() or target.stat().st_size != meta['size'] or _sha256(target) != meta['sha256']:
+                    raise RuntimeError(f'downloaded file does not match: {rel}')
+                bar((index + 1) / max(1, len(fetch)))
+            for rel in keep:
+                if (tmp / rel).stat().st_size != files[rel]['size']:
+                    raise RuntimeError(f'kept file does not match: {rel}')
 
-        bar.stage('Checking the download', 0.93, 1.0)
-        if not delta.verify_staged(staging, changed, manifest):
-            logger.warning('Partial update failed verification; using the installer')
-            shutil.rmtree(staging, ignore_errors=True)
-            return None
+            (tmp / layout.READY).write_text(
+                json.dumps(
+                    {
+                        'version': version,
+                        'notes': str(info.get('notes') or '')[:4000],
+                        'staged': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+                    }
+                ),
+                encoding='utf-8',
+            )
 
-        delta.write_plan(staging, manifest, removed)
-        bar.done()
-        return staging
-    except Exception as exc:
-        logger.info('Partial update not possible ({}); using the installer', exc)
-        # Half a download is of no use to anybody, and it used to stay in the
-        # data folder for good once the installer had taken over.
-        if staging is not None:
-            shutil.rmtree(staging, ignore_errors=True)
-        return None
+            final = base / layout.STAGING
+            if final.exists():
+                # An older update that was waiting: this one replaces it.
+                shutil.rmtree(final, ignore_errors=True)
+                if final.exists():
+                    raise RuntimeError('an older update could not be cleared away')
+            os.replace(tmp, final)
+            bar.done()
+            logger.info('Update {} is ready for the next start', version)
+            return final
+        except BaseException:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise
+
+
+def discard_staged() -> None:
+    folder = layout.staging()
+    if folder is not None and folder.exists():
+        shutil.rmtree(folder, ignore_errors=True)
 
 
 _DOWNLOADED = re.compile(r'^(?:delta-|Dannify-Setup-)(\d+(?:\.\d+)*)(?:\.exe)?(?:\.part)?$')
@@ -374,9 +448,3 @@ def prune_downloads(dest_dir: Path, current: str) -> list[str]:
     if removed:
         logger.info('Cleared old update downloads: {}', ', '.join(sorted(removed)))
     return removed
-
-
-def _get_text(url: str) -> str:
-    request = urllib.request.Request(url, headers={'User-Agent': _USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read().decode('utf-8')

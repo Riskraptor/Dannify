@@ -17,27 +17,88 @@ console.log('session ID: ', sessionID)
 
 getVersion()
 
-const wsConnection = new WebSocket(
-  `${config.WS_PROTOCOL}//${config.BACKEND}${
-    config.PORT !== '' ? ':' + config.PORT : ''
-  }${config.BASEURL}/api/ws?client_id=${sessionID}`
-)
+// The live channel: download progress, library changes, files opened from
+// Explorer. It used to be opened once and never again, so a single drop
+// (the PC sleeping, a network change) silently stopped all of that for the
+// rest of the session. Now it comes back on its own, waiting a little longer
+// after each failed attempt, and tells the library to catch up on whatever
+// it missed while it was away.
+const WS_URL = `${config.WS_PROTOCOL}//${config.BACKEND}${
+  config.PORT !== '' ? ':' + config.PORT : ''
+}${config.BASEURL}/api/ws?client_id=${sessionID}`
+let wsConnection = null
+let wsOnMessage = null
+let wsOnError = null
+let wsAttempts = 0
+let wsOpenedOnce = false
+let wsClosing = false
 
-wsConnection.onopen = (event) => {
-  console.log('websocket connection opened', event)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    wsClosing = true
+  })
+}
+
+function connectWs() {
+  let ws
+  try {
+    ws = new WebSocket(WS_URL)
+  } catch {
+    scheduleReconnect()
+    return
+  }
+  wsConnection = ws
+  ws.onopen = () => {
+    wsAttempts = 0
+    if (wsOpenedOnce && wsOnMessage) {
+      // Anything that changed while the channel was down.
+      wsOnMessage({ data: JSON.stringify({ type: 'library_changed' }) })
+    }
+    wsOpenedOnce = true
+  }
+  ws.onmessage = (event) => wsOnMessage && wsOnMessage(event)
+  ws.onerror = (event) => wsOnError && wsOnError(event)
+  ws.onclose = () => {
+    if (wsConnection === ws) scheduleReconnect()
+  }
+}
+
+function scheduleReconnect() {
+  if (wsClosing) return
+  const wait = Math.min(15000, 1000 * 2 ** Math.min(wsAttempts, 4))
+  wsAttempts += 1
+  setTimeout(connectWs, wait)
+}
+
+connectWs()
+
+function readStored(key) {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeStored(key, value) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // Blocked storage: the value just does not outlive the session.
+  }
 }
 
 // The version, live. It used to be read out of storage once when Settings was
 // set up, so a check that failed at startup wrote "0.0.0" there and About
 // went on showing it for the rest of the session, however many times the
 // request would have succeeded since.
-export const appVersion = ref(localStorage.getItem('version') || '')
+export const appVersion = ref(readStored('version') || '')
 
 function getVersion(attempt = 0) {
   API.get('/api/version')
     .then((res) => {
-      const prevItem = localStorage.getItem('version')
-      localStorage.setItem('version', res.data)
+      const prevItem = readStored('version')
+      writeStored('version', res.data)
       appVersion.value = res.data
       // Reload only after an upgrade (stale cached assets). A first run has
       // nothing stale: reloading would just flash the window.
@@ -52,7 +113,7 @@ function getVersion(attempt = 0) {
         setTimeout(() => getVersion(attempt + 1), 1000 * (attempt + 1))
         return
       }
-      localStorage.setItem('version', '0.0.0')
+      writeStored('version', '0.0.0')
       appVersion.value = ''
     })
 }
@@ -197,6 +258,15 @@ function checkForUpdate(force = false) {
 function downloadUpdate(url) {
   return API.post('/api/update/download', url ? { url } : {}, { timeout: 0 })
 }
+function updateStatus() {
+  return API.get('/api/update/status')
+}
+function acknowledgeUpdate() {
+  return API.post('/api/update/acknowledge')
+}
+function discardUpdate() {
+  return API.post('/api/update/discard')
+}
 
 // --- Online explorer (Spotify-style discovery) ---
 function exploreSearch(q, limit = 20) {
@@ -283,10 +353,12 @@ function setSettings(settings) {
 }
 
 function ws_onmessage(fn) {
-  return (wsConnection.onmessage = fn)
+  wsOnMessage = fn
+  return fn
 }
 function ws_onerror(fn) {
-  return (wsConnection.onerror = fn)
+  wsOnError = fn
+  return fn
 }
 
 export default {
@@ -345,4 +417,7 @@ export default {
   getSupportConfig,
   checkForUpdate,
   downloadUpdate,
+  updateStatus,
+  acknowledgeUpdate,
+  discardUpdate,
 }

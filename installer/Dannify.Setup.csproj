@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Dannify's installer, uninstaller and launcher: one small program.
+
+    Built against .NET Framework 4.8, which every supported Windows 10 and 11
+    already has, so nobody has to install a runtime to install Dannify.
+
+      Dannify-Setup-<version>.exe   this program with the app packed on the end
+      <install>\Dannify.exe         the same program without it: it starts the
+                                    app, applies a waiting update first, and
+                                    removes Dannify when asked to
+
+    Build: dotnet build -c Release (packaging\build.ps1 does it for you).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>DannifySetup</AssemblyName>
+    <RootNamespace>Dannify.Setup</RootNamespace>
+    <StartupObject>Dannify.Setup.Program</StartupObject>
+    <ApplicationIcon>..\Backend\assets\dannify.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <Optimize>true</Optimize>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- One file is shipped, so there is no .exe.config next to it. -->
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+    <Product>Dannify</Product>
+    <Company>Dannify</Company>
+    <AssemblyTitle>Dannify</AssemblyTitle>
+    <Description>Dannify</Description>
+    <Copyright>Dannify</Copyright>
+    <!-- Stamped by packaging\build.ps1 from Backend\dannify\__init__.py. -->
+    <Version>4.0.0</Version>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- The SDK appends the git commit to the product version by default.
+         The source is private; its commit ids have no business in a file
+         anyone can right-click. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Fonts\*.ttf" />
+  </ItemGroup>
+</Project>

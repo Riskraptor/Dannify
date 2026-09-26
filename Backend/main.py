@@ -464,8 +464,14 @@ def _extract_cover(path: Path) -> tuple[bytes | None, str | None]:
 
 
 def build_app() -> FastAPI:
-    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     DATABASE_DIR.mkdir(parents=True, exist_ok=True)
+    # The default music folder may not be the one in use (a folder chosen in
+    # Settings is picked up below), and a Music folder redirected somewhere
+    # that is not reachable yet used to stop the whole app from starting.
+    try:
+        DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        logger.warning('The default music folder cannot be made right now: {}', DOWNLOAD_DIR)
 
     # A shipped build serves no interactive API docs: /docs and
     # /openapi.json would hand anyone a complete map of the backend.
@@ -701,7 +707,7 @@ def build_app() -> FastAPI:
 
     _support.init(DATABASE_DIR)
     # What saved music is sealed with. Made once, kept for good; the
-    # uninstaller is told to leave it alone (see packaging/dannify.iss). Then
+    # uninstaller leaves it alone (see installer/Core/Engine.cs). Then
     # joined to the music folder, which keeps its own copy, so the two can
     # never again drift apart and leave the songs unopenable (see vault.attach).
     from dannify import vault as _vault
@@ -968,15 +974,23 @@ def build_app() -> FastAPI:
         # keystream that does not fit and answered with a flawless 206 full of
         # noise. The player got a response that looked perfect and sounded
         # like nothing, which is not a state anybody can debug.
-        head = vault.read_header(target)
+        #
+        # Read off the event loop: every seek is a new range request that
+        # lands here, and doing the file work inline held up every other
+        # request (another device's audio, the websocket) while it ran.
+        def _look() -> tuple:
+            found = vault.read_header(target)
+            if found is None:
+                return None, 0, None
+            return found, vault.audio_size(target), target.stat()
+
+        head, total, stat = await asyncio.to_thread(_look)
         if head is None:
             logger.error('cannot open {}', target.name)
             await _Resp(status_code=409)(scope, receive, send)
             return
 
         media = MIME.get(str(head.get('ext', '')).lower(), 'audio/mpeg')
-        total = vault.audio_size(target)
-        stat = target.stat()
 
         start, end = 0, total - 1
         status = 200
@@ -1110,7 +1124,7 @@ def build_app() -> FastAPI:
 
         target = Path(target)
         if b'cover=1' in scope.get('query_string', b''):
-            data, mime = _extract_cover(target)
+            data, mime = await asyncio.to_thread(_extract_cover, target)
             if not data:
                 await PlainTextResponse('Not Found', status_code=404)(
                     scope, receive, send,

@@ -37,12 +37,22 @@ _libraryIndex.load()
 const VOLUME_KEY = 'dannify-player-volume'
 
 const playlist = ref([])
+// Storage can refuse to be read (blocked, or a browser in private mode on
+// the LAN), and a throw here, while the module loads, blanked the whole app.
+function readStored(key) {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
 const currentIndex = ref(-1)
 const isPlaying = ref(false)
 const isBuffering = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
-const volume = ref(parseFloat(localStorage.getItem(VOLUME_KEY) || '0.85'))
+const volume = ref(parseFloat(readStored(VOLUME_KEY) || '0.85'))
 
 // --- Per-track loudness normalization ---
 //
@@ -93,12 +103,14 @@ const playbackRate = ref(1.0)
 // Autoplay: when the queue runs dry, keep going with YouTube Music's endless
 // mix for the last track: the behaviour every streaming app has.
 const AUTOPLAY_KEY = 'dannify-autoplay-radio'
-const autoplayRadio = ref(localStorage.getItem(AUTOPLAY_KEY) !== '0')
+const autoplayRadio = ref(readStored(AUTOPLAY_KEY) !== '0')
 let radioSeed = ''
 
 // Consecutive saved files that would not play, reset by the first that
 // does. Stops one click walking a whole queue of dead tracks.
 let deadRun = 0
+// Streams already retried once after failing, so a second failure moves on.
+const streamRetried = new WeakSet()
 const DEAD_RUN_LIMIT = 3
 
 // --- Session restore ---
@@ -202,13 +214,19 @@ function restoreSession() {
     a.src = track.url
     // The element has no idea how long the track is until it has read the
     // headers, and seeking before that silently does nothing.
+    //
+    // Tied to this load: if the restored track never loads (the file was
+    // deleted since), the listener would otherwise wait for the next track's
+    // metadata and throw that one to the old position.
+    const gen = playGen
     const seek = () => {
+      a.removeEventListener('loadedmetadata', seek)
+      if (gen !== playGen) return
       try {
         if (at > 0 && at < (a.duration || Infinity)) a.currentTime = at
       } catch {
         // A stream that refuses to seek still plays from the start.
       }
-      a.removeEventListener('loadedmetadata', seek)
     }
     a.addEventListener('loadedmetadata', seek)
     a.load()
@@ -395,15 +413,38 @@ function ensureAudio() {
     }
     const gen = playGen
     const at = currentTime.value
-    reportNetworkFailure()
-    // Only resume automatically for a track that died because the network
-    // did. Retrying a stream that is simply unplayable would loop forever,
-    // so when we are demonstrably online this just stops.
-    if (connectivity.online.value) return
-    whenOnline(() => {
+    // Wait for the verdict: the old code read "online" before the check
+    // had run, so the first failure of a real outage never armed the
+    // resume, and a failure while online just left the player sitting
+    // there "playing" with no sound and a frozen bar.
+    reportNetworkFailure().then((isOnline) => {
       if (gen !== playGen || currentTrack.value !== track) return
-      playAt(currentIndex.value)
-      if (at > 1) setTimeout(() => seek(at), 600)
+      if (!isOnline) {
+        // Died because the network did: carry on when it is back.
+        whenOnline(() => {
+          if (gen !== playGen || currentTrack.value !== track) return
+          playAt(currentIndex.value)
+          if (at > 1) setTimeout(() => seek(at), 600)
+        })
+        return
+      }
+      // Online, so the stream itself failed. Once is often an expired
+      // address that a fresh request replaces, so try again quietly.
+      if (!streamRetried.has(track)) {
+        streamRetried.add(track)
+        playAt(currentIndex.value)
+        if (at > 1) setTimeout(() => seek(at), 600)
+        return
+      }
+      isPlaying.value = false
+      deadRun += 1
+      if (deadRun >= DEAD_RUN_LIMIT) {
+        toast(t('player.manyStreamsFailed'), { tone: 'error' })
+        deadRun = 0
+        return
+      }
+      toast(t('player.streamFailed'), { tone: 'error' })
+      if (currentIndex.value < playlist.value.length - 1) next()
     })
   })
   audio.addEventListener('play', () => {

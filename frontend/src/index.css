@@ -440,7 +440,7 @@
   .menu-surface {
     @apply rounded-lg border border-tint/10 bg-elev shadow-pop;
   }
-  [data-theme='dannify-light'] .menu-surface {
+  [data-mode='light'] .menu-surface {
     @apply border-tint/[0.12];
   }
 

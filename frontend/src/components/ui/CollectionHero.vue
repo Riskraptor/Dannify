@@ -125,7 +125,7 @@ onBeforeUnmount(disconnect)
   filter: blur(40px) saturate(1.2) brightness(0.55);
   opacity: 0.9;
 }
-[data-theme='dannify-light'] .hero-sticky-bg {
+[data-mode='light'] .hero-sticky-bg {
   filter: blur(40px) saturate(1.1) brightness(1.1);
   opacity: 0.45;
 }
@@ -148,7 +148,7 @@ onBeforeUnmount(disconnect)
   opacity: 0.5;
   transform: scale(1.1);
 }
-[data-theme='dannify-light'] .hero-bg {
+[data-mode='light'] .hero-bg {
   opacity: 0.35;
 }
 .hero-fade {

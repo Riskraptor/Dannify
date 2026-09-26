@@ -73,6 +73,9 @@ const currentTheme = computed(() =>
 
 function apply() {
   document.documentElement.setAttribute('data-theme', `dannify-${currentTheme.value}`)
+  // Light or dark, whichever palette: what light-mode styling keys on, so a
+  // second light palette (Sand) is not left wearing dark-mode colours.
+  document.documentElement.setAttribute('data-mode', currentMode.value)
   document.documentElement.style.colorScheme = currentMode.value
   // The native frame follows, so the title bar and the page never disagree.
   desktop.setTheme(currentMode.value)

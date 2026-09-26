@@ -62,7 +62,11 @@ def _persist() -> None:
     if _path is None:
         return
     try:
-        _path.write_text(json.dumps(_data, indent=2), encoding='utf-8')
+        # Beside the real file, then renamed over it: a crash mid-write used
+        # to leave half a file, and every saved lyric timing went with it.
+        tmp = _path.with_name(_path.name + '.tmp')
+        tmp.write_text(json.dumps(_data, indent=2), encoding='utf-8')
+        tmp.replace(_path)
     except Exception:
         logger.opt(exception=True).warning('Could not persist lyric prefs')
 

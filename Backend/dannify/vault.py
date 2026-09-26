@@ -10,8 +10,15 @@ The audio has to reach the player as sound, and anything that can be played
 can be recorded. What it does stop is the obvious thing: copying files out of
 the music folder and handing them around, or pointing another player at them.
 
-    header  DNF1 | nonce(16) | header length(4) | encrypted json
+    header  DNF2 | nonce(16) | header length(4) | encrypted json
     payload the original tagged file, byte for byte, encrypted
+
+The header and the payload are encrypted with two different keys derived
+from the same nonce. Files written before 4.0 (DNF1) used one key for both,
+each starting at block zero, so the two ciphertexts could be laid over each
+other to learn the header without any key. Those still open exactly as
+before; everything sealed from now on, and every track a repair rewrites,
+is DNF2.
 
 The cipher is keyed BLAKE2b run as a counter mode, which is in the standard
 library. Adding a real crypto package would drag an OpenSSL wheel of about ten
@@ -28,17 +35,21 @@ noise nobody can identify.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import secrets
 import threading
+import time
 from pathlib import Path
 from typing import Any, BinaryIO, Optional
 
 from loguru import logger
 
-MAGIC = b'DNF1'
+MAGIC = b'DNF2'  # what seal() writes: the header has a key of its own
+MAGIC_V1 = b'DNF1'  # before 4.0: header and payload shared one keystream
+MAGICS = (MAGIC, MAGIC_V1)
 NONCE_LEN = 16
 BLOCK = 64  # blake2b digest size, and so the keystream block size
 SUFFIX = '.dnf'
@@ -535,6 +546,18 @@ def _derive(master: bytes, nonce: bytes) -> bytes:
     return hashlib.blake2b(nonce, key=master, person=b'dannify-file', digest_size=32).digest()
 
 
+def _header_key(master: bytes, nonce: bytes, magic: bytes = MAGIC) -> bytes:
+    """The key a container's header is encrypted with.
+
+    Its own key, so the header's keystream is not the payload's. A DNF1 file
+    predates that and used the payload key for both.
+    """
+
+    if magic == MAGIC_V1:
+        return _derive(master, nonce)
+    return hashlib.blake2b(nonce, key=master, person=b'dannify-head', digest_size=32).digest()
+
+
 def _file_key(nonce: bytes) -> bytes:
     """The key a song is sealed with now."""
 
@@ -566,7 +589,7 @@ def _stamp(path: Path, size: int) -> tuple[str, int, int]:
     return (str(path), int(size), mtime)
 
 
-def _unlock(nonce: bytes, blob: bytes, stamp=None) -> tuple[Optional[dict], Optional[bytes]]:
+def _unlock(nonce: bytes, blob: bytes, stamp=None, magic: bytes = MAGIC) -> tuple[Optional[dict], Optional[bytes]]:
     """Decrypt a header with whichever key fits: (header, that key)."""
 
     order = _candidates()
@@ -576,7 +599,7 @@ def _unlock(nonce: bytes, blob: bytes, stamp=None) -> tuple[Optional[dict], Opti
         if hint is not None and hint in order:
             order = [hint] + [k for k in order if k != hint]
     for master in order:
-        key = _derive(master, nonce)
+        key = _header_key(master, nonce, magic)
         # A header is JSON of a dict, so it starts with a brace: one byte
         # rules a key out without decrypting a header that can run to a
         # quarter of a megabyte in the slowest code this file has.
@@ -773,7 +796,7 @@ def seal(source: Path, target: Path, meta: dict[str, Any]) -> Path:
 
                 head['cover'] = base64.b64encode(art[0]).decode('ascii')
                 head['cover_mime'] = art[1]
-    blob = _xor(key, nonce, json.dumps(head).encode('utf-8'), 0)
+    blob = _xor(_header_key(_master, nonce), nonce, json.dumps(head).encode('utf-8'), 0)
 
     part = target.with_suffix(target.suffix + '.part')
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -872,8 +895,9 @@ def inspect(path: Path) -> tuple[Optional[dict[str, Any]], str]:
         size = path.stat().st_size
         with open(path, 'rb') as f:
             lead = f.read(4 + NONCE_LEN + 4)
-            if len(lead) < 4 + NONCE_LEN + 4 or lead[:4] != MAGIC:
+            if len(lead) < 4 + NONCE_LEN + 4 or lead[:4] not in MAGICS:
                 return None, DAMAGED
+            magic = lead[:4]
             nonce = lead[4:4 + NONCE_LEN]
             length = int.from_bytes(lead[4 + NONCE_LEN:], 'little')
             base = 4 + NONCE_LEN + 4 + length
@@ -882,7 +906,7 @@ def inspect(path: Path) -> tuple[Optional[dict[str, Any]], str]:
             if not _candidates():
                 return None, LOCKED
             blob = f.read(length)
-            head, master = _unlock(nonce, blob, _stamp(path, size))
+            head, master = _unlock(nonce, blob, _stamp(path, size), magic)
             if head is None:
                 return None, LOCKED
             key = _derive(master, nonce)
@@ -915,7 +939,8 @@ def read_header(path: Path) -> Optional[dict[str, Any]]:
     try:
         path = Path(path)
         with open(path, 'rb') as f:
-            if f.read(4) != MAGIC:
+            magic = f.read(4)
+            if magic not in MAGICS:
                 return None
             nonce = f.read(NONCE_LEN)
             length = int.from_bytes(f.read(4), 'little')
@@ -923,7 +948,7 @@ def read_header(path: Path) -> Optional[dict[str, Any]]:
                 return None
             blob = f.read(length)
             size = os.fstat(f.fileno()).st_size
-        head, _ = _unlock(nonce, blob, _stamp(path, size))
+        head, _ = _unlock(nonce, blob, _stamp(path, size), magic)
         return head
     except Exception:
         return None
@@ -949,7 +974,9 @@ def open_range(path: Path, start: int = 0, length: Optional[int] = None):
 
     path = Path(path)
     with open(path, 'rb') as f:
-        f.seek(4)
+        magic = f.read(4)
+        if magic not in MAGICS:
+            raise ValueError('not a saved song')
         nonce = f.read(NONCE_LEN)
         head_len = int.from_bytes(f.read(4), 'little')
         base = 4 + NONCE_LEN + 4 + head_len
@@ -963,7 +990,7 @@ def open_range(path: Path, start: int = 0, length: Optional[int] = None):
         if master is None or master not in _candidates():
             if head_len <= 0 or head_len > 1 << 20:
                 raise ValueError('not a saved song')
-            _, master = _unlock(nonce, f.read(head_len), stamp)
+            _, master = _unlock(nonce, f.read(head_len), stamp, magic)
         if master is None:
             raise StorageUnavailable('this song cannot be opened here')
         key = _derive(master, nonce)
@@ -1134,10 +1161,51 @@ def remember(index: Path, key: str, entry: dict[str, Any]) -> None:
     once its key is gone, so a lost entry is a track nobody can get back.
     """
 
-    with _index_lock:
+    with _index_lock, _across_processes(index):
         data = read_index(index)
         data[key] = entry
         write_index(index, data)
+
+
+@contextlib.contextmanager
+def _across_processes(index: Path, patience: float = 3.0):
+    """Two copies of Dannify on one music folder take turns on its index.
+
+    The lock above only covers threads in this process. A lock file made
+    with O_EXCL covers the other copy too. One left behind by a copy that
+    died is ignored once it is half a minute old, and if the turn never
+    comes the write goes ahead anyway: losing a race is better than losing
+    the note.
+    """
+
+    lock = Path(index).with_name(Path(index).name + '.lock')
+    deadline = time.monotonic() + patience
+    fd = None
+    while True:
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > 30:
+                    lock.unlink()
+                    continue
+            except OSError:
+                pass
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.05)
+        except OSError:
+            break
+    try:
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)
+            try:
+                lock.unlink()
+            except OSError:
+                pass
 
 
 def write_index(index: Path, data: dict[str, Any]) -> None:
@@ -1651,6 +1719,6 @@ def _repair_pass(root, stale, bench, done, on_progress, on_change) -> None:
 def is_sealed(path: Path) -> bool:
     try:
         with open(path, 'rb') as f:
-            return f.read(4) == MAGIC
+            return f.read(4) in MAGICS
     except OSError:
         return False

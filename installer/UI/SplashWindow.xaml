@@ -1,0 +1,66 @@
+<Window x:Class="Dannify.Setup.UI.SplashWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Dannify"
+        Width="440" Height="128"
+        WindowStyle="None" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource Bg}"
+        FontFamily="{StaticResource Body}"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Ideal"
+        Opacity="0">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="128" ResizeBorderThickness="0" GlassFrameThickness="0,0,0,1"
+                      CornerRadius="0" UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+    <Window.TaskbarItemInfo>
+        <TaskbarItemInfo x:Name="Taskbar" />
+    </Window.TaskbarItemInfo>
+
+    <Grid ClipToBounds="True">
+        <Canvas IsHitTestVisible="False">
+            <Ellipse Width="420" Height="420" Canvas.Left="-150" Canvas.Top="-150">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#381AD05C" Offset="0" />
+                        <GradientStop Color="#101AD05C" Offset="0.5" />
+                        <GradientStop Color="#001AD05C" Offset="1" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+                <Ellipse.RenderTransform>
+                    <TranslateTransform x:Name="GlowShift" />
+                </Ellipse.RenderTransform>
+            </Ellipse>
+        </Canvas>
+        <Border x:Name="Edge" BorderThickness="1" BorderBrush="#1CFFFFFF" IsHitTestVisible="False" Visibility="Collapsed" />
+
+        <Grid Margin="26,0,28,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="64" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Image x:Name="LogoImage" Width="58" Height="58" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                <Image.RenderTransform>
+                    <ScaleTransform x:Name="LogoScale" ScaleX="1" ScaleY="1" />
+                </Image.RenderTransform>
+            </Image>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="20,0,0,2">
+                <TextBlock x:Name="Heading" Style="{StaticResource Heading}" FontSize="18" HorizontalAlignment="Left" TextAlignment="Left" />
+                <Grid x:Name="Bar" Height="5" Margin="0,14,0,0" ClipToBounds="True">
+                    <Border CornerRadius="2.5" Background="{StaticResource Track}" />
+                    <Border x:Name="BarFill" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" Background="{StaticResource AccentFill}" />
+                    <Border x:Name="BarSweep" CornerRadius="2.5" Width="90" HorizontalAlignment="Left" Background="{StaticResource AccentFill}" Visibility="Collapsed">
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="SweepShift" X="-90" />
+                        </Border.RenderTransform>
+                    </Border>
+                </Grid>
+                <Grid Margin="0,9,0,0">
+                    <TextBlock x:Name="Step" Style="{StaticResource Caption}" HorizontalAlignment="Left" />
+                    <TextBlock x:Name="Percent" Style="{StaticResource Caption}" HorizontalAlignment="Right" />
+                </Grid>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
