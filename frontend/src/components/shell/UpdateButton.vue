@@ -100,7 +100,7 @@ function onClick(e) {
   font-weight: 700;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  color: rgb(var(--c-bg));
+  color: rgb(var(--c-accent-fg));
   background: rgb(var(--c-accent));
   animation:
     upd-in 0.35s var(--ease-out),

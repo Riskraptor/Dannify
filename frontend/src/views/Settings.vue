@@ -236,7 +236,7 @@
           <div class="row-text">
             <p class="row-label">{{ t('settings.libraryLocation') }}</p>
             <p class="row-hint selectable truncate font-mono text-[12px]" :title="s.download_dir">
-              {{ s.download_dir || 'Not set' }}
+              {{ s.download_dir || t('settings.notSet') }}
             </p>
           </div>
           <div class="flex shrink-0 gap-2">
@@ -902,7 +902,7 @@ async function setTray(patch) {
   align-self: flex-start;
   margin-top: 2px;
 }
-[data-theme='dannify-light'] .row {
+[data-mode='light'] .row {
   background: rgb(var(--c-raised));
 }
 label.row:hover {

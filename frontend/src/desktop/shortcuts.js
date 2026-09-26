@@ -3,6 +3,7 @@ import { useUi } from '/src/model/ui'
 import { desktop } from '/src/desktop/bridge'
 import { openContextMenu } from '/src/model/contextMenu'
 import { copyText, readText } from '/src/model/clipboard'
+import { useOnboarding } from '/src/model/onboarding'
 import { t } from '/src/i18n'
 
 // App-wide keyboard shortcuts and right-click behaviour. Playback keys
@@ -47,6 +48,9 @@ function onKeyDown(e) {
   const ctrl = e.ctrlKey || e.metaKey
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
   const typing = isTyping(e.target)
+
+  // The first-run welcome covers the app; nothing should act on it unseen.
+  if (useOnboarding().show.value && key !== 'F11') return
 
   // --- Global, even while typing ---
   if (ctrl && !e.altKey && (key === 'k' || (key === 'f' && !e.shiftKey))) {

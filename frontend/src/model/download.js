@@ -1,6 +1,8 @@
 import { ref, computed } from 'vue'
 
 import API from '/src/model/api'
+import { toast } from '/src/model/toast'
+import { t } from '/src/i18n'
 import { useSettingsManager } from '/src/model/settings'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 
@@ -347,8 +349,16 @@ export function useDownloadManager() {
   }
 
   async function clearAll() {
-    await API.clearQueue()
-    downloadQueue.value = []
+    try {
+      await API.clearQueue()
+      downloadQueue.value = []
+      return true
+    } catch {
+      // The list stays as it was, and says so, rather than a click that
+      // silently did nothing.
+      toast(t('queue.clearFailed'), { tone: 'error' })
+      return false
+    }
   }
 
   return {

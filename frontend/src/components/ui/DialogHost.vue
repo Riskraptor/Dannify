@@ -29,7 +29,7 @@
               </h2>
               <p
                 v-if="current.message"
-                class="mt-1.5 text-[13px] leading-relaxed text-fg/70"
+                class="mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-fg/70"
               >
                 {{ current.message }}
               </p>

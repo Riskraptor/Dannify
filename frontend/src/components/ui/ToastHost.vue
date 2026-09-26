@@ -14,7 +14,7 @@
             :icon="item.icon || toneIcon(item.tone)"
             class="h-[18px] w-[18px] shrink-0"
           />
-          <span class="min-w-0 flex-1 truncate">{{ item.message }}</span>
+          <span class="toast-text min-w-0 flex-1">{{ item.message }}</span>
           <button
             v-if="item.action"
             class="toast-action"
@@ -75,8 +75,18 @@ function runAction(item) {
   background: #2b2c31;
   box-shadow: var(--shadow-pop);
 }
-[data-theme='dannify-light'] .toast {
+[data-mode='light'] .toast {
   background: #1f2227;
+}
+/* Wraps instead of cutting off: the end of a message is often the part that
+   says what happens next. */
+.toast-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 .toast.is-success svg {
   color: rgb(26 208 92);

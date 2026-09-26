@@ -1,7 +1,6 @@
-"""The update path, streams that get cut off, and the taskbar buttons.
+"""Old downloads, streams that get cut off, and the taskbar buttons.
 
-Each of these was seen on the user's machine: an update whose first attempt
-failed because Windows held Dannify.exe for a moment, old downloads left in
+Each of these was seen on the user's machine: old update downloads left in
 the data folder, a stream that ended short of what it promised the player,
 and taskbar buttons that never appeared because a class was defined twice.
 """
@@ -38,58 +37,6 @@ def _load_from_desktop(*names: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Renaming files that Windows is briefly holding
-# ---------------------------------------------------------------------------
-class Busy(OSError):
-    def __init__(self, code):
-        super().__init__(code, 'busy')
-        self.winerror = code
-
-
-@pytest.fixture
-def patient(monkeypatch):
-    ns = _load_from_desktop('_BUSY_ERRORS', '_patient_rename')
-    slept = []
-    ns['time'] = type('T', (), {'sleep': staticmethod(lambda s: slept.append(s))})
-    return ns['_patient_rename'], slept
-
-
-def test_a_rename_waits_out_a_file_held_for_a_moment(tmp_path, patient, monkeypatch):
-    rename, slept = patient
-    src, dst = tmp_path / 'a', tmp_path / 'b'
-    src.write_text('x')
-    real = Path.rename
-    calls = {'n': 0}
-
-    def flaky(self, target):
-        calls['n'] += 1
-        if calls['n'] <= 3:
-            raise Busy(32)  # sharing violation, as the virus scanner causes
-        return real(self, target)
-
-    monkeypatch.setattr(Path, 'rename', flaky)
-    rename(src, dst)
-    assert dst.read_text() == 'x' and calls['n'] == 4
-    assert len(slept) == 3
-
-
-def test_a_rename_that_can_never_work_is_not_retried(tmp_path, patient, monkeypatch):
-    rename, slept = patient
-    monkeypatch.setattr(Path, 'rename', lambda self, t: (_ for _ in ()).throw(Busy(2)))
-    with pytest.raises(OSError):
-        rename(tmp_path / 'a', tmp_path / 'b')
-    assert slept == []
-
-
-def test_a_rename_gives_up_after_its_patience(tmp_path, patient, monkeypatch):
-    rename, slept = patient
-    monkeypatch.setattr(Path, 'rename', lambda self, t: (_ for _ in ()).throw(Busy(32)))
-    with pytest.raises(OSError):
-        rename(tmp_path / 'a', tmp_path / 'b', patience=10)
-    assert 10 <= sum(slept) <= 14
-
-
-# ---------------------------------------------------------------------------
 # Old update downloads
 # ---------------------------------------------------------------------------
 def test_old_downloads_go_and_a_waiting_update_stays(tmp_path):
@@ -111,27 +58,6 @@ def test_old_downloads_go_and_a_waiting_update_stays(tmp_path):
     assert sorted(p.name for p in folder.iterdir()) == [
         'Dannify-Setup-3.19.0.exe', 'delta-3.19.0', 'notes.txt',
     ]
-
-
-def test_a_partial_update_that_fails_part_way_leaves_nothing_behind(tmp_path, monkeypatch):
-    from dannify import delta
-
-    manifest = {'version': '3.19.0', 'files': {'Dannify.exe': {'size': 10, 'sha256': 'x'}}}
-    monkeypatch.setattr(updates, '_get_text', lambda url: __import__('json').dumps(manifest))
-    monkeypatch.setattr(delta, 'plan', lambda app, man, bar: {
-        'changed': ['Dannify.exe'], 'removed': [], 'bytes': 10,
-    })
-
-    def cut_off(url, changed, staging, bar):
-        (staging / 'runtime').mkdir(parents=True)
-        (staging / 'runtime' / 'half.bin').write_bytes(b'x' * 100)
-        raise ConnectionResetError('the connection dropped')
-
-    monkeypatch.setattr(delta, 'fetch', cut_off)
-    info = {'manifest_url': 'https://x/manifest.json', 'files_url': 'https://x/files.zip'}
-
-    assert updates.prepare_delta(tmp_path / 'app', tmp_path / 'updates', info) is None
-    assert not (tmp_path / 'updates' / 'delta-3.19.0').exists()
 
 
 def test_pruning_copes_with_nothing_there(tmp_path):

@@ -6,7 +6,7 @@
         class="ls-backdrop"
         @click.self="confirmClose"
       >
-        <div class="ls-shell">
+        <div ref="shellEl" class="ls-shell">
           <!-- Header -->
           <header class="ls-head">
             <CoverImage :src="cover" radius="sm" :size="48" class="ls-head-art" />
@@ -466,6 +466,8 @@ import { usePlayer, formatTime } from '/src/model/player'
 import API from '/src/model/api'
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import { useI18n } from '/src/i18n'
+import { useDialogs } from '/src/model/dialog'
+import { rememberFocus, trapTab } from '/src/model/focusTrap'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -487,6 +489,9 @@ const song = computed(() => {
 const cover = computed(() => player.currentTrack.value?.cover || '')
 
 const phase = ref(0)
+const shellEl = ref(null)
+const { queue: dialogQueue } = useDialogs()
+let giveBack = null
 const form = ref({
   track: '',
   artist: '',
@@ -799,6 +804,21 @@ function nudgeActive(delta) {
 
 // ─── Editor: keyboard ───
 function onKey(e) {
+  // In every phase: Escape closes (the line being edited takes it first,
+  // and so does a dialog on top), and Tab stays inside the editor. It
+  // used to ignore Escape entirely and let Tab walk out behind the scrim.
+  if (!dialogQueue.value.length) {
+    if (e.key === 'Escape' && editingIndex.value === -1) {
+      e.preventDefault()
+      e.stopPropagation()
+      confirmClose()
+      return
+    }
+    if (e.key === 'Tab') {
+      trapTab(e, shellEl.value)
+      return
+    }
+  }
   // Only handle keys when we're in the sync phase.
   if (phase.value !== 1) return
   // Don't hijack typing in the inline text editor.
@@ -1158,8 +1178,12 @@ watch(
       loopLineIdx.value = -1
       player.noAutoAdvance.value = false
       unbindWindowKeys()
+      const back = giveBack
+      giveBack = null
+      back?.()
       return
     }
+    giveBack = rememberFocus()
     // While the modal is open, the song "ended" event should NOT
     // advance to the next track: that would yank the user's editor
     // context mid-sync. The modal restores normal behavior on close.
@@ -1249,7 +1273,7 @@ function unbindWindowKeys() {
   z-index: 1200;
   padding: 1rem;
 }
-[data-theme='dannify-light'] .ls-backdrop {
+[data-mode='light'] .ls-backdrop {
   background: rgb(210 214 222 / 0.7);
 }
 .ls-shell {
@@ -1438,7 +1462,7 @@ function unbindWindowKeys() {
   color: rgba(230, 231, 235, 0.65);
   line-height: 1.5;
 }
-[data-theme='dannify-light'] .ls-help { color: rgba(22, 24, 28, 0.65); }
+[data-mode='light'] .ls-help { color: rgba(22, 24, 28, 0.65); }
 
 .ls-meta {
   display: grid;
@@ -1458,7 +1482,7 @@ function unbindWindowKeys() {
   letter-spacing: 0.04em;
   color: rgba(230, 231, 235, 0.5);
 }
-[data-theme='dannify-light'] .ls-field { color: rgba(22, 24, 28, 0.5); }
+[data-mode='light'] .ls-field { color: rgba(22, 24, 28, 0.5); }
 .ls-field input {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1472,7 +1496,7 @@ function unbindWindowKeys() {
   font-family: inherit;
   outline: none;
 }
-[data-theme='dannify-light'] .ls-field input {
+[data-mode='light'] .ls-field input {
   background: rgba(0, 0, 0, 0.03);
   border-color: rgba(0, 0, 0, 0.08);
   color: #16181c;
@@ -1498,7 +1522,7 @@ function unbindWindowKeys() {
   resize: vertical;
   outline: none;
 }
-[data-theme='dannify-light'] .ls-paste {
+[data-mode='light'] .ls-paste {
   background: rgba(0, 0, 0, 0.03);
   border-color: rgba(0, 0, 0, 0.08);
   color: #16181c;
@@ -1539,7 +1563,7 @@ function unbindWindowKeys() {
 .ls-btn.ghost { background: rgba(255, 255, 255, 0.06); color: rgba(230, 231, 235, 0.75); }
 .ls-btn.ghost:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 .ls-btn.ghost:disabled { opacity: 0.4; cursor: not-allowed; }
-[data-theme='dannify-light'] .ls-btn.ghost {
+[data-mode='light'] .ls-btn.ghost {
   background: rgba(0, 0, 0, 0.05);
   color: rgba(22, 24, 28, 0.7);
 }
@@ -1554,7 +1578,7 @@ function unbindWindowKeys() {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 0.8rem;
 }
-[data-theme='dannify-light'] .ls-rail {
+[data-mode='light'] .ls-rail {
   background: rgba(0, 0, 0, 0.03);
   border-color: rgba(0, 0, 0, 0.06);
 }
@@ -1586,7 +1610,7 @@ function unbindWindowKeys() {
   position: relative;
   overflow: hidden;
 }
-[data-theme='dannify-light'] .ls-rail-track { background: rgba(0, 0, 0, 0.08); }
+[data-mode='light'] .ls-rail-track { background: rgba(0, 0, 0, 0.08); }
 .ls-rail-track::after {
   content: '';
   position: absolute;
@@ -1639,7 +1663,7 @@ function unbindWindowKeys() {
 .ls-rail-time .now { color: #1ad05c; }
 .ls-rail-time .sep { color: rgba(230, 231, 235, 0.35); }
 .ls-rail-time .total { color: rgba(230, 231, 235, 0.6); }
-[data-theme='dannify-light'] .ls-rail-time .total { color: rgba(22, 24, 28, 0.6); }
+[data-mode='light'] .ls-rail-time .total { color: rgba(22, 24, 28, 0.6); }
 
 /* ─── Phase 2: transport buttons ─── */
 .ls-trans {
@@ -1654,7 +1678,7 @@ function unbindWindowKeys() {
   background: rgba(255, 255, 255, 0.08);
   margin: 0 0.25rem;
 }
-[data-theme='dannify-light'] .ls-trans-sep { background: rgba(0, 0, 0, 0.08); }
+[data-mode='light'] .ls-trans-sep { background: rgba(0, 0, 0, 0.08); }
 .ls-tbtn {
   display: inline-flex;
   align-items: center;
@@ -1666,7 +1690,7 @@ function unbindWindowKeys() {
   font-size: 0.74rem;
   font-weight: 600;
 }
-[data-theme='dannify-light'] .ls-tbtn {
+[data-mode='light'] .ls-tbtn {
   background: rgba(0, 0, 0, 0.04);
   color: rgba(22, 24, 28, 0.75);
 }
@@ -1681,7 +1705,7 @@ function unbindWindowKeys() {
   background: rgba(255, 255, 255, 0.04);
   border-radius: 9999px;
 }
-[data-theme='dannify-light'] .ls-speed { background: rgba(0, 0, 0, 0.04); }
+[data-mode='light'] .ls-speed { background: rgba(0, 0, 0, 0.04); }
 .ls-speed-btn {
   font-size: 0.7rem;
   font-weight: 700;
@@ -1690,7 +1714,7 @@ function unbindWindowKeys() {
   color: rgba(230, 231, 235, 0.55);
   transition: all 0.13s ease;
 }
-[data-theme='dannify-light'] .ls-speed-btn { color: rgba(22, 24, 28, 0.55); }
+[data-mode='light'] .ls-speed-btn { color: rgba(22, 24, 28, 0.55); }
 .ls-speed-btn:hover { color: #1ad05c; }
 .ls-speed-btn.on { background: rgba(26, 208, 92, 0.2); color: #1ad05c; }
 
@@ -1714,7 +1738,7 @@ function unbindWindowKeys() {
   text-transform: uppercase;
   color: rgba(230, 231, 235, 0.55);
 }
-[data-theme='dannify-light'] .ls-hero-meta { color: rgba(22, 24, 28, 0.55); }
+[data-mode='light'] .ls-hero-meta { color: rgba(22, 24, 28, 0.55); }
 .ls-hero-num {
   display: inline-flex;
   align-items: center;
@@ -1741,13 +1765,13 @@ function unbindWindowKeys() {
   color: #fff;
   word-break: break-word;
 }
-[data-theme='dannify-light'] .ls-hero-text { color: #16181c; }
+[data-mode='light'] .ls-hero-text { color: #16181c; }
 .ls-hero-hint {
   margin-top: 0.4rem;
   font-size: 0.72rem;
   color: rgba(230, 231, 235, 0.55);
 }
-[data-theme='dannify-light'] .ls-hero-hint { color: rgba(22, 24, 28, 0.55); }
+[data-mode='light'] .ls-hero-hint { color: rgba(22, 24, 28, 0.55); }
 .ls-hero-hint kbd {
   background: rgba(255, 255, 255, 0.12);
   padding: 0.05rem 0.4rem;
@@ -1756,7 +1780,7 @@ function unbindWindowKeys() {
   font-size: 0.7rem;
   margin: 0 0.15rem;
 }
-[data-theme='dannify-light'] .ls-hero-hint kbd { background: rgba(0, 0, 0, 0.08); }
+[data-mode='light'] .ls-hero-hint kbd { background: rgba(0, 0, 0, 0.08); }
 
 /* ─── Phase 2: lines list ─── */
 .ls-lines2 {
@@ -1776,7 +1800,7 @@ function unbindWindowKeys() {
 .ls-lines2 > * {
   margin: 0;
 }
-[data-theme='dannify-light'] .ls-lines2 {
+[data-mode='light'] .ls-lines2 {
   background: rgba(0, 0, 0, 0.02);
   border-color: rgba(0, 0, 0, 0.05);
 }
@@ -1791,7 +1815,7 @@ function unbindWindowKeys() {
   border: 1px solid transparent;
 }
 .ls-row:hover { background: rgba(255, 255, 255, 0.04); }
-[data-theme='dannify-light'] .ls-row:hover { background: rgba(0, 0, 0, 0.03); }
+[data-mode='light'] .ls-row:hover { background: rgba(0, 0, 0, 0.03); }
 .ls-row.active {
   background: rgba(26, 208, 92, 0.12);
   border-color: rgba(26, 208, 92, 0.28);
@@ -1803,7 +1827,7 @@ function unbindWindowKeys() {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-[data-theme='dannify-light'] .ls-row-num { color: rgba(22, 24, 28, 0.4); }
+[data-mode='light'] .ls-row-num { color: rgba(22, 24, 28, 0.4); }
 .ls-row-stamp {
   display: inline-flex;
   align-items: center;
@@ -1820,7 +1844,7 @@ function unbindWindowKeys() {
   justify-content: center;
   transition: all 0.13s ease;
 }
-[data-theme='dannify-light'] .ls-row-stamp {
+[data-mode='light'] .ls-row-stamp {
   background: rgba(0, 0, 0, 0.05);
   color: rgba(22, 24, 28, 0.55);
 }
@@ -1839,7 +1863,7 @@ function unbindWindowKeys() {
   white-space: nowrap;
   min-width: 0;
 }
-[data-theme='dannify-light'] .ls-row-text { color: rgba(22, 24, 28, 0.92); }
+[data-mode='light'] .ls-row-text { color: rgba(22, 24, 28, 0.92); }
 .ls-row-edit {
   font-size: 0.95rem;
   background: rgba(255, 255, 255, 0.06);
@@ -1850,7 +1874,7 @@ function unbindWindowKeys() {
   font-family: inherit;
   outline: none;
 }
-[data-theme='dannify-light'] .ls-row-edit {
+[data-mode='light'] .ls-row-edit {
   background: rgba(0, 0, 0, 0.04);
   color: #16181c;
 }
@@ -1875,7 +1899,7 @@ function unbindWindowKeys() {
 .ls-row-act.on { background: rgba(26, 208, 92, 0.2); color: #1ad05c; }
 .ls-row-act.danger:hover { background: rgba(255, 90, 90, 0.18); color: #ff8b8b; }
 .ls-row-act:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
-[data-theme='dannify-light'] .ls-row-act { color: rgba(22, 24, 28, 0.55); }
+[data-mode='light'] .ls-row-act { color: rgba(22, 24, 28, 0.55); }
 
 .ls-row.error { background: rgba(255, 90, 90, 0.05); border-color: rgba(255, 90, 90, 0.18); }
 .ls-row.warn { background: rgba(255, 200, 60, 0.04); border-color: rgba(255, 200, 60, 0.18); }
@@ -1943,8 +1967,8 @@ function unbindWindowKeys() {
 .ls-insert.top svg {
   opacity: 1;
 }
-[data-theme='dannify-light'] .ls-insert { color: rgba(22, 24, 28, 0.35); }
-[data-theme='dannify-light'] .ls-insert { color: rgba(22, 24, 28, 0.35); }
+[data-mode='light'] .ls-insert { color: rgba(22, 24, 28, 0.35); }
+[data-mode='light'] .ls-insert { color: rgba(22, 24, 28, 0.35); }
 
 /* ─── Phase 2: quality pill ─── */
 .ls-trans-label {
@@ -2018,7 +2042,7 @@ function unbindWindowKeys() {
 .ls-quality-pill.partial { background: rgba(26, 208, 92, 0.12); color: rgba(26, 208, 92, 0.85); }
 .ls-quality-pill.ok { background: rgba(26, 208, 92, 0.2); color: #1ad05c; }
 .ls-quality-pill.err { background: rgba(255, 90, 90, 0.18); color: #ff8b8b; }
-[data-theme='dannify-light'] .ls-quality-pill.idle {
+[data-mode='light'] .ls-quality-pill.idle {
   background: rgba(0, 0, 0, 0.05);
   color: rgba(22, 24, 28, 0.55);
 }
@@ -2049,7 +2073,7 @@ function unbindWindowKeys() {
   background: rgba(255, 255, 255, 0.04);
   border-radius: 0.7rem;
 }
-[data-theme='dannify-light'] .ls-stat { background: rgba(0, 0, 0, 0.04); }
+[data-mode='light'] .ls-stat { background: rgba(0, 0, 0, 0.04); }
 .ls-stat-num {
   font-size: 1.55rem;
   font-weight: 800;
@@ -2064,7 +2088,7 @@ function unbindWindowKeys() {
   color: rgba(230, 231, 235, 0.6);
   margin-top: 0.15rem;
 }
-[data-theme='dannify-light'] .ls-stat-label { color: rgba(22, 24, 28, 0.6); }
+[data-mode='light'] .ls-stat-label { color: rgba(22, 24, 28, 0.6); }
 .ls-preview {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -2073,7 +2097,7 @@ function unbindWindowKeys() {
   overflow-y: auto;
   padding: 0.7rem 0.9rem;
 }
-[data-theme='dannify-light'] .ls-preview {
+[data-mode='light'] .ls-preview {
   background: rgba(0, 0, 0, 0.03);
   border-color: rgba(0, 0, 0, 0.05);
 }
@@ -2084,7 +2108,7 @@ function unbindWindowKeys() {
   color: #e6e7eb;
   white-space: pre-wrap;
 }
-[data-theme='dannify-light'] .ls-preview pre { color: #16181c; }
+[data-mode='light'] .ls-preview pre { color: #16181c; }
 .ls-msg {
   display: inline-flex;
   align-items: center;
@@ -2105,7 +2129,7 @@ function unbindWindowKeys() {
   border-radius: 0.7rem;
   padding: 0.65rem 0.85rem;
 }
-[data-theme='dannify-light'] .ls-submitting {
+[data-mode='light'] .ls-submitting {
   background: rgba(0, 0, 0, 0.04);
   border-color: rgba(0, 0, 0, 0.06);
 }
@@ -2115,7 +2139,7 @@ function unbindWindowKeys() {
   color: rgba(230, 231, 235, 0.55);
   margin-top: 0.1rem;
 }
-[data-theme='dannify-light'] .ls-submit-sub { color: rgba(22, 24, 28, 0.55); }
+[data-mode='light'] .ls-submit-sub { color: rgba(22, 24, 28, 0.55); }
 
 /* Transitions */
 .ls-modal-enter-active, .ls-modal-leave-active { transition: opacity 0.18s ease; }

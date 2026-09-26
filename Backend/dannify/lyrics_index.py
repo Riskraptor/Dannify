@@ -130,7 +130,9 @@ def store(artist: str, title: str, text: str) -> Optional[Path]:
     fname = _safe_filename(f'{artist} - {title}') + '.lrc'
     target = _lyrics_base / fname
     try:
-        target.write_text(text, encoding='utf-8')
+        tmp = target.with_name(target.name + '.tmp')
+        tmp.write_text(text, encoding='utf-8')
+        tmp.replace(target)
     except OSError:
         logger.opt(exception=True).debug('Could not write lyrics {}', target)
         return None

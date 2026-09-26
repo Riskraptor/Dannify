@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { rememberFocus } from '/src/model/focusTrap'
 
 // Custom right-click menus. Builders return arrays of items; falsy entries are
 // dropped so callers can write `cond && {...}`.
@@ -10,6 +11,7 @@ import { ref } from 'vue'
 
 const menu = ref(null)
 let seq = 0
+let giveBack = null
 
 function normalize(items) {
   const out = []
@@ -53,11 +55,19 @@ export function openContextMenu(event, items, { anchor = false } = {}) {
     x = r.left + 24
     y = r.top + r.height / 2
   }
+  if (!menu.value) giveBack = rememberFocus()
   menu.value = { id: ++seq, x, y, items: list, alignRight: anchor }
 }
 
 export function closeContextMenu() {
+  if (!menu.value) return
   menu.value = null
+  const back = giveBack
+  giveBack = null
+  // Only if nothing else has taken focus meanwhile (an action that opens
+  // a dialog focuses its own button, and that must win).
+  const now = document.activeElement
+  if (back && (!now || now === document.body || now.closest?.('.cm'))) back()
 }
 
 export function useContextMenu() {

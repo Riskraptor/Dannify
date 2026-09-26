@@ -58,6 +58,7 @@
   <ToastHost />
   <ShortcutsDialog />
   <LyricsSubmit :open="submitOpen" @close="submitOpen = false" />
+  <Onboarding />
 </template>
 
 <script setup>
@@ -75,6 +76,8 @@ import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
 import ShortcutsDialog from './components/ui/ShortcutsDialog.vue'
 import LyricsSubmit from './components/LyricsSubmit.vue'
+import Onboarding from './components/Onboarding.vue'
+import { startOnboarding } from './model/onboarding'
 import { useUi } from './model/ui'
 import { usePlayer } from './model/player'
 import { desktop } from './desktop/bridge'
@@ -167,6 +170,7 @@ function openSubmit() {
 }
 
 onMounted(() => {
+  startOnboarding()
   window.addEventListener('popstate', onPopState)
   window.addEventListener('dannify:open-lyrics-submit', openSubmit)
   // Bring back the track that was playing when the app was last closed,

@@ -165,9 +165,10 @@ def _save() -> bool:
             blob = vault._protect(raw)
             if vault._unprotect(blob) != raw:
                 return False
-            tmp = Path(str(path) + '.tmp')
-            tmp.write_bytes(blob)
-            tmp.replace(path)
+            # Flushed to disk before the rename, as the song keys are: a power
+            # cut straight after the rename could otherwise leave an empty
+            # file, and an empty sign-in is a sign-out nobody asked for.
+            vault._atomic_write(Path(path), blob)
         else:
             Path(path).unlink(missing_ok=True)
             # Signed out: an old plain copy must not outlive the session.

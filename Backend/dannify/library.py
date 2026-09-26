@@ -57,12 +57,22 @@ def _split_artists(value: str) -> list[str]:
         return []
     import re as _re
 
-    parts = _re.split(r'\s*(?:/|;|,|&|\bfeat\.?\b|\bft\.?\b|\bx\b)\s*', value, flags=_re.IGNORECASE)
+    # The word separators only count between two names, with a space on
+    # each side: "X Ambassadors" and "Malcolm X" are one artist each, where
+    # the old pattern cut the X off and kept "Ambassadors". "x" is tried
+    # last, inside what the other separators left, so the X that ends
+    # "Lil Nas X ft. Billy Ray Cyrus" stays with its name.
+    parts = _re.split(
+        r'\s*(?:/|;|,|&)\s*|\s+(?:feat\.?|ft\.?)\s+', value, flags=_re.IGNORECASE
+    )
     seen: list[str] = []
-    for p in parts:
-        p = p.strip()
-        if p and p not in seen:
-            seen.append(p)
+    for part in parts:
+        pieces = [q.strip() for q in _re.split(r'\s+x\s+', part.strip(), flags=_re.IGNORECASE)]
+        if len(pieces) > 1 and not all(len(q) >= 2 for q in pieces):
+            pieces = [part.strip()]
+        for p in pieces:
+            if p and p not in seen:
+                seen.append(p)
     return seen
 
 

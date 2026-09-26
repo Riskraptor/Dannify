@@ -18,22 +18,30 @@ let announced = false
 
 const isOffline = computed(() => !online.value)
 
-async function probe() {
-  if (checking.value) return online.value
+let inflight = null
+
+// One check at a time, and everyone who asks while it runs gets its answer,
+// not the value from before it started.
+function probe() {
+  if (inflight) return inflight
   checking.value = true
-  try {
-    // Our own backend proxies the reachability question: it is the thing
-    // that actually needs the network, and it never caches this route.
-    const res = await API.checkForUpdate(false)
-    // A reachable GitHub means a reachable internet. `error` set means the
-    // request completed but could not get out.
-    setOnline(!(res.data && res.data.error))
-  } catch {
-    setOnline(false)
-  } finally {
-    checking.value = false
-  }
-  return online.value
+  inflight = (async () => {
+    try {
+      // Our own backend proxies the reachability question: it is the thing
+      // that actually needs the network, and it never caches this route.
+      const res = await API.checkForUpdate(false)
+      // A reachable GitHub means a reachable internet. `error` set means the
+      // request completed but could not get out.
+      setOnline(!(res.data && res.data.error))
+    } catch {
+      setOnline(false)
+    } finally {
+      checking.value = false
+      inflight = null
+    }
+    return online.value
+  })()
+  return inflight
 }
 
 function setOnline(value) {
@@ -77,17 +85,21 @@ function stopProbing() {
   probeTimer = null
 }
 
-/** Something network-shaped failed. Verify, and tell the user once. */
-export function reportNetworkFailure() {
+/**
+ * Something network-shaped failed. Verify, and tell the user once.
+ * Resolves to whether the network is really there.
+ */
+export async function reportNetworkFailure() {
   if (navigator.onLine === false) {
     setOnline(false)
   } else {
-    probe()
+    await probe()
   }
   if (!online.value && !announced) {
     announced = true
     toast(t('net.offline'), { tone: 'error', icon: 'ph:wifi-slash', timeout: 6000 })
   }
+  return online.value
 }
 
 /** Run `fn` as soon as the network is back (or now, if it already is). */

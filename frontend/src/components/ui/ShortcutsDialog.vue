@@ -40,10 +40,13 @@ import { Icon } from '@iconify/vue'
 import { useUi } from '/src/model/ui'
 import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
+import { rememberFocus, trapTab } from '/src/model/focusTrap'
 
 const { t } = useI18n()
 const ui = useUi()
 const box = ref(null)
+
+let giveBack = null
 
 function close() {
   ui.shortcutsOpen.value = false
@@ -52,12 +55,20 @@ function onKey(e) {
   if (e.key === 'Escape') {
     e.preventDefault()
     close()
+    return
   }
+  trapTab(e, box.value)
 }
 watch(
   () => ui.shortcutsOpen.value,
   async (open) => {
-    if (!open) return
+    if (!open) {
+      const back = giveBack
+      giveBack = null
+      back?.()
+      return
+    }
+    giveBack = rememberFocus()
     await nextTick()
     box.value && box.value.focus()
   }

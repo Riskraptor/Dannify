@@ -78,13 +78,13 @@
     <transition name="jump">
       <div v-if="ui.lyricsSyncOpen.value && hasLines" class="lyrics-sync menu-surface">
         <span class="sync-label">{{ t('lyrics.sync') }}</span>
-        <button class="icon-btn is-round press h-7 w-7" title="-0.2s" @click="player.adjustLyricsOffset(-0.2)">
+        <button class="icon-btn is-round press h-7 w-7" :title="t('lyrics.syncEarlier')" :aria-label="t('lyrics.syncEarlier')" @click="player.adjustLyricsOffset(-0.2)">
           <Icon icon="ph:minus-bold" class="h-3.5 w-3.5" />
         </button>
         <span class="sync-val" :class="{ zero: offsetVal === 0 }">
           {{ offsetVal > 0 ? '+' : '' }}{{ offsetVal.toFixed(1) }}s
         </span>
-        <button class="icon-btn is-round press h-7 w-7" title="+0.2s" @click="player.adjustLyricsOffset(0.2)">
+        <button class="icon-btn is-round press h-7 w-7" :title="t('lyrics.syncLater')" :aria-label="t('lyrics.syncLater')" @click="player.adjustLyricsOffset(0.2)">
           <Icon icon="ph:plus-bold" class="h-3.5 w-3.5" />
         </button>
         <button
@@ -316,7 +316,7 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
   border-radius: 999px;
   font-weight: 700;
   font-size: 12px;
-  color: rgb(var(--c-bg));
+  color: rgb(var(--c-accent-fg));
   background: rgb(var(--c-accent));
   transition:
     filter 0.15s ease,

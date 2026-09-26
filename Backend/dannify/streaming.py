@@ -45,7 +45,27 @@ _DIRECT_TTL = 60 * 60 * 3  # googlevideo URLs live ~6h; refresh well before
 # Margin kept between an entry's own stated expiry and when we stop trusting
 # it, so a long track cannot run past the end of its URL mid-playback.
 _EXPIRY_MARGIN = 60 * 20
-_direct_cache: dict[str, dict[str, Any]] = {}
+class _BoundedCache(OrderedDict):
+    """A dict that forgets its oldest entries past a size.
+
+    Every song streamed, saved or merely hovered adds one, and nothing ever
+    took them out again: a long session carried thousands, and wrote them all
+    to disk on every new one.
+    """
+
+    def __init__(self, limit: int) -> None:
+        super().__init__()
+        self._limit = limit
+
+    def __setitem__(self, key, value) -> None:
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        while len(self) > self._limit:
+            self.popitem(last=False)
+
+
+_direct_cache: 'OrderedDict[str, dict[str, Any]]' = _BoundedCache(2000)
 _direct_lock = threading.Lock()
 _direct_path: Optional['Path'] = None  # noqa: F821. Set by init_persistent_cache
 _direct_dirty = False
@@ -165,8 +185,13 @@ def _persist_direct_cache_locked() -> None:
     """Write the in-memory direct cache to disk atomically."""
     if _direct_path is None:
         return
-    # Snapshot under the existing lock then write outside it.
-    snapshot = dict(_direct_cache)
+    # Snapshot under the existing lock then write outside it. Entries past
+    # their life are dropped here rather than carried from launch to launch.
+    now = time.time()
+    snapshot = {
+        vid: entry for vid, entry in _direct_cache.items()
+        if now - float(entry.get('ts') or 0) <= _DIRECT_TTL
+    }
     try:
         tmp = _direct_path.with_suffix('.json.tmp')
         tmp.write_text(json.dumps(snapshot), encoding='utf-8')
@@ -175,18 +200,40 @@ def _persist_direct_cache_locked() -> None:
         logger.opt(exception=True).debug('direct cache persist failed')
 
 
+_save_timer: Optional[threading.Timer] = None
+_save_timer_lock = threading.Lock()
+
+
 def _save_direct_cache_async() -> None:
-    """Persist the cache without blocking the request: best-effort."""
+    """Persist the cache without blocking the request: best-effort.
+
+    Coalesced: a burst of new entries (a page of hovered rows) is one write
+    a few seconds later, not a thread and a full rewrite for each.
+    """
+
+    global _save_timer
 
     def _run() -> None:
+        global _save_timer
+        with _save_timer_lock:
+            _save_timer = None
         with _direct_lock:
             _persist_direct_cache_locked()
 
-    threading.Thread(target=_run, daemon=True).start()
+    with _save_timer_lock:
+        if _save_timer is not None:
+            return
+        _save_timer = threading.Timer(4.0, _run)
+        _save_timer.daemon = True
+        _save_timer.start()
 
 
 def _key_lock(key: str) -> threading.Lock:
     with _key_locks_guard:
+        if len(_key_locks) > 4096:
+            # Forget the ones nobody holds; they are recreated when needed.
+            for stale in [k for k, lk in _key_locks.items() if not lk.locked()]:
+                _key_locks.pop(stale, None)
         lk = _key_locks.get(key)
         if lk is None:
             lk = threading.Lock()
@@ -951,16 +998,20 @@ def open_stream(video_id: str, start_seconds: float = 0.0) -> tuple[str, Iterato
             # Server is saturated; surface as an empty body (client retries).
             logger.warning('stream sema timeout for {}', video_id)
             return
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-            bufsize=0,
-            creationflags=_POPEN_FLAGS,
-            startupinfo=_POPEN_SI,
-        )
+        proc = None
         try:
+            # Inside the try: a media tool that will not start (missing, or
+            # quarantined by a virus scanner) must still hand its slot back,
+            # or every such failure left one fewer stream for good.
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                bufsize=0,
+                creationflags=_POPEN_FLAGS,
+                startupinfo=_POPEN_SI,
+            )
             assert proc.stdout is not None
             while True:
                 chunk = proc.stdout.read(64 * 1024)
@@ -968,10 +1019,11 @@ def open_stream(video_id: str, start_seconds: float = 0.0) -> tuple[str, Iterato
                     break
                 yield chunk
         finally:
-            try:
-                proc.kill()
-            except Exception:
-                pass
+            if proc is not None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
             _stream_sema.release()
 
     return mime, _gen()

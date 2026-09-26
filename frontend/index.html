@@ -32,8 +32,10 @@
             'data-theme',
             dark ? 'dannify-dark' : 'dannify-light'
           )
+          document.documentElement.setAttribute('data-mode', dark ? 'dark' : 'light')
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dannify-dark')
+          document.documentElement.setAttribute('data-mode', 'dark')
         }
       })()
     </script>

@@ -1,12 +1,13 @@
 # Ship-time configuration
 
-Anything in this folder is copied to `<install dir>\config\` by the installer
-and read at startup. Nothing here is secret: only public keys and URLs. So
-it is safe to commit and to ship.
+Anything in this folder is copied into the app folder
+(`<install dir>\app\config\`) by `packaging\build.ps1`, so it ships with every
+release and every update, and is read at startup. Nothing here is secret:
+only public keys and URLs. So it is safe to commit and to ship.
 
 Precedence, lowest to highest:
 
-1. `<install dir>\config\<file>.json`: what you ship (this folder)
+1. `<install dir>\app\config\<file>.json`: what you ship (this folder)
 2. `%LOCALAPPDATA%\Dannify\<file>.json`: a per-machine override
 3. environment variables: handy for testing
 
@@ -17,18 +18,19 @@ Precedence, lowest to highest:
 ```
 
 * `repo`: the GitHub repository whose **Releases** the app checks. Tag each
-  release `v3.0.1` (the leading `v` is optional) and attach the installer
-  the updater picks the first asset ending in `.exe`, preferring one with
-  `setup` in the name, which is exactly what `packaging\build.ps1` produces.
+  release `v4.0.1` (the leading `v` is optional) and attach what
+  `packaging\build.ps1` produces: `Dannify-Setup-<v>.exe`, `package-<v>.json`
+  and `package-<v>.zip`. `packaging\publish.ps1` does exactly that.
 * `channel`: `stable` (default) uses GitHub's "latest release"; `prerelease`
   also picks up releases marked as pre-release.
 
 Environment override: `DANNIFY_UPDATE_REPO=your-user/your-repo`.
 
 The whole flow is already wired: Dannify checks 8 seconds after launch and
-every 6 hours, shows a download arrow in the title bar, streams the installer
-with a progress ring, then closes itself and runs it. Your library, settings
-and sign-in all survive the upgrade.
+every 6 hours, gets a new version ready in the background (only the files
+that changed are downloaded), then shows "Restart to update". Ignore it and
+the new version is simply there the next time Dannify opens. Your library,
+settings and sign-in all carry over.
 
 ## support.json: donations (Paystack)
 

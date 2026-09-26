@@ -91,11 +91,10 @@ APP_TITLE = 'Dannify'
 APP_USER_MODEL_ID = 'Dannify.Player'
 
 # An installer that has been downloaded and is waiting for the app to close.
-# Applied by _apply_staged_update() on the way out.
+# Applied by _apply_staged_update() on the way out. Only a copy that is not
+# installed the 4.0 way ever uses this; an installed one updates in place
+# through its launcher (see dannify/layout.py).
 _staged_update: Optional[Path] = None
-# Or a folder of replacement files from a partial update, applied the same
-# way but by our own helper rather than by Setup.
-_staged_delta: Optional[Path] = None
 _INSTANCE_FILE = _DATA_DIR / 'instance.json'
 _WINDOW_STATE_FILE = _DATA_DIR / 'window.json'
 _WEBVIEW_STORAGE = _DATA_DIR / 'WebView2'
@@ -201,8 +200,7 @@ def _fatal() -> None:
             None,
             'Dannify could not start.\n\n'
             'Close it from the notification area if a copy is still running, '
-            'then open it again. If it keeps happening, install the latest '
-            'version over the top of this one.',
+            'then open it again. If it keeps happening, restart your PC.',
             APP_TITLE,
             0x10 | 0x40000,  # MB_ICONERROR | MB_TOPMOST
         )
@@ -798,6 +796,11 @@ class _Taskbar:
 
     def reset(self) -> None:
         """Explorer restarted: the old COM object and buttons are gone."""
+        if self._ptr.value:
+            try:
+                self._method(2)(self._ptr)  # IUnknown::Release
+            except Exception:
+                pass
         self._ptr = ctypes.c_void_p()
         self._buttons_added = False
 
@@ -1554,7 +1557,7 @@ class DesktopApi:
                         {'mini_pos': [round(rect.left / scale), round(top / scale)]}
                     )
                 form.TopMost = False
-                form.MinimumSize = Size(int(MIN_W * scale), int(MIN_H * scale))
+                form.MinimumSize = Size(int(_min_fit[0] * scale), int(_min_fit[1] * scale))
                 if restore:
                     form.Bounds = Rectangle(
                         int(restore['x'] * scale),
@@ -1631,8 +1634,8 @@ class DesktopApi:
         hwnd = self._hwnd
         scale = _window_scale(hwnd)
         fx, fy = _frame_thickness(hwnd)
-        floor_w = int(MIN_W * value * scale) + 2 * fx
-        floor_h = int(MIN_H * value * scale) + fy
+        floor_w = int(_min_fit[0] * value * scale) + 2 * fx
+        floor_h = int(_min_fit[1] * value * scale) + fy
 
         def apply():
             form.browser.webview.ZoomFactor = value
@@ -1735,13 +1738,27 @@ class DesktopApi:
         self._quit()
 
     def app_restart(self) -> bool:
-        """Relaunch Dannify (used by the 'restart to apply' prompt)."""
-        # When a partial update is waiting, the helper that applies it is also
-        # the thing that starts the app again. Spawning a copy here as well
-        # put two processes in the same folder at the same moment: one
-        # rewriting it, one booting out of it. Whoever lost that race came up
-        # broken. Just close; the helper does the rest.
-        if _staged_delta is not None:
+        """Relaunch Dannify (used by "restart to update").
+
+        An installed copy hands this to its launcher: it waits for this
+        process to finish, puts a waiting update in place, and opens the new
+        version, showing a small window of its own in between.
+        """
+        from dannify import layout
+
+        launcher = layout.launcher()
+        if launcher is not None and _WIN:
+            try:
+                import subprocess
+
+                subprocess.Popen(
+                    [str(launcher), '--after', str(os.getpid())],
+                    cwd=str(launcher.parent),
+                    close_fds=True,
+                )
+            except Exception as exc:
+                logger_print('restart failed:', exc)
+                return False
             threading.Timer(0.25, self._quit).start()
             return True
         try:
@@ -1779,9 +1796,13 @@ class DesktopApi:
 
     def app_install_update(self, installer: str) -> bool:
         """Run a downloaded installer and step out of its way."""
+        global _staged_update
         path = self._vetted_installer(installer)
         if path is None:
             return False
+        # Running it now is instead of running it on the way out, not as
+        # well: two copies of setup at once is what 3.18 did here.
+        _staged_update = None
         try:
             os.startfile(str(path))  # noqa: S606
         except Exception as exc:
@@ -1807,29 +1828,9 @@ class DesktopApi:
         logger.info('Update staged for the next exit: {}', path.name)
         return True
 
-    def app_stage_delta(self, folder: str) -> bool:
-        """Hold a folder of replacement files to apply when the app closes.
-
-        Same contract as staging an installer: nothing happens now, the work
-        is done on the way out so no file is in use when it is replaced.
-        """
-
-        global _staged_delta
-        try:
-            path = Path(str(folder or '')).resolve()
-            path.relative_to((_DATA_DIR / 'updates').resolve())
-            if not (path / 'apply.json').is_file():
-                return False
-        except Exception:
-            return False
-        _staged_delta = path
-        logger.info('Partial update staged for the next exit: {}', path.name)
-        return True
-
     def app_clear_staged_update(self) -> bool:
-        global _staged_update, _staged_delta
+        global _staged_update
         _staged_update = None
-        _staged_delta = None
         return True
 
     # --- YouTube Music account ----------------------------------------------
@@ -1905,8 +1906,11 @@ class DesktopApi:
         target = _library_path(rel_path)
         if target is None or not target.exists():
             return False
+        initialized = False
         try:
-            ole32.CoInitializeEx(None, 0x2)  # apartment-threaded, per worker thread
+            # apartment-threaded, per worker thread; balanced below, since the
+            # bridge reuses its threads for other calls
+            initialized = ole32.CoInitializeEx(None, 0x2) in (0, 1)
             pidl = ctypes.c_void_p()
             if shell32.SHParseDisplayName(str(target), None, ctypes.byref(pidl), 0, None) == 0:
                 shell32.SHOpenFolderAndSelectItems(pidl, 0, None, 0)
@@ -1914,6 +1918,12 @@ class DesktopApi:
                 return True
         except Exception:
             pass
+        finally:
+            if initialized:
+                try:
+                    ole32.CoUninitialize()
+                except Exception:
+                    pass
         try:
             import subprocess
 
@@ -2361,391 +2371,6 @@ def _wait_for_parent_exit() -> bool:
     return False
 
 
-# --- Applying a downloaded update -----------------------------------------
-#
-# An update that only fetched the files that changed arrives as a folder of
-# replacements plus an apply.json describing them. Something has to copy
-# them over the installation, and it cannot be the app itself: a running
-# executable holds its own file open.
-#
-# So the app relaunches itself with --apply-update. That second copy waits
-# for the first to exit, does the copying, and starts the app again. Using
-# our own executable rather than shipping a separate updater means there is
-# no extra binary to sign, to explain, or to go missing. It is a windowed
-# program, so nothing appears on screen while it works.
-
-
-# Windows refuses a rename while anything else has the file open, and just
-# after an app exits something often does for a moment: the virus scanner
-# looking over the program that just stopped, or the search indexer. The
-# first rename used to be the only try, so an update could fail on nothing
-# more than bad timing and come back as the old version, to be downloaded
-# and applied all over again. It keeps trying for about half a minute now.
-_BUSY_ERRORS = (5, 32, 33)  # access denied, sharing violation, lock violation
-
-
-def _patient_rename(src: Path, dst: Path, patience: float = 30.0) -> None:
-    """Rename, retrying while Windows says the file is busy. Uses nothing
-    that is not already loaded (see _apply_update_folder)."""
-
-    waited = 0.0
-    pause = 0.25
-    while True:
-        try:
-            src.rename(dst)
-            return
-        except OSError as exc:
-            busy = getattr(exc, 'winerror', None) in _BUSY_ERRORS
-            if not busy or waited >= patience:
-                raise
-        time.sleep(pause)
-        waited += pause
-        pause = min(pause * 2, 3.0)
-
-
-def _apply_update_folder(staging: Path) -> bool:
-    """Copy a staged update over this installation. Runs in the helper.
-
-    Nothing may be imported once the first file has moved. This program is a
-    single executable with its own archive of modules inside it, and the
-    importer opens that archive by path, lazily, the first time a module is
-    asked for. Replace the executable and the next lazy import reads the new
-    archive at the old offsets: "Error -3 while decompressing data". That is
-    not hypothetical, it is what happened. Everything the rest of this
-    function and its caller need is loaded up front, by _preload_for_apply().
-    """
-
-    import shutil
-
-    from dannify import delta
-
-    staging = Path(staging)
-    plan_file = staging / 'apply.json'
-    try:
-        plan = json.loads(plan_file.read_text(encoding='utf-8'))
-    except Exception:
-        logger_print('no usable apply.json in', staging)
-        return False
-
-    exe_name = Path(sys.executable).name.lower()
-    target = Path(sys.executable).resolve().parent
-    files = plan.get('files', {})
-    logger_print(f'applying update {plan.get("version", "?")} into {target}')
-
-    # Two passes, because the old way could destroy an installation.
-    #
-    # It used to rename the live file out of the way and then copy the new one
-    # in. If that copy failed - a full disk, a virus scanner holding the fresh
-    # unsigned executable, the power going - the rename had already happened
-    # and the file was simply gone. When the file in question is Dannify.exe,
-    # nothing launches any more and there is nothing left to roll back to.
-    #
-    # So: copy everything beside its destination first, touching nothing live.
-    # Only once every copy has landed do the renames, which are as close to
-    # atomic as the filesystem gets and cannot half-write. If one of those
-    # fails, put back the ones already done.
-    # Written before a single byte is copied, not after. Written after, the
-    # whole copy phase - a hundred megabytes of it for a delta carrying the
-    # executable and the Python runtime - was unmarked, so another launch in
-    # that window saw a folder with no update in progress, ran the startup
-    # sweep, and deleted every .new file staged so far.
-    marker = target / '.updating'
-    try:
-        marker.write_text(str(plan.get('version', '')), encoding='utf-8')
-    except OSError:
-        pass
-    # Recorded when the apply starts, not when the download finished. An
-    # update can sit downloaded and staged for days waiting for the app to
-    # be closed, and every launch in between would otherwise be told the
-    # update had failed when nothing had been attempted yet.
-    _note_update_attempt(str(plan.get('version', '')))
-
-    staged: list[tuple[Path, Path]] = []  # (destination, its .new)
-    try:
-        for rel in sorted(files):
-            source = staging / rel
-            if not source.is_file():
-                continue  # unchanged file, was never downloaded
-            dest = target / rel
-            fresh = dest.with_name(dest.name + '.new')
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                fresh.unlink()
-            except OSError:
-                pass
-            shutil.copy2(source, fresh)
-            staged.append((dest, fresh))
-    except Exception as exc:
-        logger_print('could not stage', exc)
-        for _dest, fresh in staged:
-            try:
-                fresh.unlink()
-            except OSError:
-                pass
-        try:
-            marker.unlink()
-        except OSError:
-            pass
-        return False
-
-    # Our own executable goes last, so the window in which this process is
-    # running against a swapped archive is as small as it can be.
-    staged.sort(key=lambda p: p[0].name.lower() == exe_name)
-
-    done: list[tuple[Path, Path, bool]] = []  # (dest, its .old, .old exists)
-    for dest, fresh in staged:
-        stale = dest.with_name(dest.name + '.old')
-        try:
-            try:
-                stale.unlink()
-            except OSError:
-                pass
-            had = dest.exists()
-            if had:
-                # A running executable cannot be overwritten, but it can be
-                # renamed out of the way: that includes this very file.
-                _patient_rename(dest, stale)
-                # Recorded here, between the two renames, not after both.
-                # Recorded after, an entry whose first rename worked and whose
-                # second failed was not in the list the rollback walks, so the
-                # original stayed parked at <name>.old and nothing put it back.
-                # For the entry sorted last that file is Dannify.exe.
-                done.append((dest, stale, had))
-            _patient_rename(fresh, dest)
-            if not had:
-                done.append((dest, stale, had))
-        except Exception as exc:
-            logger_print('could not put', dest.name, 'in place:', exc)
-            # Undo, newest first, so the install is exactly as we found it.
-            for gone, old, had in reversed(done):
-                try:
-                    if gone.exists():
-                        _patient_rename(gone, gone.with_name(gone.name + '.new'))
-                    if had and old.exists():
-                        _patient_rename(old, gone)
-                except OSError:
-                    logger_print('rollback failed for', gone.name)
-            try:
-                marker.unlink()
-            except OSError:
-                pass
-            return False
-
-    copied = len(done)
-    try:
-        marker.unlink()
-    except OSError:
-        pass
-
-    # Check what actually landed. Only the handful we replaced, so this costs
-    # nothing, and a silently corrupt copy is worth catching here rather than
-    # at the next launch.
-    for dest, _stale, _had in done:
-        rel = dest.relative_to(target).as_posix()
-        want = files.get(rel) or {}
-        if not want.get('sha256'):
-            continue
-        try:
-            if delta.sha256_of(dest) != want['sha256']:
-                logger_print('what landed does not match the manifest:', rel)
-                return False
-        except OSError as exc:
-            logger_print('could not read back', rel, exc)
-            return False
-
-    emptied: set[Path] = set()
-    for rel in plan.get('removed', []):
-        # The plan is written by whichever version downloaded the update, and
-        # an older one listed everything the manifest did not mention: the
-        # uninstaller Setup left here, and the ship-time config. Check again
-        # on this side, where the files actually are.
-        if not delta.is_ours(str(rel)):
-            logger_print('keeping', rel, '(not ours to remove)')
-            continue
-        try:
-            gone = (target / rel).resolve()
-            gone.relative_to(target)  # never delete outside the install
-            if gone.is_file():
-                gone.unlink()
-                emptied.add(gone.parent)
-        except Exception:
-            pass
-
-    # A release that drops a whole folder leaves the folder behind, because
-    # the plan lists files. An install that has been updated a few times then
-    # carries a little museum of empty directories, named for things the app
-    # no longer ships. Walk up from each one and take the empty ones with it.
-    for folder in sorted(emptied, key=lambda p: len(p.parts), reverse=True):
-        while folder != target:
-            try:
-                folder.relative_to(target)
-                folder.rmdir()  # refuses if anything is still in there
-            except Exception:
-                break
-            folder = folder.parent
-
-    logger_print(f'update applied: {copied} file(s) replaced')
-    return True
-
-
-def _wait_for_apply_to_finish(root: Path, timeout: float = 45.0) -> None:
-    """Hold off while an update helper is part way through the folder.
-
-    The helper leaves a marker beside the app for the few seconds its renames
-    take. Starting in the middle of that means loading half of one build and
-    half of another, so wait it out. A stale marker from a helper that died is
-    cleared once the timeout passes: an app that refuses to start for ever is
-    worse than one that starts against a folder nobody is touching.
-    """
-
-    marker = root / '.updating'
-    waited = 0.0
-    while waited < timeout:
-        try:
-            if not marker.exists():
-                return
-        except OSError:
-            return
-        time.sleep(0.25)
-        waited += 0.25
-    logger_print('an update looks stuck; starting anyway')
-    try:
-        marker.unlink()
-    except OSError:
-        pass
-
-
-def _sweep_old_files(root: Path) -> None:
-    """Clear what a previous update left lying about.
-
-    Reaching here means this build started, so the copies it replaced are
-    safe to drop. Half-staged .new files are swept too: an apply that never
-    got as far as its renames leaves them, and they are dead weight.
-
-    Empty folders go the same way. An update removes files, not directories,
-    so a release that stops shipping a whole folder leaves the folder there,
-    and an install updated a few times collects a set of empty directories
-    named for things the app no longer has. Nothing in here ever wants an
-    empty folder, and one this build needs it makes for itself.
-    """
-
-    # A .new file is half of an update in flight. _wait_for_apply_to_finish
-    # gives up after a while and starts anyway, and sweeping then deleted the
-    # replacement files an update helper was still copying, which left the
-    # install with neither the old files nor the new ones. If the marker is
-    # still there the update is still happening, so the .new files are not
-    # rubbish and are left exactly where they are.
-    mid_update = (Path(root) / '.updating').exists()
-    try:
-        stale_files = list(Path(root).rglob('*.old'))
-        if not mid_update:
-            stale_files += list(Path(root).rglob('*.new'))
-        for stale in stale_files:
-            try:
-                stale.unlink()
-            except OSError:
-                pass  # still locked; the next launch gets it
-    except Exception:
-        pass
-
-    try:
-        # Deepest first, so clearing a child lets its parent go in the same
-        # pass. rmdir refuses a folder with anything in it, which is the whole
-        # safety check: no listing, no rules about what may go.
-        folders = sorted(
-            (p for p in Path(root).rglob('*') if p.is_dir()),
-            key=lambda p: len(p.parts),
-            reverse=True,
-        )
-        for folder in folders:
-            try:
-                folder.rmdir()
-            except OSError:
-                pass
-    except Exception:
-        pass
-
-
-def _preload_for_apply() -> tuple:
-    """Load everything the update helper needs, before it touches a file.
-
-    See the note in _apply_update_folder: once our own executable has been
-    replaced, importing anything that is not already in memory reads the new
-    archive with the old offsets and fails. So the imports happen here, while
-    the file on disk is still the one we were started from.
-    """
-
-    import shutil
-    import subprocess
-
-    from dannify import delta
-
-    # Touch the attributes too, not just the module objects: a lazy importer
-    # can defer a submodule until first use.
-    _ = (shutil.copy2, shutil.rmtree, subprocess.Popen, delta.is_ours)
-    return shutil, subprocess, delta
-
-
-def _run_update_helper(staging: str) -> int:
-    """The --apply-update entry point."""
-
-    shutil, subprocess, _delta = _preload_for_apply()
-    if not _wait_for_parent_exit():
-        # Replacing files under a live process is how an install ends up
-        # half old and half new. Leave everything alone; the update is still
-        # staged and the next start will offer it again.
-        return 1
-    ok = _apply_update_folder(Path(staging))
-    exe = Path(sys.executable).resolve()
-    if ok:
-        try:
-            shutil.rmtree(staging, ignore_errors=True)
-        except Exception:
-            pass
-    # Start the app again either way: a failed update must not leave the
-    # user with nothing running. A bad copy still has the old files, and the
-    # update will simply be offered again.
-    #
-    # Not immediately, though, and not only once. Waiting for the old process
-    # to exit is not the same as waiting for it to let go: the browser engine
-    # runs in its own child processes, and they keep the profile folder open
-    # for a moment after their parent is gone. Start inside that moment and
-    # the engine refuses to open the folder at all, which takes the whole
-    # window down with it. That is what put "Dannify could not start" on
-    # screen after an update while the update itself had worked perfectly.
-    for attempt in range(4):
-        time.sleep(2 if attempt == 0 else 3)
-        try:
-            child = subprocess.Popen(
-                [str(exe)],
-                cwd=str(exe.parent),
-                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
-                close_fds=True,
-            )
-        except Exception as exc:
-            logger_print('could not relaunch after the update:', exc)
-            return 0 if ok else 1
-
-        # A copy that got the folder stays up. One that did not is gone in
-        # about a second, so a short watch tells the two apart.
-        settled = None
-        for _ in range(12):
-            time.sleep(0.5)
-            settled = child.poll()
-            if settled is not None:
-                break
-        if settled is None:
-            return 0 if ok else 1
-        # Exit code 0 is the single-instance path: something else is already
-        # running, which is a fine place to stop.
-        if settled == 0:
-            return 0 if ok else 1
-        logger_print(f'relaunch {attempt + 1} exited with {settled}; trying again')
-
-    logger_print('gave up relaunching after the update')
-    return 0 if ok else 1
-
-
 # A name the installer can signal to ask us to shut down. Without this the
 # only way to close a running copy is a window message, and close-to-tray
 # swallows those: the app hides instead of exiting and the installer sits
@@ -2812,11 +2437,31 @@ def _acquire_single_instance() -> bool:
         return True
     _wait_for_parent_exit()
     suffix = os.environ.get('DANNIFY_INSTANCE', '')
-    kernel32.CreateMutexW(None, False, f'Local\\DannifyAppMutex{suffix}')
-    if ctypes.get_last_error() == 183 or kernel32.GetLastError() == 183:
+    name = f'Local\\DannifyAppMutex{suffix}'
+
+    def claim() -> bool:
+        handle = kernel32.CreateMutexW(None, False, name)
+        taken = ctypes.get_last_error() == 183 or kernel32.GetLastError() == 183
+        if taken and handle:
+            # Our handle would keep the other copy's mutex alive after it
+            # exits; hold one only while we own it.
+            kernel32.CloseHandle(handle)
+        return not taken
+
+    if claim():
+        return True
+    if _running_instance_window():
         _focus_existing_window()
         return False
-    return True
+    # Another copy holds the mutex but has no window any more: it is on its
+    # way out (closed a moment ago). Opening Dannify again straight after
+    # closing it used to do nothing at all; wait for it to finish instead.
+    for _ in range(40):
+        time.sleep(0.1)
+        if claim():
+            return True
+    _focus_existing_window()
+    return False
 
 
 def _running_instance_window() -> int:
@@ -3042,41 +2687,6 @@ def _wait_until_up(port: int, timeout: float = 30.0, token: str = '') -> bool:
     return False
 
 
-_UPDATE_NOTE = _DATA_DIR / 'update-result.json'
-
-
-def _note_update_attempt(version: str) -> None:
-    """Write down which version we are about to install.
-
-    An update that fails used to do so in complete silence: the files were not
-    replaced, nothing said why, and the same update was offered again on the
-    next check, forever. From the outside that is an app whose updates simply
-    never work.
-
-    The next start compares this against the version actually running. If they
-    match the update landed and the note goes. If they do not, something ate
-    it, and the app says so instead of quietly offering it again.
-    """
-
-    try:
-        _UPDATE_NOTE.write_text(
-            json.dumps({'version': str(version or '')}), encoding='utf-8',
-        )
-    except OSError:
-        pass
-
-
-def _version_from_staging(path) -> str:
-    """The version a staging folder or installer is carrying."""
-
-    name = Path(path).name
-    match = _re_version.search(name)
-    return match.group(0) if match else ''
-
-
-_re_version = __import__('re').compile(r'\d+\.\d+\.\d+')
-
-
 def _write_instance_file(port: int, hwnd: int = 0) -> None:
     """Leave a note for a second launch: how to reach us, and which window
     to bring forward.
@@ -3148,13 +2758,27 @@ def _settle(measured: dict, launched: tuple[int, int, int, int] | None) -> dict:
     return measured
 
 
+# The smallest the window may be: MIN_W x MIN_H, but never more than the
+# screen can show. A 1366 x 768 laptop at 150% scaling has well under 540
+# logical pixels of height above the taskbar, and forcing 540 there put the
+# player bar underneath the taskbar on every start.
+_min_fit = (MIN_W, MIN_H)
+
+
+def _fit_minimum(work_w: int, work_h: int) -> tuple[int, int]:
+    global _min_fit
+    _min_fit = (max(480, min(MIN_W, work_w - 8)), max(360, min(MIN_H, work_h - 8)))
+    return _min_fit
+
+
 def _clamp_to_visible(x: int, y: int, w: int, h: int) -> tuple[int, int, int, int]:
     left, top, work_w, work_h = _work_area_near(x, y, w, h)
     # Leave a little room: a window sized to the exact work area can still
     # spill its shadow (and on some setups its last row of pixels) past the
     # edge, which is how the player bar ends up under the taskbar.
-    w = max(MIN_W, min(w, work_w - 8))
-    h = max(MIN_H, min(h, work_h - 8))
+    min_w, min_h = _fit_minimum(work_w, work_h)
+    w = max(min_w, min(w, work_w - 8))
+    h = max(min_h, min(h, work_h - 8))
     x = max(left, min(x, left + work_w - w))
     y = max(top, min(y, top + work_h - h))
     return x, y, w, h
@@ -3163,8 +2787,9 @@ def _clamp_to_visible(x: int, y: int, w: int, h: int) -> tuple[int, int, int, in
 def _centered_geometry() -> tuple[int, int, int, int]:
     """Default (x, y, w, h): DEFAULT_W × DEFAULT_H centered on the primary work area."""
     left, top, work_w, work_h = _work_area_near(0, 0, 1, 1)
-    w = min(DEFAULT_W, max(MIN_W, work_w - 80))
-    h = min(DEFAULT_H, max(MIN_H, work_h - 80))
+    min_w, min_h = _fit_minimum(work_w, work_h)
+    w = min(DEFAULT_W, max(min_w, work_w - 80))
+    h = min(DEFAULT_H, max(min_h, work_h - 80))
     return left + (work_w - w) // 2, top + (work_h - h) // 2, w, h
 
 
@@ -3383,9 +3008,15 @@ def _tag_media_windows() -> int:
         return 0
 
 
+# The window's bridge object, once main() has made it. This used to read a
+# name that only existed inside main(), so it always came back 0 and the
+# main window was never among the windows stamped with our identity.
+_API = None
+
+
 def _main_hwnd() -> int:
     try:
-        return int(getattr(api, '_hwnd', 0) or 0)
+        return int(getattr(_API, '_hwnd', 0) or 0)
     except Exception:
         return 0
 
@@ -3405,24 +3036,6 @@ def _apply_staged_update() -> None:
     """
 
     import subprocess
-
-    # A partial update goes first: it is the cheaper and more common one.
-    if _staged_delta is not None and _WIN:
-        try:
-            exe = Path(sys.executable).resolve()
-            logger.info('Applying partial update from {}', _staged_delta.name)
-            env = dict(os.environ)
-            env['DANNIFY_WAIT_PID'] = str(os.getpid())
-            subprocess.Popen(
-                [str(exe), '--apply-update', str(_staged_delta)],
-                cwd=str(exe.parent),
-                env=env,
-                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
-                close_fds=True,
-            )
-            return
-        except Exception:
-            logger.opt(exception=True).debug('could not start the update helper')
 
     installer = _staged_update
     if installer is None or not _WIN:
@@ -3445,6 +3058,28 @@ def _apply_staged_update() -> None:
         )
     except Exception:
         logger.opt(exception=True).debug('could not apply the staged update')
+
+
+def _after_start_housekeeping() -> None:
+    """Once the app has settled: the launcher, the Apps entry, leftovers.
+
+    An update can bring a new launcher; it is copied into place from here
+    because the launcher is not running once the app is. Settings > Apps is
+    told the version that actually runs. Folders earlier updates parked are
+    cleared, keeping the one version there is to go back to.
+    """
+
+    time.sleep(20)
+    try:
+        from dannify import __version__, layout
+
+        if not layout.managed():
+            return
+        layout.refresh_registration(__version__)
+        layout.refresh_launcher()
+        layout.tidy()
+    except Exception:
+        logger.opt(exception=True).debug('housekeeping failed')
 
 
 def _schedule_media_identity() -> None:
@@ -3537,21 +3172,6 @@ def main() -> None:
         _signal_quit_request()
         sys.exit(0)
 
-    # `--apply-update <dir>` is this same program acting as its own updater:
-    # it waits for the copy that spawned it to exit, replaces the files, and
-    # starts the app again.
-    if '--apply-update' in sys.argv[1:]:
-        where = sys.argv[sys.argv.index('--apply-update') + 1 :]
-        if where:
-            sys.exit(_run_update_helper(where[0]))
-        sys.exit(2)
-
-    # Never boot out of a folder something is still rewriting.
-    _wait_for_apply_to_finish(Path(sys.executable).resolve().parent)
-
-    # Tidy up whatever the last update renamed out of the way.
-    _sweep_old_files(Path(sys.executable).resolve().parent)
-
     _claim_app_identity()
     opening = _file_argument()
     if not _acquire_single_instance():
@@ -3566,6 +3186,9 @@ def main() -> None:
     session_key = secrets.token_urlsafe(24)
     server = _start_server(port, session_key)
     _write_instance_file(port)
+    threading.Thread(
+        target=_after_start_housekeeping, name='dannify-housekeeping', daemon=True,
+    ).start()
 
     threading.Thread(
         target=_watch_for_opened_files, name='dannify-open', daemon=True,
@@ -3636,7 +3259,9 @@ def main() -> None:
         browser_args.append(f'--remote-debugging-port={devtools_port}')
     os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = ' '.join(browser_args)
 
+    global _API
     api = DesktopApi(native_frame_pref=native_frame, prefs=prefs)
+    _API = api
     api._theme = theme
     # What we asked for. Windows reports back a slightly different rect once
     # the custom frame is installed, and saving *that* made the window creep
@@ -3653,7 +3278,7 @@ def main() -> None:
         y=y,
         width=w,
         height=h,
-        min_size=(MIN_W, MIN_H),
+        min_size=_min_fit,
         background_color=_THEME_BG[theme],
         text_select=False,
         # Ctrl with the scroll wheel zooming the whole interface is browser
@@ -3731,7 +3356,7 @@ def main() -> None:
             if hwnd and not api._fullscreen:
                 placement = api._pre_mini if api._mini and api._pre_mini else _current_placement(hwnd)
                 placement = _settle(placement, api._launch_geometry)
-                if placement['w'] >= MIN_W and placement['h'] >= MIN_H:
+                if placement['w'] >= _min_fit[0] and placement['h'] >= _min_fit[1]:
                     _write_prefs(placement)
         except Exception:
             pass

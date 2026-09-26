@@ -5,6 +5,7 @@
     :class="{
       'is-desktop': desktop.isDesktop,
       'is-inactive': desktop.isDesktop && !win.focused,
+      'is-welcome': welcome,
     }"
   >
     <div class="tb-left">
@@ -48,36 +49,38 @@
     </div>
 
     <div class="tb-right">
-      <RepairIndicator />
-      <DownloadIndicator />
-      <UpdateButton />
-      <button
-        class="tb-account"
-        :class="{ 'is-in': account.signedIn.value }"
-        :title="account.signedIn.value ? account.displayName.value : t('account.connect')"
-        @click="openAccountMenu"
-      >
-        <img
-          v-if="account.profile.value.photo && !photoFailed"
-          :src="account.profile.value.photo"
-          alt=""
-          class="tb-avatar drag-none"
-          referrerpolicy="no-referrer"
-          @error="photoFailed = true"
-        />
-        <span v-else-if="account.signedIn.value" class="tb-avatar tb-initials">
-          {{ initials }}
-        </span>
-        <Icon v-else icon="ph:user-circle" class="h-[19px] w-[19px]" />
-      </button>
-      <button
-        class="icon-btn"
-        :class="{ 'is-active': route.name === 'Settings' }"
-        :title="`${t('nav.settings')} (Ctrl+,)`"
-        @click="router.push({ name: 'Settings' })"
-      >
-        <Icon icon="ph:gear-six" class="h-[18px] w-[18px]" />
-      </button>
+      <div class="tb-app">
+        <RepairIndicator />
+        <DownloadIndicator />
+        <UpdateButton />
+        <button
+          class="tb-account"
+          :class="{ 'is-in': account.signedIn.value }"
+          :title="account.signedIn.value ? account.displayName.value : t('account.connect')"
+          @click="openAccountMenu"
+        >
+          <img
+            v-if="account.profile.value.photo && !photoFailed"
+            :src="account.profile.value.photo"
+            alt=""
+            class="tb-avatar drag-none"
+            referrerpolicy="no-referrer"
+            @error="photoFailed = true"
+          />
+          <span v-else-if="account.signedIn.value" class="tb-avatar tb-initials">
+            {{ initials }}
+          </span>
+          <Icon v-else icon="ph:user-circle" class="h-[19px] w-[19px]" />
+        </button>
+        <button
+          class="icon-btn"
+          :class="{ 'is-active': route.name === 'Settings' }"
+          :title="`${t('nav.settings')} (Ctrl+,)`"
+          @click="router.push({ name: 'Settings' })"
+        >
+          <Icon icon="ph:gear-six" class="h-[18px] w-[18px]" />
+        </button>
+      </div>
       <template v-if="desktop.isDesktop && !win.nativeFrame">
         <span class="tb-sep" />
         <WindowControls />
@@ -93,6 +96,7 @@ import { Icon } from '@iconify/vue'
 import { desktop, bindWindowDrag } from '/src/desktop/bridge'
 import { useUi } from '/src/model/ui'
 import { useAccount } from '/src/model/account'
+import { useOnboarding } from '/src/model/onboarding'
 import { openContextMenu } from '/src/model/contextMenu'
 import { useI18n } from '/src/i18n'
 import SearchBox from './SearchBox.vue'
@@ -106,6 +110,7 @@ const router = useRouter()
 const route = useRoute()
 const ui = useUi()
 const account = useAccount()
+const welcome = useOnboarding().show
 const win = desktop.state
 
 const bar = ref(null)
@@ -275,6 +280,34 @@ onBeforeUnmount(() => {
 .titlebar.is-inactive .tb-brand,
 .titlebar.is-inactive .tb-nav {
   opacity: 0.55;
+}
+.tb-app {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+/* While the first-run welcome covers the app, only the name and the window
+   buttons stay: everything else here would act on the app out of sight. */
+.tb-brand,
+.tb-nav,
+.tb-center,
+.tb-app {
+  /* Visible at once when coming back, so the search box can take focus the
+     moment the welcome closes. */
+  transition:
+    opacity 0.3s ease,
+    visibility 0s;
+}
+.titlebar.is-welcome .tb-left > .icon-btn,
+.titlebar.is-welcome .tb-nav,
+.titlebar.is-welcome .tb-center,
+.titlebar.is-welcome .tb-app,
+.titlebar.is-welcome .tb-sep {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.3s ease,
+    visibility 0s 0.3s;
 }
 @media (max-width: 700px) {
   .titlebar {

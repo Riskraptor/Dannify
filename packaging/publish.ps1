@@ -23,10 +23,14 @@ $version = (Select-String -Path (Join-Path $root 'Backend\dannify\__init__.py') 
 if (-not $version) { throw 'could not read the version' }
 
 $tag = "v$version"
+# The installer (new installs, and Dannify 3.x moving to 4.0) and the package
+# installed copies update from. Deliberately not manifest-*/files-*: 3.x
+# would try to patch its old layout with those, instead of taking the
+# installer that moves it to the new one.
 $files = @(
     (Join-Path $out "Dannify-Setup-$version.exe"),
-    (Join-Path $out "manifest-$version.json"),
-    (Join-Path $out "files-$version.zip")
+    (Join-Path $out "package-$version.json"),
+    (Join-Path $out "package-$version.zip")
 )
 foreach ($f in $files) { if (-not (Test-Path $f)) { throw "missing $f" } }
 

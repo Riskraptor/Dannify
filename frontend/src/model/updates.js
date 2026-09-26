@@ -2,20 +2,39 @@ import { ref, computed, watch } from 'vue'
 import API from '/src/model/api'
 import { desktop } from '/src/desktop/bridge'
 import { toast } from '/src/model/toast'
-import { confirmDialog } from '/src/model/dialog'
-import { t } from '/src/i18n'
+import { alertDialog, confirmDialog } from '/src/model/dialog'
+import { t, currentLocale } from '/src/i18n'
 
-// In-app updates from GitHub releases.
+// In-app updates.
 //
-// Nobody should have to manage this. The app checks on its own, downloads a
-// new version quietly in the background, and then says once that it is ready.
-// Press restart and it applies now; ignore it and it applies the next time
-// the app closes, which is how a browser does it and why browser updates
-// never feel like a chore.
+// Nobody should have to manage this. The app checks on its own, gets a new
+// version ready in the background, and then says once that it is ready.
+// Restart and it is there; ignore it and it is there the next time Dannify
+// opens. Nothing the running app uses is ever replaced while it runs: the
+// new version is built beside it and swapped in by the launcher at start.
 //
 // The backend does the network work; this is the state the UI binds to.
 
 const SKIP_KEY = 'dannify-skipped-update'
+const AUTO_KEY = 'dannify-auto-update'
+
+function read(key, fallback) {
+  try {
+    return localStorage.getItem(key) ?? fallback
+  } catch {
+    // Blocked storage: the default is fine.
+    return fallback
+  }
+}
+
+function write(key, value) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // The choice just will not survive a restart.
+  }
+}
+
 const info = ref({ available: false, version: '', notes: '', url: '', size: 0, site_url: '' })
 // The product page. Comes from the backend so a rebrand changes one config
 // file rather than a hard-coded URL in here.
@@ -25,28 +44,24 @@ const siteUrl = computed(
 const checking = ref(false)
 const downloading = ref(false)
 const progress = ref(0)
-// What the app is doing right now, in words. Most of an update is spent
-// working out which files changed, and a bar stuck at zero with nothing
-// beside it reads as broken.
-const stage = ref('')
+// What the update is doing, as a stage name from the backend plus bytes, so
+// it can be said in the user's language.
+const stageCode = ref('')
+const stageBytes = ref({ done: 0, total: 0 })
+// Where the prepared update is, and what kind it is: 'staged' (an installed
+// copy, applied by the launcher) or 'installer' (anything else).
 const installerPath = ref('')
-// 'installer' or 'delta': what `installerPath` actually points at.
 const updateKind = ref('installer')
 const lastError = ref('')
-const skipped = ref(localStorage.getItem(SKIP_KEY) || '')
+const skipped = ref(read(SKIP_KEY, ''))
 
 // Automatic downloading can be turned off for anyone who would rather decide
 // for themselves. On by default: the whole point is that it is not a decision.
-const AUTO_KEY = 'dannify-auto-update'
-const autoUpdate = ref(localStorage.getItem(AUTO_KEY) !== '0')
+const autoUpdate = ref(read(AUTO_KEY, '1') !== '0')
 
 function setAutoUpdate(on) {
   autoUpdate.value = !!on
-  try {
-    localStorage.setItem(AUTO_KEY, autoUpdate.value ? '1' : '0')
-  } catch {
-    // The choice just will not survive a restart.
-  }
+  write(AUTO_KEY, autoUpdate.value ? '1' : '0')
 }
 
 const available = computed(
@@ -54,11 +69,32 @@ const available = computed(
 )
 const ready = computed(() => !!installerPath.value)
 
+function megabytes(bytes) {
+  const mb = (Number(bytes) || 0) / 1048576
+  const formatted = new Intl.NumberFormat(currentLocale.value || 'en', {
+    maximumFractionDigits: mb < 10 ? 1 : 0,
+  }).format(mb)
+  return `${formatted} ${t('update.mb')}`
+}
+
+const stage = computed(() => {
+  const code = stageCode.value
+  if (!code) return ''
+  const { done, total } = stageBytes.value
+  if (code === 'downloading' && total > 0) {
+    return t('update.stage.downloadingOf', { done: megabytes(done), total: megabytes(total) })
+  }
+  return t(`update.stage.${code}`)
+})
+
 if (typeof window !== 'undefined') {
   window.addEventListener('dannify:update-progress', (e) => {
-    const value = e.detail && e.detail.progress
-    if (typeof value === 'number') progress.value = value
-    if (e.detail && typeof e.detail.label === 'string') stage.value = e.detail.label
+    const d = e.detail || {}
+    if (typeof d.progress === 'number') progress.value = d.progress
+    if (typeof d.stage === 'string' && d.stage) {
+      stageCode.value = d.stage
+      stageBytes.value = { done: Number(d.done) || 0, total: Number(d.total) || 0 }
+    }
   })
 }
 
@@ -68,10 +104,13 @@ async function check(force = false, { quiet = true } = {}) {
   lastError.value = ''
   try {
     const res = await API.checkForUpdate(force)
-    info.value = res.data || {}
-    lastError.value = info.value.error || ''
+    const fresh = res.data || {}
+    // An update already prepared stays prepared: a check that finds the
+    // same version must not hide the "restart to update" button.
+    info.value = { ...fresh, available: !!fresh.available || (ready.value && fresh.version === info.value.version) }
+    lastError.value = fresh.error || ''
     if (!quiet && !info.value.available) {
-      toast(t('update.upToDate', { version: info.value.current || '' }), {
+      toast(t('update.upToDate', { version: fresh.current || '' }), {
         icon: 'ph:check-circle',
       })
     }
@@ -85,35 +124,31 @@ async function check(force = false, { quiet = true } = {}) {
 }
 
 async function download({ quiet = false } = {}) {
-  if (downloading.value || !info.value.download_url) {
-    // Nothing to fetch. Say so rather than opening a page somewhere.
-    if (!info.value.download_url && !quiet) {
-      toast(t('update.downloadFailed'), { tone: 'error' })
-    }
+  if (downloading.value) return false
+  if (!info.value.package_url && !info.value.download_url) {
+    if (!quiet) toast(t('update.downloadFailed'), { tone: 'error' })
     return false
   }
   downloading.value = true
   progress.value = 0
-  stage.value = t('update.stageStarting')
+  stageCode.value = 'starting'
   try {
     const res = await API.downloadUpdate(info.value.download_url)
     const data = res.data || {}
     installerPath.value = data.path || ''
     updateKind.value = data.kind || 'installer'
     progress.value = 100
-    stage.value = t('update.stageReady')
-    // Tell the shell about it so closing the app is enough to apply it. A
-    // partial update is a folder of replacement files rather than an
-    // installer, and the shell applies it with its own helper.
-    if (installerPath.value) {
-      if (updateKind.value === 'delta') desktop.stageDelta(installerPath.value)
-      else desktop.stageUpdate(installerPath.value)
+    stageCode.value = 'ready'
+    // An installer (for a copy that cannot update itself in place) is run by
+    // the shell when the app closes. A staged update needs nothing: the
+    // launcher finds it at the next start.
+    if (installerPath.value && updateKind.value === 'installer') {
+      desktop.stageUpdate(installerPath.value)
     }
     return true
   } catch (e) {
     // A background attempt that fails says nothing: it will be retried, and
-    // an error about work the user never asked for is just noise. What the
-    // server said goes to the log; the toast says something readable.
+    // an error about work the user never asked for is just noise.
     console.warn('[update] download failed', e)
     if (!quiet) toast(t('update.downloadFailed'), { tone: 'error' })
     return false
@@ -122,12 +157,10 @@ async function download({ quiet = false } = {}) {
   }
 }
 
-/** Run the downloaded installer. Dannify closes so it can replace itself. */
+/** Apply the prepared update: restart into it. */
 async function install({ ask = true } = {}) {
   if (!installerPath.value) return false
-  // A partial update is applied by the shell on the way out, so "restart
-  // now" is exactly that: restart. The helper does the rest.
-  if (updateKind.value === 'delta') return desktop.restart()
+  if (updateKind.value === 'staged') return desktop.restart()
   if (!ask) return desktop.installUpdate(installerPath.value)
   const ok = await confirmDialog({
     title: t('update.installTitle', { version: info.value.version }),
@@ -141,18 +174,70 @@ async function install({ ask = true } = {}) {
   return started
 }
 
-/** Download and install in one step: what the update button does. */
+/** Download (if needed) and apply in one step: what "update now" does. */
 async function downloadAndInstall() {
   if (!ready.value && !(await download())) return false
-  return install()
+  return install({ ask: false })
 }
 
 function skipVersion() {
   skipped.value = info.value.version || ''
+  write(SKIP_KEY, skipped.value)
+  if (updateKind.value === 'staged' && installerPath.value) {
+    installerPath.value = ''
+    API.discardUpdate().catch(() => {})
+  } else {
+    desktop.clearStagedUpdate?.()
+    installerPath.value = ''
+  }
+}
+
+// --- After a restart ---------------------------------------------------------
+//
+// Two things the launcher leaves behind for the interface: an update that is
+// still waiting (the app was restarted before it could be swapped in), and
+// the note that one just was, which is shown once.
+
+function noteLines(notes) {
+  return String(notes || '')
+    .split(/\r?\n+/)
+    .map((l) => l.replace(/^[#*\-\s]+/, '').trim())
+    .filter(Boolean)
+    .slice(0, 10)
+}
+
+async function showWhatsNew(version, notes) {
+  const lines = noteLines(notes)
+  await alertDialog({
+    title: t('update.whatsNewTitle', { version }),
+    message: lines.join('\n') || t('update.whatsNewEmpty'),
+    confirmText: t('update.gotIt'),
+    icon: 'ph:sparkle-fill',
+  })
+}
+
+async function loadStatus() {
   try {
-    localStorage.setItem(SKIP_KEY, skipped.value)
+    const { data } = await API.updateStatus()
+    if (data && data.pending && data.pending.version) {
+      updateKind.value = 'staged'
+      installerPath.value = 'staged'
+      info.value = { ...info.value, available: true, version: data.pending.version }
+    }
+    if (data && data.just_updated && data.just_updated.version) {
+      const { version, notes } = data.just_updated
+      API.acknowledgeUpdate().catch(() => {})
+      toast(t('update.updatedToast', { version }), {
+        icon: 'ph:sparkle-fill',
+        tone: 'success',
+        timeout: 10000,
+        action: noteLines(notes).length
+          ? { label: t('update.whatsNew'), run: () => showWhatsNew(version, notes) }
+          : undefined,
+      })
+    }
   } catch {
-    // ignore
+    // An older backend, or none yet: nothing to say.
   }
 }
 
@@ -162,8 +247,8 @@ function skipVersion() {
 // repeat call inside that window costs nothing.
 //
 // When something is found, fetch it in the background. Two rules about when:
-// not while a track is playing, because a 48 MB download competing with the
-// stream is a stutter the user will blame on the player; and not instantly on
+// not while a track is playing, because a download competing with the stream
+// is a stutter the user will blame on the player; and not instantly on
 // launch, because the first seconds belong to whatever they opened the app to
 // do. Failures retry with a widening gap rather than hammering.
 
@@ -207,9 +292,10 @@ async function tryAutoDownload() {
 }
 
 if (typeof window !== 'undefined') {
+  setTimeout(loadStatus, 2500)
   setTimeout(() => check(false), 8000)
   setInterval(() => check(false), 6 * 60 * 60 * 1000)
-  // A found update starts downloading itself half a minute later.
+  // A found update starts getting ready by itself half a minute later.
   watch(available, (yes) => {
     if (yes) {
       autoAttempts = 0
