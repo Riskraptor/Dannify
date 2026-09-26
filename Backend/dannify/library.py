@@ -332,24 +332,33 @@ def _build(base: Path) -> dict[str, Any]:
         [tr['artist'] or 'Unknown Artist' for tr in tracks]
     )
 
+    def pick_cover(holder: dict[str, Any], tr: dict[str, Any]) -> None:
+        # The picture of an artist or an album comes from one of its tracks.
+        # It used to be the first one found, broken or not, so an artist whose
+        # first song would not play showed a grey square however many good
+        # ones they had. A track that plays wins; 'cover_v' changes whenever
+        # that file does, so a repaired song's picture is fetched afresh
+        # instead of the failure being remembered.
+        if holder.get('_cover_ok') or ('cover' in holder and tr.get('problem')):
+            return
+        holder['cover'] = tr['file']
+        holder['cover_v'] = int(tr.get('added') or 0)
+        holder['_cover_ok'] = not tr.get('problem')
+
     artists: dict[str, dict[str, Any]] = {}
     for tr in tracks:
         raw = tr['artist'] or 'Unknown Artist'
         name = canon.get(raw, raw)
-        entry = artists.setdefault(
-            name,
-            {'name': name, 'count': 0, 'albums': {}, 'cover': tr['file']},
-        )
+        entry = artists.setdefault(name, {'name': name, 'count': 0, 'albums': {}})
+        pick_cover(entry, tr)
         entry['count'] += 1
         album_name = tr['album'] or ''
         # A "single" often tags album == title; bucket those together so the
         # artist view isn't a wall of one-track albums.
         if not album_name or album_name.strip().lower() == tr['title'].strip().lower():
             album_name = 'Singles'
-        album = entry['albums'].setdefault(
-            album_name,
-            {'name': album_name, 'tracks': [], 'cover': tr['file']},
-        )
+        album = entry['albums'].setdefault(album_name, {'name': album_name, 'tracks': []})
+        pick_cover(album, tr)
         album['tracks'].append(tr)
 
     artist_list = []
@@ -361,11 +370,13 @@ def _build(base: Path) -> dict[str, Any]:
             album['tracks'].sort(
                 key=lambda t: (t['track_number'] or 999, t['title'].lower())
             )
+            album.pop('_cover_ok', None)
             albums.append(album)
         artist_list.append({
             'name': name,
             'count': entry['count'],
             'cover': entry['cover'],
+            'cover_v': entry['cover_v'],
             'albums': albums,
         })
 
@@ -490,7 +501,7 @@ def artists(base: Path) -> list[dict[str, Any]]:
     data = _get(base)
     # Strip nested album/track payloads for the lightweight list view.
     return [
-        {'name': a['name'], 'count': a['count'], 'cover': a['cover']}
+        {'name': a['name'], 'count': a['count'], 'cover': a['cover'], 'cover_v': a.get('cover_v', 0)}
         for a in data['artists']
     ]
 
@@ -524,7 +535,7 @@ def search(base: Path, query: str, limit: int = 50) -> dict[str, Any]:
     ][:limit]
 
     artist_hits = [
-        {'name': a['name'], 'count': a['count'], 'cover': a['cover']}
+        {'name': a['name'], 'count': a['count'], 'cover': a['cover'], 'cover_v': a.get('cover_v', 0)}
         for a in data['artists']
         if matches(a['name'])
     ][:limit]
@@ -542,6 +553,7 @@ def search(base: Path, query: str, limit: int = 50) -> dict[str, Any]:
                     'name': album['name'],
                     'artist': a['name'],
                     'cover': album['cover'],
+                    'cover_v': album.get('cover_v', 0),
                     'count': len(album['tracks']),
                 })
     album_hits = album_hits[:limit]

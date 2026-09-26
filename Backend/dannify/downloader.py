@@ -508,9 +508,9 @@ class Downloader:
         # does not get saved at all, and the reason is said out loud.
         if not vault.ready():
             final_path.unlink(missing_ok=True)
-            raise RuntimeError(
-                'Saved music cannot be locked on this installation, so nothing '
-                'is being saved. See the message at the top of the window.'
+            raise vault.StorageUnavailable(
+                'This song could not be saved. See the message at the top of '
+                'the window.'
             )
         try:
             artists = song.get('artists') or []
@@ -534,7 +534,7 @@ class Downloader:
             sealed = vault.seal(
                 final_path, final_path.with_suffix(vault.SUFFIX), meta,
             )
-            _remember(target_dir, sealed, song, video_id)
+            _remember(self.download_dir, sealed, song, video_id)
             final_path = sealed
         except Exception as exc:
             logger.opt(exception=True).error('Could not seal {}', final_path)
@@ -545,8 +545,7 @@ class Downloader:
             ):
                 junk.unlink(missing_ok=True)
             raise RuntimeError(
-                'That track downloaded but could not be saved securely, so it '
-                'was not kept.'
+                'This song downloaded but could not be saved, so it was not kept.'
             ) from exc
 
         if progress_cb:
@@ -555,17 +554,22 @@ class Downloader:
 
 
 def _remember(root: Path, sealed: Path, song: dict, video_id: str) -> None:
-    """Keep a plain note of what each sealed file is.
+    """Keep a note of what each sealed file is, in the library's own index.
 
-    The header inside a container is encrypted too, so a lost key would leave
-    a folder of files nobody could even identify. This costs a few hundred
-    bytes and turns that into "download these again".
+    The header inside a container is encrypted too, so a song that can no
+    longer be opened would otherwise be a file nobody could even identify.
+    This costs a few hundred bytes and turns that into "download it again",
+    as exactly the same recording.
     """
 
     from . import vault  # noqa: PLC0415
 
+    try:
+        rel = Path(sealed).relative_to(Path(root)).as_posix()
+    except ValueError:
+        return
     artists = song.get('artists') or []
-    vault.remember(Path(root) / vault.INDEX, sealed.name, {
+    vault.note_track(root, rel, {
         'title': song.get('name', '') or '',
         'artist': artists[0] if artists else '',
         'video_id': video_id,

@@ -22,6 +22,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { Icon } from '@iconify/vue'
+import { libraryEpoch } from '/src/model/library'
 
 const props = defineProps({
   src: { type: String, default: '' },
@@ -48,17 +49,35 @@ function atSize(url, px) {
 
 const failed = ref(false)
 const loaded = ref(false)
+const retry = ref(0)
 watch(
   () => props.src,
   () => {
     failed.value = false
     loaded.value = false
+    retry.value = 0
   }
 )
 
-const src1x = computed(() => atSize(props.src, props.size))
+// A saved song's picture that failed is tried again whenever the library is
+// read again. It failed because the song would not open, and the usual reason
+// the library changes is that it has just been repaired. Pictures from the
+// web are left alone: those fail for reasons a reload does not change.
+const isLocal = computed(() => String(props.src || '').startsWith('/cover'))
+watch(libraryEpoch, () => {
+  if (failed.value && isLocal.value) {
+    failed.value = false
+    loaded.value = false
+    retry.value++
+  }
+})
+
+const src1x = computed(() => {
+  const url = atSize(props.src, props.size)
+  return retry.value && isLocal.value ? `${url}&r=${retry.value}` : url
+})
 const srcset = computed(() => {
-  if (!props.size || src1x.value === props.src) return undefined
+  if (!props.size || src1x.value === props.src || isLocal.value) return undefined
   return `${src1x.value} 1x, ${atSize(props.src, props.size * 2)} 2x`
 })
 

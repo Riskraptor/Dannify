@@ -4,7 +4,7 @@
 ; Output: packaging\out\Dannify-Setup-<version>.exe
 
 #define MyAppName "Dannify"
-#define MyAppVersion "3.17.0"
+#define MyAppVersion "3.18.0"
 #define MyAppPublisher "Dannify"
 #define MyAppExeName "Dannify.exe"
 #define BuildDir "..\Backend\dist\Dannify"
@@ -89,10 +89,11 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 ; Remove runtime state but keep the user's music (~\Music\Dannify stays!).
 ;
 ; Listed one by one on purpose. This used to delete the whole folder, and the
-; folder holds vault.key: the key saved music is encrypted with. Taking that
-; while leaving the music behind would hand somebody a folder of files nothing
-; can ever open again, under a comment promising their music was kept. The key
-; stays, so uninstalling and reinstalling leaves the library playable.
+; folder holds store\ (and, from older versions, vault.key): what saved music
+; is sealed with. Taking that while leaving the music behind would hand
+; somebody a folder of files nothing can ever open again, under a comment
+; promising their music was kept. It stays, so uninstalling and reinstalling
+; leaves the library playable. (The music folder keeps its own copy too.)
 Type: filesandordirs; Name: "{localappdata}\Dannify\WebView2"
 Type: filesandordirs; Name: "{localappdata}\Dannify\SignIn"
 Type: filesandordirs; Name: "{localappdata}\Dannify\updates"
@@ -102,6 +103,7 @@ Type: filesandordirs; Name: "{localappdata}\Dannify\ytdlp-cache"
 Type: filesandordirs; Name: "{localappdata}\Dannify\replaced"
 Type: files; Name: "{localappdata}\Dannify\*.log"
 Type: files; Name: "{localappdata}\Dannify\account.json"
+Type: files; Name: "{localappdata}\Dannify\account.dat"
 Type: files; Name: "{localappdata}\Dannify\direct_cache.json"
 Type: files; Name: "{localappdata}\Dannify\instance.json"
 Type: files; Name: "{localappdata}\Dannify\lyrics_cache.json"

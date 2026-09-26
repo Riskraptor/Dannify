@@ -248,45 +248,34 @@ def health() -> dict[str, Any]:
     # before then becomes unreadable while the app reports itself healthy.
     # That is the failure this whole endpoint exists to stop being invisible,
     # so it is the one it must actually test for.
-    sealed = locked = damaged = 0
+    sealed = broken = 0
     # Not while a conversion is running: a track being rewritten is unreadable
-    # for the moment it takes, and telling somebody their library is locked
-    # because the app is in the middle of fixing it would be its own bug.
+    # for the moment it takes, and telling somebody their songs will not play
+    # because the app is in the middle of fixing them would be its own bug.
     if base is not None and not vault.busy():
         try:
             for path in base.rglob('*' + vault.SUFFIX):
                 sealed += 1
-                _, problem = vault.inspect(path)
-                if problem == vault.LOCKED:
-                    locked += 1
-                elif problem == vault.DAMAGED:
-                    damaged += 1
+                if vault.inspect(path)[1]:
+                    broken += 1
                 if sealed >= 4000:  # a library, not a disk scan
                     break
         except OSError:
             pass
 
-    # Both kinds are mended the same way, by downloading the track again, and
-    # that needs a key to seal the new copy with. Without one the window must
-    # not offer a button that cannot work.
-    fixable = vault.ready() and state.downloader is not None
-    where = vault.state()
-    if locked:
+    # What is said about it is deliberately plain: a song that will not play,
+    # and a button that fixes it. How saved songs are protected is nobody's
+    # business but the app's, and naming the mechanism in a message is an
+    # invitation to go poking at it. Whether it was sealed elsewhere or cut
+    # short, the fix is the same.
+    if not vault.ready():
+        problems.append({'code': 'storage_unavailable'})
+    elif broken:
         problems.append({
-            'code': 'music_locked',
-            'tracks': locked,
+            'code': 'songs_unplayable',
+            'tracks': broken,
             'of': sealed,
-            'why': where,
-            'repairable': fixable,
-        })
-    elif where != 'ready':
-        problems.append({'code': 'no_key', 'tracks': 0, 'why': where})
-    if damaged:
-        problems.append({
-            'code': 'tracks_damaged',
-            'tracks': damaged,
-            'of': sealed,
-            'repairable': fixable,
+            'repairable': state.downloader is not None,
         })
 
     # An update that did not take. The desktop shell writes down which version
@@ -776,6 +765,12 @@ async def update_settings_endpoint(
                 # Re-point the central lyrics index at the new folder
                 # (no-op if storage mode is 'sidecar', it just exists).
                 lyrics_index.init(new_dir)
+                # And join it, so songs already in it open and new ones are
+                # sealed the way that folder's songs are.
+                try:
+                    vault.attach(new_dir)
+                except Exception:
+                    logger.opt(exception=True).warning('could not join {}', new_dir)
                 # Drop the library cache so the new location is scanned.
                 library_mod.invalidate_cache()
                 state.settings['download_dir'] = str(new_dir)
@@ -1772,7 +1767,7 @@ async def repair_endpoint(
 
     body = payload if isinstance(payload, dict) else {}
     if not vault.ready():
-        raise HTTPException(status_code=409, detail='no_key')
+        raise HTTPException(status_code=409, detail='unavailable')
     base = _require_download_dir()
     if body.get('all'):
         data = await asyncio.to_thread(library_mod.library, base)

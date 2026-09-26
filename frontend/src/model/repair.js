@@ -25,6 +25,10 @@ let seen = { epoch: '', seq: -1 }
 // because nothing else on screen would say how it went.
 const watching = new Set()
 
+// Set when somebody presses Stop, so the end of that round is reported as
+// stopped rather than as a result.
+let stopping = false
+
 function apply(next) {
   if (!next || typeof next !== 'object' || !next.items) return
   // Two threads report on the backend and their messages can land out of
@@ -32,9 +36,46 @@ function apply(next) {
   // "still repairing" could be the final word and the spinner never stops.
   if (next.epoch === seen.epoch && next.seq <= seen.seq) return
   seen = { epoch: next.epoch, seq: next.seq }
+  const before = status.value
   status.value = next
   announce(next)
+  if (before.running && !next.running) finished(next)
   poll(next.running)
+}
+
+// How a round of more than one went. A round of one is reported by
+// announce(), next to the song it was about.
+function finished(round) {
+  if (stopping) {
+    stopping = false
+    return
+  }
+  if (round.total < 2) return
+  if (!round.failed) {
+    toast(t('repair.doneAll', { count: round.fixed || round.total }), {
+      icon: 'ph:check-circle',
+      tone: 'success',
+      timeout: 6000,
+    })
+    return
+  }
+  let text = `${t('repair.doneSome', { fixed: round.fixed, total: round.total })} ${t(
+    'repair.failedSome',
+    { count: round.failed }
+  )}`
+  // One reason for all of them is worth saying: "no internet" is the fix.
+  const reasons = new Set(
+    Object.values(round.items || {})
+      .filter((i) => i.state === 'failed')
+      .map((i) => i.reason)
+  )
+  if (reasons.size === 1) text += ` ${reasonText([...reasons][0])}`
+  const failed = failedRepairs()
+  toast(text, {
+    tone: 'error',
+    timeout: 12000,
+    action: { label: t('repair.retry'), run: () => repairFiles(failed) },
+  })
 }
 
 function titleOf(file) {
@@ -94,8 +135,18 @@ async function refreshStatus() {
 }
 
 function failedToStart(err) {
-  const noKey = err && err.response && err.response.status === 409
-  toast(t(noKey ? 'repair.noKey' : 'repair.couldNotStart'), { tone: 'error' })
+  const unavailable = err && err.response && err.response.status === 409
+  toast(t(unavailable ? 'repair.unavailable' : 'repair.couldNotStart'), { tone: 'error' })
+}
+
+// Said once, when a round of several starts here: the button that started
+// it has just gone, and the ring that replaced it is small.
+function started(snapshot) {
+  const count = Object.keys((snapshot && snapshot.items) || {}).length
+  if (count > 1 && snapshot.running) {
+    stopping = false
+    toast(t('repair.started', { count }), { icon: 'ph:wrench', timeout: 5000 })
+  }
 }
 
 /** Repair these files (paths inside the music folder). */
@@ -104,24 +155,28 @@ export async function repairFiles(files, { force = false } = {}) {
   if (!list.length) return
   if (list.length === 1) watching.add(list[0])
   try {
-    apply((await API.repairTracks({ files: list, force })).data)
+    const snapshot = (await API.repairTracks({ files: list, force })).data
+    apply(snapshot)
+    if (list.length > 1) started(snapshot)
   } catch (err) {
     list.forEach((f) => watching.delete(f))
     failedToStart(err)
   }
 }
 
-/** Repair every saved track the library finds a problem with. */
+/** Repair every saved song the library finds a problem with. */
 export async function repairAll() {
   try {
     const snapshot = (await API.repairTracks({ all: true })).data
     apply(snapshot)
-    // The banner reports rounds of more than one. A round of one gets the
-    // message a single row's repair gets, or it would finish in silence.
+    // A round of one gets the message a single row's repair gets, or it
+    // would finish in silence.
     const files = Object.keys((snapshot && snapshot.items) || {})
     if (files.length === 1) {
       watching.add(files[0])
       announce(status.value)
+    } else {
+      started(snapshot)
     }
   } catch (err) {
     failedToStart(err)
@@ -129,8 +184,10 @@ export async function repairAll() {
 }
 
 export async function stopRepairs() {
+  stopping = true
   try {
     apply((await API.repairStop()).data)
+    toast(t('repair.stopped'), { icon: 'ph:stop-circle' })
   } catch {
     // Nothing to stop, or it stopped on its own.
   }

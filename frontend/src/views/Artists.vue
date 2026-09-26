@@ -27,6 +27,19 @@
       </div>
     </div>
 
+    <!-- The load failed. This used to say the library was empty, which sent
+         people looking for songs that were sitting right there. -->
+    <EmptyState
+      v-else-if="lib.error.value && !lib.artists.value.length"
+      icon="ph:cloud-warning"
+      :title="t('library.failedLoad')"
+    >
+      <button class="btn-accent btn-pill press" @click="lib.refresh()">
+        <Icon icon="ph:arrows-clockwise" class="h-4 w-4" />
+        {{ t('common.retry') }}
+      </button>
+    </EmptyState>
+
     <EmptyState
       v-else-if="!lib.artists.value.length"
       icon="ph:users-three"
@@ -41,7 +54,7 @@
         <MediaCard
           v-for="a in filtered"
           :key="a.name"
-          :item="{ name: a.name, cover: a.cover ? API.coverFileURL(a.cover) : '' }"
+          :item="{ name: a.name, cover: a.cover ? API.coverFileURL(a.cover, a.cover_v) : '' }"
           kind="artist"
           :subtitle-text="t('nav.artistSongs', { count: a.count })"
           playable

@@ -2,30 +2,37 @@
 /**
  * What is wrong, on screen, instead of nowhere.
  *
- * Every failure in this app so far has been a silent one. The key that saved
- * music is locked with could not be read, and what the person saw was a
- * library of grey squares with no album names and no lengths, and a play
- * button that said the file may have been moved or deleted. Nothing said the
- * real reason. The same fault was worked out from scratch three separate
- * times, twice from a screenshot.
+ * Every failure in this app used to be a silent one: songs that would not
+ * play looked like songs with their details missing, and the play button said
+ * the file may have been moved or deleted. So the backend checks what it needs
+ * and says what is missing, and this puts it where the person it is happening
+ * to can read it, with the fix as a button beside it.
  *
- * So the backend checks what it needs on every start and says what is
- * missing, and this puts it where the person it is happening to can read it.
- * It says what is wrong and what it means for them. It never mentions a log.
- *
- * Where there is a fix, it is a button here too. Saved tracks that will not
- * play are repaired from this banner in one press, and it shows how that is
- * going and how it went.
+ * Deliberately plain. It says a song will not play and offers to repair it;
+ * it never explains how saved songs are protected, because naming the
+ * mechanism in a message only invites somebody to go and poke at it. It is a
+ * calm note rather than an alarm, it keeps out of the Now Playing screen, and
+ * while a repair is running it steps aside for the ring in the title bar
+ * instead of repeating the problem next to a count that disagrees with it.
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
 import { t } from '/src/i18n'
-import { failedRepairs, reasonText, useRepair } from '/src/model/repair'
+import { useRepair } from '/src/model/repair'
+
+const props = defineProps({
+  // True on screens it must stay off (Now Playing). A prop rather than
+  // v-show from outside: the root here is a transition that is sometimes
+  // empty, and a directive from the parent did not reliably reach the note
+  // inside it, so it went on showing over the album art.
+  away: { type: Boolean, default: false },
+})
 
 const problems = ref([])
 const dismissed = ref(false)
 const repair = useRepair()
+const running = computed(() => !!repair.status.value.running)
 
 async function check() {
   try {
@@ -42,7 +49,7 @@ async function check() {
 }
 
 // Checked again whenever the library changes, but once per burst: a repair
-// changes it every few seconds, and every check reads every saved track.
+// changes it every few seconds, and every check reads every saved song.
 let soon = null
 function checkSoon() {
   clearTimeout(soon)
@@ -50,15 +57,8 @@ function checkSoon() {
 }
 
 function messageFor(p) {
-  if (p.code === 'music_locked') {
-    // Not repairable means there is no working key at all, and a repair
-    // could not seal what it downloaded. That is a different sentence.
-    return p.repairable === false
-      ? t('health.keyUnreadable')
-      : t('health.musicLocked', { count: p.tracks })
-  }
-  if (p.code === 'tracks_damaged') return t('health.tracksDamaged', { count: p.tracks })
-  if (p.code === 'no_key') return t('health.noKey')
+  if (p.code === 'songs_unplayable') return t('health.songsUnplayable', { count: p.tracks })
+  if (p.code === 'storage_unavailable') return t('health.storageUnavailable')
   if (p.code === 'folder_missing') return t('health.folderMissing', { path: p.path })
   if (p.code === 'folder_read_only') return t('health.folderReadOnly', { path: p.path })
   if (p.code === 'check_failed') return t('health.checkFailed')
@@ -68,72 +68,18 @@ function messageFor(p) {
   return ''
 }
 
-// How many saved tracks the backend says it can repair right now.
-const broken = computed(() =>
-  problems.value
-    .filter((p) => (p.code === 'music_locked' || p.code === 'tracks_damaged') && p.repairable)
-    .reduce((n, p) => n + (p.tracks || 0), 0)
+const shown = computed(() => problems.value.filter((p) => messageFor(p)))
+const repairable = computed(() =>
+  shown.value.find((p) => p.code === 'songs_unplayable' && p.repairable)
 )
-
-const round = computed(() => repair.status.value)
-const running = computed(() => !!round.value.running)
-// A round of one is reported where it was started, next to the track. A
-// bigger one is reported here, and stays until dismissed: the problems it
-// fixed have left the list above, and a banner that simply vanished would
-// read as though nothing had happened.
-const finished = computed(() => !running.value && round.value.total > 1)
-
-const current = computed(() => {
-  const items = Object.values(round.value.items || {})
-  return items.find((i) => i.state === 'working') || null
-})
-const place = computed(() => Math.min(round.value.done + 1, round.value.total))
-const percent = computed(() => {
-  const total = round.value.total || 1
-  const partial = current.value ? (current.value.progress || 0) / 100 : 0
-  return Math.min(100, Math.round(((round.value.done + partial) / total) * 100))
-})
-
-const summary = computed(() => {
-  const r = round.value
-  if (!r.failed) return t('repair.doneAll', { count: r.fixed || r.total })
-  let text = `${t('repair.doneSome', { fixed: r.fixed, total: r.total })} ${t(
-    'repair.failedSome',
-    { count: r.failed }
-  )}`
-  // One reason for all of them is worth saying: "no internet" is the fix.
-  const reasons = new Set(
-    Object.values(r.items || {})
-      .filter((i) => i.state === 'failed')
-      .map((i) => i.reason)
-  )
-  if (reasons.size === 1) text += ` ${reasonText([...reasons][0])}`
-  return text
-})
-const allGood = computed(
-  () => !problems.value.length && finished.value && !round.value.failed
-)
-
-// A round starting or finishing is news, whatever was dismissed before.
-watch(running, () => {
-  dismissed.value = false
-})
-
-// Good news does not need to stay at the top of every page. Anything that
-// failed does, until somebody closes it.
-let fade = null
-watch(allGood, (good) => {
-  clearTimeout(fade)
-  if (good) fade = setTimeout(() => (dismissed.value = true), 15000)
-})
-
 const visible = computed(
-  () => !dismissed.value && (problems.value.length > 0 || running.value || finished.value)
+  () => !props.away && !dismissed.value && !running.value && shown.value.length > 0
 )
 
-function retryFailed() {
-  repair.repairFiles(failedRepairs())
-}
+// A repair finishing is a reason to look again straight away.
+watch(running, (now, before) => {
+  if (before && !now) check()
+})
 
 // Registered on mount and taken off again on unmount. Toggling the mini player
 // unmounts the whole shell, so a listener added at module scope would be added
@@ -144,137 +90,71 @@ onMounted(() => {
 })
 onUnmounted(() => {
   clearTimeout(soon)
-  clearTimeout(fade)
   window.removeEventListener('dannify:library-changed', checkSoon)
 })
 </script>
 
 <template>
-  <div v-if="visible" class="health" :class="{ 'is-good': allGood }" :role="allGood ? 'status' : 'alert'">
-    <span class="health-mark" aria-hidden="true">
-      <Icon v-if="allGood" icon="ph:check-bold" class="h-3 w-3" />
-      <template v-else>!</template>
-    </span>
-    <div class="health-text">
-      <p v-for="p in problems" :key="p.code">{{ messageFor(p) }}</p>
-
-      <div v-if="running" class="health-repair">
-        <span class="health-now">
-          {{ t('repair.progress', { done: place, total: round.total }) }}
-        </span>
-        <span class="health-bar" role="progressbar" :aria-valuenow="percent" aria-valuemin="0" aria-valuemax="100">
-          <span :style="{ width: `${percent}%` }" />
-        </span>
-        <button class="health-link" @click="repair.stopRepairs()">{{ t('repair.stop') }}</button>
+  <transition name="note">
+    <div v-if="visible" class="note" role="status">
+      <Icon icon="ph:warning-circle-fill" class="note-mark" aria-hidden="true" />
+      <div class="note-text">
+        <p v-for="p in shown" :key="p.code">{{ messageFor(p) }}</p>
       </div>
-
-      <!-- What went wrong last time stays until it is dealt with. "Try
-           again" takes everything still broken, not only what failed: a
-           track that broke since needs it just as much. -->
-      <div v-else-if="finished && round.failed" class="health-repair">
-        <span>{{ summary }}</span>
-        <button
-          class="btn-accent btn-pill press health-btn"
-          @click="broken > 0 ? repair.repairAll() : retryFailed()"
-        >
-          <Icon icon="ph:arrows-clockwise" class="h-4 w-4" />
-          {{ t('repair.retry') }}
-        </button>
-      </div>
-
-      <!-- Something broken and nothing running: the offer. It comes before
-           a finished round's good news, which is old news by then. -->
-      <div v-else-if="broken > 0" class="health-repair">
-        <button class="btn-accent btn-pill press health-btn" @click="repair.repairAll()">
-          <Icon icon="ph:wrench" class="h-4 w-4" />
-          {{ broken > 1 ? t('repair.all') : t('repair.action') }}
-        </button>
-        <span class="health-hint">{{ t('repair.hint', { count: broken }) }}</span>
-      </div>
-
-      <div v-else-if="finished" class="health-repair">
-        <span>{{ summary }}</span>
-      </div>
+      <button
+        v-if="repairable"
+        class="btn-accent btn-pill press note-btn"
+        @click="repair.repairAll()"
+      >
+        <Icon icon="ph:wrench" class="h-4 w-4" />
+        {{ repairable.tracks > 1 ? t('repair.all') : t('repair.action') }}
+      </button>
+      <button class="note-close" :title="t('common.dismiss')" :aria-label="t('common.dismiss')" @click="dismissed = true">
+        <Icon icon="ph:x" class="h-4 w-4" />
+      </button>
     </div>
-    <button class="health-close" :title="t('common.dismiss')" @click="dismissed = true">
-      ×
-    </button>
-  </div>
+  </transition>
 </template>
 
 <style scoped>
-.health {
+.note {
   display: flex;
   flex: none;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   margin: 16px 24px 4px;
-  padding: 12px 14px;
+  padding: 10px 10px 10px 14px;
   max-width: 900px;
-  border: 1px solid var(--danger-border, rgba(255 107 107 / 0.35));
+  border: 1px solid rgb(var(--c-tint) / 0.1);
   border-radius: 10px;
-  background: var(--danger-bg, rgba(255 107 107 / 0.1));
-  color: var(--text, inherit);
-  font-size: 0.9rem;
+  background: rgb(var(--c-tint) / 0.05);
+  font-size: 0.88rem;
   line-height: 1.45;
 }
 
-.health.is-good {
-  border-color: rgb(var(--c-accent) / 0.4);
-  background: rgb(var(--c-accent) / 0.1);
-}
-
-.health-mark {
-  display: grid;
-  place-items: center;
+.note-mark {
   flex: none;
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
-  border-radius: 50%;
-  background: var(--danger, #ff6b6b);
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.78rem;
-  line-height: 20px;
-  text-align: center;
+  width: 18px;
+  height: 18px;
+  color: rgb(var(--c-warn));
 }
 
-.is-good .health-mark {
-  background: rgb(var(--c-accent));
-  color: rgb(var(--c-accent-fg));
-}
-
-.health-text {
+.note-text {
   flex: 1;
   min-width: 0;
+  color: rgb(var(--c-fg) / 0.9);
 }
 
-.health-text p {
+.note-text p {
   margin: 0;
 }
 
-.health-text p + p {
-  margin-top: 6px;
+.note-text p + p {
+  margin-top: 4px;
 }
 
-.health-repair {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  margin-top: 10px;
-}
-
-.health-text p + .health-repair {
-  margin-top: 10px;
-}
-
-.health-text > .health-repair:first-child {
-  margin-top: 0;
-}
-
-.health-btn {
+.note-btn {
+  flex: none;
   height: 30px;
   padding: 0 14px;
   gap: 6px;
@@ -282,69 +162,38 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.health-hint {
-  opacity: 0.7;
-  font-size: 0.84rem;
-}
-
-.health-now {
-  font-variant-numeric: tabular-nums;
-}
-
-.health-bar {
-  position: relative;
-  flex: 1;
-  min-width: 80px;
-  max-width: 260px;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgb(var(--c-tint) / 0.15);
-}
-
-.health-bar > span {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: inherit;
-  background: rgb(var(--c-accent));
-  transition: width 0.3s ease;
-}
-
-.health-link {
-  border: 0;
-  background: none;
-  color: inherit;
-  opacity: 0.75;
-  font-size: 0.84rem;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-  padding: 0;
-}
-
-.health-link:hover {
-  opacity: 1;
-}
-
-.health-close {
+.note-close {
+  display: grid;
   flex: none;
-  border: 0;
-  background: none;
-  color: inherit;
-  opacity: 0.6;
-  font-size: 1.1rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px 4px;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: rgb(var(--c-fg) / 0.55);
 }
 
-.health-close:hover {
-  opacity: 1;
+.note-close:hover {
+  background: rgb(var(--c-tint) / 0.08);
+  color: rgb(var(--c-fg));
+}
+
+.note-enter-active,
+.note-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.note-enter-from,
+.note-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 @media (width <= 700px) {
-  .health {
+  .note {
     margin: 0 16px 10px;
+    flex-wrap: wrap;
   }
 }
 </style>

@@ -10,6 +10,10 @@ const artists = ref([])
 const loaded = ref(false)
 const loading = ref(false)
 const error = ref(false)
+// Goes up every time the library is read again. A picture of a saved song
+// that could not be shown (the song would not open) tries again when it
+// changes: the usual reason is that the song has just been repaired.
+export const libraryEpoch = ref(0)
 
 let inflight = null
 async function refresh() {
@@ -21,6 +25,7 @@ async function refresh() {
       artists.value = Array.isArray(art.data) ? art.data : []
       loaded.value = true
       error.value = false
+      libraryEpoch.value++
     })
     .catch(() => {
       error.value = true

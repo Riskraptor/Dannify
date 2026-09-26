@@ -195,7 +195,7 @@ def _protect(raw: bytes) -> bytes:
             return b'DPA2' + _dpapi(raw, salt, unwrap=False)
         return b'DPAP' + _dpapi(raw, None, unwrap=False)
     except Exception:
-        logger.opt(exception=True).debug('could not protect the vault key')
+        logger.opt(exception=True).debug('could not protect a store entry')
         return b'RAW0' + raw
 
 
@@ -218,80 +218,282 @@ def _unprotect(stored: bytes) -> bytes:
     raise ValueError('unknown key format')
 
 
-def _write_key(data: bytes) -> None:
-    """Put the key on disk in a way that cannot half happen.
+# ---------------------------------------------------------------------------
+# Where the keys live
+# ---------------------------------------------------------------------------
+# Every key is kept wrapped (see _protect) in a small store: a folder holding
+# one file per key, named after a fingerprint of it, and a note of which one
+# new songs are sealed with. There are two stores:
+#
+#   <data folder>/store       this installation's keys
+#   <music folder>/.dannify   every key the songs in that folder were sealed
+#                             with, hidden, so the knowledge travels with them
+#
+# The second is what keeps a library from being cut off from its own songs.
+# The key used to live in the data folder only, and anything that left a new
+# one there (a cleaner emptying AppData, a reinstall by an old uninstaller, a
+# copy of Dannify started from inside another app's sandbox, which Windows
+# gives a private AppData of its own) made every song saved before it
+# unplayable, and the only cure was downloading every one of them again. Now
+# a key a library needs is found in the library, and its songs are moved onto
+# one key quietly in the background (see repair()).
+#
+# A wrapped key only opens for the same Windows account on the same PC, so
+# keeping one beside the music gives nothing away: copied anywhere else it is
+# as useless as the songs are.
+STORE = 'store'
+LIBRARY_STORE = '.dannify'
+_MARKER = 'store.json'
+# Where earlier versions kept the key, under names that said what it was.
+_LEGACY_KEYS = ('vault.key', 'vault.key.bak')
+
+# Every other key this installation can open saved music with. _master is the
+# one new songs are sealed with; these are keys songs were sealed with before
+# (another data folder, an older copy) and are kept so those still play while
+# they are moved onto _master.
+_keys: list[bytes] = []
+_library: Optional[Path] = None
+
+
+class StorageUnavailable(RuntimeError):
+    """Nothing can be saved or opened: there is no usable key."""
+
+
+def _fp(master: bytes) -> str:
+    """A short name for a key that says nothing about it."""
+
+    return hashlib.blake2b(master, person=b'dannify-kid', digest_size=8).hexdigest()
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    """Put a file on disk in a way that cannot half happen.
 
     write_bytes opens 'wb', which truncates first. Losing power or being killed
-    in the moment between the truncate and the write left a zero length
-    vault.key, and a zero length vault.key is every saved track gone for good.
-    Written to one side and renamed over instead: a rename is atomic, so the
-    file on disk is either the old key or the new one and never neither.
+    in the moment between the truncate and the write left a zero length file,
+    and a zero length key is every saved track gone for good. Written to one
+    side and renamed over instead: a rename is atomic, so the file on disk is
+    either the old one or the new one and never neither.
     """
 
-    tmp = _key_path.with_name(_key_path.name + '.tmp')
+    tmp = path.with_name(path.name + '.tmp')
     with open(tmp, 'wb') as f:
         f.write(data)
         f.flush()
         os.fsync(f.fileno())
-    tmp.replace(_key_path)
+    tmp.replace(path)
+
+
+def _hide(path: Path) -> None:
+    """Hidden and system, so Explorer does not list it."""
+
+    if os.name != 'nt':
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.kernel32.SetFileAttributesW(str(path), 0x2 | 0x4)
+    except Exception:
+        pass
+
+
+def _age(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _load_store(folder: Path) -> tuple[list[bytes], bool, bool]:
+    """(keys in a store that open here, whether the first is the one the
+    store names as its own, whether any would not open)."""
+
+    keys: list[bytes] = []
+    named = blocked = False
+    if not folder.is_dir():
+        return keys, named, blocked
+    try:
+        chosen = str(
+            json.loads((folder / _MARKER).read_text(encoding='utf-8')).get('primary') or ''
+        )
+    except (OSError, ValueError, AttributeError):
+        chosen = ''
+    for entry in sorted(folder.glob('*.dat'), key=lambda p: (_age(p), p.name)):
+        try:
+            master = _unprotect(entry.read_bytes())
+        except Exception:
+            blocked = True
+            continue
+        if len(master) != 32:
+            blocked = True
+            continue
+        if master in keys:
+            continue
+        if chosen and _fp(master) == chosen:
+            keys.insert(0, master)
+            named = True
+        else:
+            keys.append(master)
+    return keys, named, blocked
+
+
+def _write_marker(folder: Path, fp: str) -> None:
+    """Name the store's own key, unless it already has one: first one wins."""
+
+    path = folder / _MARKER
+    try:
+        fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return
+    except OSError:
+        logger.opt(exception=True).debug('could not write {}', path)
+        return
+    try:
+        os.write(fd, json.dumps({'v': 1, 'primary': fp}).encode('utf-8'))
+    finally:
+        os.close(fd)
+
+
+def _store_key(folder: Path, master: bytes, chosen: bool = False, hide: bool = False) -> bool:
+    """Keep *master* in a store. Returns whether it is safely there.
+
+    Never overwrites an entry with a different key and never removes one: a
+    store only ever gains. An entry wrapped the way an older version did it is
+    rewrapped as tightly as this machine allows, but only once the new
+    wrapping has been read back and shown to hold the same key.
+    """
+
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        if hide:
+            _hide(folder)
+        target = folder / f'{_fp(master)}.dat'
+        want = _protect(master)
+        if target.is_file():
+            current = target.read_bytes()
+            try:
+                same = _unprotect(current) == master
+            except Exception:
+                same = False
+            if not same:
+                logger.warning('store entry {} is not what its name says; left alone', target.name)
+                return False
+            if current[:4] != want[:4] and _unprotect(want) == master:
+                _atomic_write(target, want)
+        else:
+            if _unprotect(want) != master:
+                return False
+            _atomic_write(target, want)
+        if chosen:
+            _write_marker(folder, _fp(master))
+        return True
+    except OSError:
+        logger.opt(exception=True).debug('could not save to the store at {}', folder)
+        return False
 
 
 def init(data_dir: Path) -> None:
-    """Load this installation's key, making one the first time."""
+    """Load this installation's keys, making one the first time."""
 
-    global _master, _key_path, _state
-    _key_path = Path(data_dir) / 'vault.key'
-    spare = _key_path.with_name('vault.key.bak')
-    try:
-        if _key_path.is_file():
-            stored = _key_path.read_bytes()
-            try:
-                _master = _unprotect(stored)
-            except Exception:
-                # The copy kept from before the last re-wrap. This is the whole
-                # reason it is kept: a key that stops unwrapping takes the
-                # library with it, and there is nothing else to fall back on.
-                if not spare.is_file():
-                    raise
-                logger.warning('the saved-music key would not open; using the spare')
-                _master = _unprotect(spare.read_bytes())
-                stored = b''  # force it to be written back below
-            _state = 'ready'
-            # An older wrapping still opens, and is tightened on the way past
-            # so a key written before this stops being portable now. Only if
-            # the new wrapping reads back: a key that cannot be unwrapped is
-            # every saved track gone.
-            want = _protect(_master)
-            if stored[:4] != want[:4]:
+    global _master, _key_path, _state, _keys
+    data_dir = Path(data_dir)
+    store = data_dir / STORE
+    _key_path = store
+    found, _, blocked = _load_store(store)
+
+    # Keys kept by earlier versions. Each is copied into the store and only
+    # removed once the copy is there and reads back as the same key. One that
+    # will not open is left exactly where it is.
+    for name in _LEGACY_KEYS:
+        old = data_dir / name
+        if not old.is_file():
+            continue
+        try:
+            master = _unprotect(old.read_bytes())
+        except Exception:
+            blocked = True
+            logger.warning('an earlier saved-music file would not open; left where it is')
+            continue
+        if len(master) != 32:
+            blocked = True
+            continue
+        own = not found  # the first ever found is the one this installation used
+        if master not in found:
+            if own:
+                found.insert(0, master)
+            else:
+                found.append(master)
+        if _store_key(store, master, chosen=own):
+            loaded, _, _ = _load_store(store)
+            if master in loaded:
                 try:
-                    if _unprotect(want) == _master:
-                        if stored:
-                            spare.write_bytes(stored)  # keep what did work
-                        _write_key(want)
-                        logger.debug('vault key re-wrapped for this machine')
-                except Exception:
-                    logger.opt(exception=True).debug('left the key wrapping alone')
-            return
-    except Exception:
-        # A key we cannot read is worse than none: say so loudly rather than
-        # quietly making a second one and orphaning everything already saved.
-        logger.opt(exception=True).error(
-            'The saved-music key at {} could not be read. Saved music stays '
-            'locked until this is sorted out.', _key_path,
-        )
-        _master = None
-        _state = 'unreadable'
-        return
+                    old.unlink()
+                except OSError:
+                    pass
 
-    _master = secrets.token_bytes(32)
+    if found:
+        _master, _keys, _state = found[0], found[1:], 'ready'
+        _write_marker(store, _fp(_master))
+        return
+    if blocked:
+        # There is saved-music state and none of it opens. Worse than none:
+        # say so rather than quietly starting over and orphaning everything
+        # saved before.
+        logger.error('Saved music in {} could not be opened on this account.', data_dir)
+        _master, _keys, _state = None, [], 'unreadable'
+        return
+    master = secrets.token_bytes(32)
+    if _store_key(store, master, chosen=True):
+        _master, _keys, _state = master, [], 'ready'
+    else:
+        logger.error('Could not set up saved music in {}', store)
+        _master, _keys, _state = None, [], 'unwritable'
+
+
+def attach(root: Path) -> None:
+    """Join this installation to the music folder it uses.
+
+    Called at startup and whenever the folder changes. Afterwards _master is
+    the key that folder's songs are sealed with, when it has one this account
+    can open, and every key either side knows is kept by both, so neither
+    losing its store can cut the songs off from them again.
+    """
+
+    global _master, _keys, _library, _state
+    root = Path(root)
+    _library = root
     try:
-        _key_path.parent.mkdir(parents=True, exist_ok=True)
-        _write_key(_protect(_master))
-        _state = 'ready'
+        root.mkdir(parents=True, exist_ok=True)
     except OSError:
-        logger.opt(exception=True).error('Could not write the saved-music key')
-        _master = None
-        _state = 'unwritable'
+        return
+    shelf = root / LIBRARY_STORE
+    theirs, named, _ = _load_store(shelf)
+    mine = _candidates()
+
+    if theirs and (named or not mine):
+        primary = theirs[0]  # the folder's own key: everyone seals with it
+    elif mine:
+        primary = mine[0]
+    else:
+        return  # no keys anywhere, and none can be made here
+    ring: list[bytes] = []
+    for master in [primary, *mine, *theirs]:
+        if master not in ring:
+            ring.append(master)
+    # Swapped in an order that never leaves a key out, because a song can be
+    # streaming while the music folder is changed in Settings: every key goes
+    # in before the sealing one changes, and the list is only trimmed after.
+    _keys = list(ring)
+    _master = ring[0]
+    _state = 'ready'
+    _keys = ring[1:]
+
+    for master in ring:
+        _store_key(shelf, master, chosen=master == primary, hide=True)
+        if _key_path is not None:
+            _store_key(_key_path, master)
+    _hide(shelf)
+    _migrate_index(root)
+    _clear_old_lock(root)
 
 
 def ready() -> bool:
@@ -329,10 +531,80 @@ def key_path() -> Optional[Path]:
 # ---------------------------------------------------------------------------
 # The cipher
 # ---------------------------------------------------------------------------
+def _derive(master: bytes, nonce: bytes) -> bytes:
+    return hashlib.blake2b(nonce, key=master, person=b'dannify-file', digest_size=32).digest()
+
+
 def _file_key(nonce: bytes) -> bytes:
+    """The key a song is sealed with now."""
+
     if _master is None:
-        raise RuntimeError('no key')
-    return hashlib.blake2b(nonce, key=_master, person=b'dannify-file', digest_size=32).digest()
+        raise StorageUnavailable('saved music is unavailable')
+    return _derive(_master, nonce)
+
+
+def _candidates() -> list[bytes]:
+    """Every key a song might have been sealed with, the current one first."""
+
+    keys = [_master] if _master is not None else []
+    keys.extend(k for k in _keys if k not in keys)
+    return keys
+
+
+# Which key opened a file, so a song streamed in ranges is not tried against
+# every key for each one. Keyed on size and modification time as well as the
+# path, so a file that has been replaced is looked at afresh.
+_opened: dict[tuple[str, int, int], bytes] = {}
+_opened_lock = threading.Lock()
+
+
+def _stamp(path: Path, size: int) -> tuple[str, int, int]:
+    try:
+        mtime = Path(path).stat().st_mtime_ns
+    except OSError:
+        mtime = 0
+    return (str(path), int(size), mtime)
+
+
+def _unlock(nonce: bytes, blob: bytes, stamp=None) -> tuple[Optional[dict], Optional[bytes]]:
+    """Decrypt a header with whichever key fits: (header, that key)."""
+
+    order = _candidates()
+    if stamp is not None:
+        with _opened_lock:
+            hint = _opened.get(stamp)
+        if hint is not None and hint in order:
+            order = [hint] + [k for k in order if k != hint]
+    for master in order:
+        key = _derive(master, nonce)
+        # A header is JSON of a dict, so it starts with a brace: one byte
+        # rules a key out without decrypting a header that can run to a
+        # quarter of a megabyte in the slowest code this file has.
+        if _xor(key, nonce, blob[:1], 0) != b'{':
+            continue
+        try:
+            head = json.loads(_xor(key, nonce, blob, 0).decode('utf-8'))
+        except Exception:
+            continue
+        if isinstance(head, dict):
+            if stamp is not None:
+                with _opened_lock:
+                    if len(_opened) > 8192:
+                        _opened.clear()
+                    _opened[stamp] = master
+            return head, master
+    return None, None
+
+
+def _opened_with(path: Path) -> Optional[bytes]:
+    """The key that last opened *path*, if it has not changed since."""
+
+    try:
+        size = Path(path).stat().st_size
+    except OSError:
+        return None
+    with _opened_lock:
+        return _opened.get(_stamp(path, size))
 
 
 def _keystream(key: bytes, nonce: bytes, index: int) -> bytes:
@@ -462,7 +734,7 @@ def seal(source: Path, target: Path, meta: dict[str, Any]) -> Path:
     """Write *source* into *target* as a container, then remove the original."""
 
     if not ready():
-        raise RuntimeError('no key; refusing to seal')
+        raise StorageUnavailable('saved music is unavailable')
     source, target = Path(source), Path(target)
     # The last thing seal() does is delete the source. Handed the same path
     # twice it would write the container and then delete it, and the track
@@ -607,16 +879,13 @@ def inspect(path: Path) -> tuple[Optional[dict[str, Any]], str]:
             base = 4 + NONCE_LEN + 4 + length
             if length <= 0 or length > 1 << 20 or base >= size:
                 return None, DAMAGED
-            if _master is None:
+            if not _candidates():
                 return None, LOCKED
-            key = _file_key(nonce)
             blob = f.read(length)
-            try:
-                head = json.loads(_xor(key, nonce, blob, 0).decode('utf-8'))
-            except Exception:
+            head, master = _unlock(nonce, blob, _stamp(path, size))
+            if head is None:
                 return None, LOCKED
-            if not isinstance(head, dict):
-                return None, LOCKED
+            key = _derive(master, nonce)
             have = size - base
             want = head.get('size')
             try:
@@ -644,6 +913,7 @@ def read_header(path: Path) -> Optional[dict[str, Any]]:
     """The metadata, without touching the audio."""
 
     try:
+        path = Path(path)
         with open(path, 'rb') as f:
             if f.read(4) != MAGIC:
                 return None
@@ -652,7 +922,9 @@ def read_header(path: Path) -> Optional[dict[str, Any]]:
             if length <= 0 or length > 1 << 20:
                 return None
             blob = f.read(length)
-        return json.loads(_xor(_file_key(nonce), nonce, blob, 0).decode('utf-8'))
+            size = os.fstat(f.fileno()).st_size
+        head, _ = _unlock(nonce, blob, _stamp(path, size))
+        return head
     except Exception:
         return None
 
@@ -681,9 +953,22 @@ def open_range(path: Path, start: int = 0, length: Optional[int] = None):
         nonce = f.read(NONCE_LEN)
         head_len = int.from_bytes(f.read(4), 'little')
         base = 4 + NONCE_LEN + 4 + head_len
-        key = _file_key(nonce)
+        size = os.fstat(f.fileno()).st_size
+        # The key that opened this file last time, when it has not changed
+        # since: a seek is a new range request, and trying every key against
+        # the header on each one would be all the work of opening it again.
+        stamp = _stamp(path, size)
+        with _opened_lock:
+            master = _opened.get(stamp)
+        if master is None or master not in _candidates():
+            if head_len <= 0 or head_len > 1 << 20:
+                raise ValueError('not a saved song')
+            _, master = _unlock(nonce, f.read(head_len), stamp)
+        if master is None:
+            raise StorageUnavailable('this song cannot be opened here')
+        key = _derive(master, nonce)
 
-        total = max(0, path.stat().st_size - base)
+        total = max(0, size - base)
         start = max(0, min(start, total))
         remaining = total - start if length is None else min(length, total - start)
 
@@ -711,11 +996,121 @@ def open_range(path: Path, start: int = 0, length: Optional[int] = None):
 
 PLAIN_EXTS = {'.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus'}
 
-# The plain record of what each sealed file is. Two have been kept over time:
-# one at the top of the music folder keyed by the path inside it, written
-# here, and one in each track's own folder keyed by file name, written by the
-# downloader. Anything reading them has to try both.
+# The plain record of what each sealed file is, kept in the library's hidden
+# store and keyed by the path inside the music folder. Earlier versions left
+# it lying in the open instead, as INDEX: one at the top of the music folder
+# keyed the same way, and one in each artist folder keyed by file name. Those
+# are folded into the hidden one by attach(), and read as a fallback until
+# they have been.
 INDEX = 'dannify-library.json'
+_INDEX_FILE = 'index.json'
+
+
+def index_path(root: Path) -> Path:
+    return Path(root) / LIBRARY_STORE / _INDEX_FILE
+
+
+def note_track(root: Path, rel: str, entry: dict[str, Any]) -> None:
+    """Record what the saved file at *rel* is, in the library's own index."""
+
+    shelf = Path(root) / LIBRARY_STORE
+    try:
+        shelf.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+    _hide(shelf)
+    remember(shelf / _INDEX_FILE, rel, entry)
+
+
+def lookup(root: Path, path: Path) -> dict[str, Any]:
+    """Everything the indexes know about a saved file, newest first."""
+
+    root, path = Path(root), Path(path)
+    try:
+        rel = path.relative_to(root).as_posix()
+    except ValueError:
+        return {}
+    notes: dict[str, Any] = {}
+    for index, key in (
+        (index_path(root), rel),
+        (path.parent / INDEX, path.name),
+        (root / INDEX, rel),
+    ):
+        entry = read_index(index).get(key)
+        if isinstance(entry, dict):
+            for field, value in entry.items():
+                if value and not notes.get(field):
+                    notes[field] = value
+    return notes
+
+
+def _migrate_index(root: Path) -> None:
+    """Fold the index files earlier versions left in the open into the
+    hidden one, and remove them once it holds everything they did."""
+
+    root = Path(root)
+    try:
+        legacy = [
+            p for p in root.rglob(INDEX)
+            if p.is_file() and LIBRARY_STORE not in p.relative_to(root).parts
+        ]
+    except OSError:
+        return
+    if not legacy:
+        return
+    with _index_lock:
+        merged = read_index(index_path(root))
+        for old in legacy:
+            for key, entry in read_index(old).items():
+                if not isinstance(entry, dict):
+                    continue
+                # The top one is keyed by path inside the music folder, the
+                # ones in artist folders by file name.
+                rel = key if old.parent == root else (
+                    old.parent.relative_to(root) / key
+                ).as_posix()
+                current = merged.get(rel) if isinstance(merged.get(rel), dict) else {}
+                combined = dict(entry)
+                combined.update({k: v for k, v in current.items() if v})
+                merged[rel] = combined
+        shelf = root / LIBRARY_STORE
+        try:
+            shelf.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return
+        write_index(index_path(root), merged)
+        written = read_index(index_path(root))
+    if not all(rel in written for rel in merged):
+        return  # the new one did not take; leave the old ones be
+    for old in legacy:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+        for stray in (old.with_name(old.name + '.tmp'),):
+            try:
+                stray.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _clear_old_lock(root: Path) -> None:
+    """The conversion lock used to sit in the open, in the music folder
+    itself. One left behind by a run that was killed is just clutter now."""
+
+    old = Path(root) / '.dannify-converting'
+    try:
+        if not old.is_file():
+            return
+        owner = int(old.read_text(encoding='utf-8').strip() or 0)
+    except (OSError, ValueError):
+        owner = 0
+    if owner and owner != os.getpid() and _process_alive(owner):
+        return
+    try:
+        old.unlink()
+    except OSError:
+        pass
 
 
 def read_index(index: Path) -> dict[str, Any]:
@@ -776,7 +1171,7 @@ def _note(root: Path, sealed: Path, meta: dict[str, Any]) -> None:
     exactly the same recording, rather than whatever a search turns up.
     """
 
-    remember(Path(root) / INDEX, sealed.relative_to(root).as_posix(), {
+    note_track(root, sealed.relative_to(root).as_posix(), {
         'title': str(meta.get('title') or ''),
         'artist': str(meta.get('artist') or ''),
         'video_id': str(meta.get('video_id') or ''),
@@ -931,7 +1326,13 @@ def _claim(root: Path):
 
     import errno
 
-    lock = Path(root) / '.dannify-converting'
+    shelf = Path(root) / LIBRARY_STORE
+    try:
+        shelf.mkdir(parents=True, exist_ok=True)
+        _hide(shelf)
+    except OSError:
+        return None
+    lock = shelf / 'busy'
     try:
         fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
@@ -1024,8 +1425,8 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
                 break  # plainly ours; no need to read the rest
     if theirs and not mine:
         logger.error(
-            'Every saved track in the music folder was sealed by a different '
-            'installation of Dannify, so nothing in it will be converted.',
+            'None of the saved songs in the music folder open here, so nothing '
+            'in it will be converted.',
         )
         return done
 
@@ -1122,6 +1523,11 @@ def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
 
     Every file gets smaller. It is a read and a write per track on a
     background thread, once, and then never again.
+
+    The same pass moves songs onto the library's key. A song sealed with any
+    other key this installation holds (see attach()) plays as it is, but
+    rewritten here it no longer depends on that key being around, which is
+    how a library ends up relying on one key instead of a collection of them.
     """
 
     global _busy
@@ -1132,7 +1538,7 @@ def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
 
     stale = []
     for path in sorted(root.rglob('*' + SUFFIX)):
-        if not path.is_file():
+        if not path.is_file() or LIBRARY_STORE in path.relative_to(root).parts:
             continue
         head, problem = inspect(path)
         if head is None or problem:
@@ -1142,7 +1548,8 @@ def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
             # completely alone for a repair to replace.
             done['skipped'] += 1
             continue
-        if int(head.get('v') or 1) >= FORMAT:
+        current = int(head.get('v') or 1) >= FORMAT
+        if current and _opened_with(path) in (None, _master):
             continue
         stale.append((path, head))
 

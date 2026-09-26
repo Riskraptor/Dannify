@@ -28,13 +28,15 @@ NOISE = b'\x12\x34\x56\x78' * 1000
 def key():
     """A key of our own for every test, and the real module state put back."""
 
-    saved = (vault._master, vault._state, vault._busy)
+    saved = (vault._master, vault._state, vault._busy, vault._keys, vault._key_path)
     vault._master = secrets.token_bytes(32)
     vault._state = 'ready'
     vault._busy = False
+    vault._keys = []
+    vault._key_path = None
     library.invalidate_cache()
     yield vault._master
-    vault._master, vault._state, vault._busy = saved
+    vault._master, vault._state, vault._busy, vault._keys, vault._key_path = saved
     library.invalidate_cache()
 
 
@@ -328,8 +330,9 @@ def test_fix_replaces_a_locked_track_in_place(tmp_path, downloads):
     ]
     # Both indexes know what is there now.
     assert vault.read_index(folder / vault.INDEX)['dancelo musiq - Nobody.dnf']['video_id'] == 'EjreKstObTM'
-    top = vault.read_index(music / vault.INDEX)
+    top = vault.read_index(vault.index_path(music))
     assert top['dancelo musiq/dancelo musiq - Nobody.dnf']['title'] == 'Nobody'
+    assert not (music / vault.INDEX).exists()  # nothing new is written in the open
     assert seen == [50.0]
 
 
@@ -393,7 +396,7 @@ def test_fix_only_touches_saved_tracks_inside_the_folder(tmp_path, downloads, re
 def test_fix_says_so_when_there_is_no_key(tmp_path, downloads):
     path = locked(tmp_path, 'A - B.dnf')
     vault._master = None
-    assert repair.fix(tmp_path, path.name, FakeDownloader(), tmp_path / 'd') == ('failed', repair.NO_KEY)
+    assert repair.fix(tmp_path, path.name, FakeDownloader(), tmp_path / 'd') == ('failed', repair.UNAVAILABLE)
 
 
 def test_fix_gives_up_on_a_file_held_open_and_keeps_the_original(tmp_path, downloads, monkeypatch):
@@ -574,7 +577,7 @@ def test_a_failure_while_offline_says_offline(tmp_path, downloads):
     [
         ('ERROR: [youtube] abc: Video unavailable', repair.NOT_FOUND),
         ('ERROR: [youtube] abc: Private video. Sign in', repair.NOT_FOUND),
-        ('Saved music cannot be locked on this installation, so nothing', repair.NO_KEY),
+        ('ffmpeg: could not open the output file', repair.FAILED),
         ('ffmpeg exited with code 1', repair.FAILED),
     ],
 )
@@ -739,3 +742,10 @@ def test_forgetting_something_never_asked_for_is_harmless(tmp_path, downloads):
     jobs.configure(lambda: (tmp_path, FakeDownloader(), None), sent.append, lambda: None)
     jobs.forget('nothing/here.dnf')
     assert sent == [] and jobs.status()['total'] == 0
+
+
+def test_a_download_that_cannot_be_saved_says_so(downloads):
+    assert repair._reason(vault.StorageUnavailable('x')) == repair.UNAVAILABLE
+    wrapped = RuntimeError('This song downloaded but could not be saved')
+    wrapped.__cause__ = vault.StorageUnavailable('x')
+    assert repair._reason(wrapped) == repair.UNAVAILABLE

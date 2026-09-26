@@ -31,7 +31,8 @@
         :class="{ 'is-immersive': isNowPlaying }"
         tabindex="-1"
       >
-        <HealthBanner />
+        <!-- Not on Now Playing: that screen is the music and nothing else. -->
+        <HealthBanner :away="isNowPlaying" />
         <router-view v-slot="{ Component, route: r }">
           <!-- Views cross-fade instead of snapping in. `out-in` keeps the
                scroll container from having two children at once, which would

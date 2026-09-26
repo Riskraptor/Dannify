@@ -226,8 +226,12 @@ function downloadFileURL(fileName) {
   return `/downloads/${encodePath(fileName)}`
 }
 
-function coverFileURL(fileName) {
-  return `/cover?file=${encodeURIComponent(fileName)}`
+// *version* changes whenever the file does (its date). A repaired song is a
+// new file at the same path, and without it the old picture, or the failure
+// to get one, was what the window went on showing.
+function coverFileURL(fileName, version) {
+  const v = version ? `&v=${encodeURIComponent(version)}` : ''
+  return `/cover?file=${encodeURIComponent(fileName)}${v}`
 }
 
 function health() {

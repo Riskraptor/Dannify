@@ -41,7 +41,7 @@ KEEP_DAYS = 14
 NOT_FOUND = 'not_found'  # nothing online matches it any more
 OFFLINE = 'offline'
 IN_USE = 'in_use'  # something had the file open the whole time
-NO_KEY = 'no_key'  # nothing can be saved on this installation
+UNAVAILABLE = 'unavailable'  # nothing can be saved right now
 MISSING = 'missing'  # not there, or not a saved track
 FAILED = 'failed'
 
@@ -54,8 +54,8 @@ _VIDEO_ID = re.compile(r'^[A-Za-z0-9_-]{11}$')
 def identify(base: Path, path: Path, head: Optional[dict[str, Any]]) -> dict[str, Any]:
     """What a saved track is, as a song the downloader can fetch again.
 
-    The header knows best when it can be read. When it cannot, the two plain
-    indexes usually know the video it came from, which gets back exactly the
+    The header knows best when it can be read. When it cannot, the library's
+    index usually knows the video it came from, which gets back exactly the
     recording that was saved rather than whatever a search ranks first. The
     filename is the last resort: it is always "Artists - Title".
     """
@@ -63,16 +63,7 @@ def identify(base: Path, path: Path, head: Optional[dict[str, Any]]) -> dict[str
     from .library import _split_artists  # noqa: PLC0415  (circular at import)
 
     head = head or {}
-    notes: dict[str, Any] = {}
-    for index, key in (
-        (path.parent / vault.INDEX, path.name),
-        (base / vault.INDEX, path.relative_to(base).as_posix()),
-    ):
-        entry = vault.read_index(index).get(key)
-        if isinstance(entry, dict):
-            for field, value in entry.items():
-                if value and not notes.get(field):
-                    notes[field] = value
+    notes = vault.lookup(base, path)
 
     named_artist, _, named_title = path.stem.partition(' - ')
     if not named_title:
@@ -142,7 +133,7 @@ def fix(
     if not problem and not force:
         return 'fine', ''
     if not vault.ready():
-        return 'failed', NO_KEY
+        return 'failed', UNAVAILABLE
     if downloader is None:
         return 'failed', FAILED
 
@@ -368,18 +359,13 @@ def _unlink(path: Path) -> None:
 
 
 def _renote(base: Path, path: Path, head: dict[str, Any]) -> None:
-    """Point both indexes at what is in the file now."""
+    """Point the library's index at what is in the file now."""
 
-    entry = {
+    vault.note_track(base, path.relative_to(base).as_posix(), {
         'title': str(head.get('title') or ''),
         'artist': str(head.get('artist') or ''),
         'video_id': str(head.get('video_id') or ''),
-    }
-    for index, key in (
-        (path.parent / vault.INDEX, path.name),
-        (base / vault.INDEX, path.relative_to(base).as_posix()),
-    ):
-        vault.remember(index, key, entry)
+    })
 
 
 def _online() -> bool:
@@ -402,8 +388,10 @@ def _reason(exc: BaseException) -> str:
     """
 
     text = f'{type(exc).__name__}: {exc}'.lower()
-    if 'cannot be locked' in text:
-        return NO_KEY
+    if isinstance(exc, vault.StorageUnavailable) or isinstance(
+        exc.__cause__, vault.StorageUnavailable
+    ):
+        return UNAVAILABLE
     if not _online():
         return OFFLINE
     if 'could not find a youtube match' in text or any(
