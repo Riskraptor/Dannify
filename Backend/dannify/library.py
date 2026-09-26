@@ -73,7 +73,13 @@ def _read_tags(path: Path) -> dict[str, Any]:
     if path.suffix.lower() == '.dnf':
         from . import vault
 
-        head = vault.read_header(path) or {}
+        # Read once, and with it whether the track will play at all. A track
+        # that will not used to come back looking like any other with its
+        # details missing, and the first anybody heard of it was a play button
+        # that did nothing. Saying so here is what lets the window mark it and
+        # offer to repair it.
+        head, problem = vault.inspect(path)
+        head = head or {}
         name = path.stem
         title = str(head.get('title') or '')
         raw = str(head.get('artist') or '')
@@ -110,6 +116,7 @@ def _read_tags(path: Path) -> dict[str, Any]:
             'duration': int(head.get('duration') or 0),
             'track_number': int(head.get('track_number') or 0),
             'video_id': str(head.get('video_id') or ''),
+            'problem': problem,
         }
 
     title = ''
@@ -173,6 +180,7 @@ def _read_tags(path: Path) -> dict[str, Any]:
         'duration': duration,
         'track_number': track_number,
         'video_id': video_id,
+        'problem': '',
     }
 
 
@@ -361,20 +369,25 @@ def _build(base: Path) -> dict[str, Any]:
             'albums': albums,
         })
 
+    # A track that will not play is not a downloaded copy of anything. Left
+    # in these, every play of that song from search or home was sent to the
+    # broken file instead of streaming it, and failed.
+    playable = [tr for tr in tracks if not tr.get('problem')]
+
     return {
         'tracks': tracks,
         'artists': artist_list,
         'total': len(tracks),
         # O(1) lookup tables for the "is this song already downloaded?" check.
         'by_video_id': {
-            tr['video_id']: tr['file'] for tr in tracks if tr.get('video_id')
+            tr['video_id']: tr['file'] for tr in playable if tr.get('video_id')
         },
         # Normalized (artist|title) → file for the fuzzy fallback when a song
         # was downloaded before we started tagging video_id, or imported from
         # somewhere else (no tag).
         'by_key': {
             _locate_key(tr['artist'], tr['title']): tr['file']
-            for tr in tracks
+            for tr in playable
         },
     }
 

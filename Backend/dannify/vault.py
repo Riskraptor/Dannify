@@ -32,6 +32,7 @@ import hashlib
 import json
 import os
 import secrets
+import threading
 from pathlib import Path
 from typing import Any, BinaryIO, Optional
 
@@ -541,6 +542,104 @@ def seal(source: Path, target: Path, meta: dict[str, Any]) -> Path:
     return target
 
 
+# What can be wrong with a saved track. See inspect().
+LOCKED = 'locked'
+DAMAGED = 'damaged'
+
+# The first bytes every file of each kind starts with, for telling audio from
+# noise once the payload is decrypted. Generous on purpose: a track flagged as
+# damaged when it is not gets downloaded again for nothing, so anything a real
+# file of that kind can legitimately start with is accepted.
+_MP4_BOXES = (b'ftyp', b'moov', b'mdat', b'free', b'skip', b'wide')
+
+
+def _looks_like(ext: str, lead: bytes) -> bool:
+    if len(lead) < 8:
+        return False
+    sync = lead[0] == 0xFF and (lead[1] & 0xE0) == 0xE0
+    if ext == '.mp3':
+        return lead[:3] == b'ID3' or sync or lead[:4] == b'RIFF'
+    if ext == '.aac':
+        return lead[:3] == b'ID3' or sync or lead[4:8] in _MP4_BOXES
+    if ext in ('.m4a', '.mp4'):
+        return lead[4:8] in _MP4_BOXES
+    if ext == '.flac':
+        return lead[:4] == b'fLaC' or lead[:3] == b'ID3'
+    if ext in ('.ogg', '.opus'):
+        return lead[:4] == b'OggS'
+    if ext == '.wav':
+        return lead[:4] == b'RIFF'
+    return True  # a kind this does not know: no grounds to call it broken
+
+
+def inspect(path: Path) -> tuple[Optional[dict[str, Any]], str]:
+    """The header of a saved track, and what is wrong with it if anything.
+
+    Returns ``(header, problem)``. The problem is '' for a track that should
+    play, or one of two things:
+
+    ``LOCKED``  the container is whole, but it was sealed with a key this
+                installation does not have. A new PC, a new Windows account or
+                a lost data folder does this to every track saved before it.
+    ``DAMAGED`` the file is not a whole container: cut short by a crash or a
+                full disk while it was written, or overwritten with something
+                else. Seals that never finished leave runs of zeros, and a
+                payload that decrypts to no known kind of audio is noise.
+
+    Both look identical from the outside: no artwork, no album, no length, and
+    a play button that does nothing. Telling them apart is what lets the app
+    say which one it is and offer the fix, which for both is a fresh copy.
+
+    A file that cannot be opened at all right now (held by another program, no
+    permission) is reported as fine. That is not a property of the track, and
+    calling it broken would offer to replace a file with nothing wrong with it.
+    """
+
+    path = Path(path)
+    try:
+        size = path.stat().st_size
+        with open(path, 'rb') as f:
+            lead = f.read(4 + NONCE_LEN + 4)
+            if len(lead) < 4 + NONCE_LEN + 4 or lead[:4] != MAGIC:
+                return None, DAMAGED
+            nonce = lead[4:4 + NONCE_LEN]
+            length = int.from_bytes(lead[4 + NONCE_LEN:], 'little')
+            base = 4 + NONCE_LEN + 4 + length
+            if length <= 0 or length > 1 << 20 or base >= size:
+                return None, DAMAGED
+            if _master is None:
+                return None, LOCKED
+            key = _file_key(nonce)
+            blob = f.read(length)
+            try:
+                head = json.loads(_xor(key, nonce, blob, 0).decode('utf-8'))
+            except Exception:
+                return None, LOCKED
+            if not isinstance(head, dict):
+                return None, LOCKED
+            have = size - base
+            want = head.get('size')
+            try:
+                want = int(want) if want is not None else 0
+            except (TypeError, ValueError):
+                want = 0
+            if want and have < want:
+                return head, DAMAGED  # cut short
+            first = f.read(16)
+            f.seek(max(base, size - 16))
+            last = f.read(16)
+        # Ciphertext is never sixteen zero bytes in a row by chance. A run of
+        # them is disk space that was set aside and never written.
+        if first == bytes(len(first)) or last == bytes(len(last)):
+            return head, DAMAGED
+        ext = str(head.get('ext') or '').lower()
+        if ext and not _looks_like(ext, _xor(key, nonce, first, 0)):
+            return head, DAMAGED
+        return head, ''
+    except OSError:
+        return None, ''
+
+
 def read_header(path: Path) -> Optional[dict[str, Any]]:
     """The metadata, without touching the audio."""
 
@@ -612,26 +711,76 @@ def open_range(path: Path, start: int = 0, length: Optional[int] = None):
 
 PLAIN_EXTS = {'.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus'}
 
+# The plain record of what each sealed file is. Two have been kept over time:
+# one at the top of the music folder keyed by the path inside it, written
+# here, and one in each track's own folder keyed by file name, written by the
+# downloader. Anything reading them has to try both.
+INDEX = 'dannify-library.json'
 
-def _note(root: Path, sealed: Path, title: str, artist: str) -> None:
+
+def read_index(index: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(Path(index).read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+_index_lock = threading.Lock()
+
+
+def remember(index: Path, key: str, entry: dict[str, Any]) -> None:
+    """Add or replace one entry in an index.
+
+    Read, change and write back under one lock. Downloads and repairs run
+    side by side, and two of them finishing together in the same folder each
+    read the index, each added their own track, and whichever wrote last
+    quietly dropped the other's. The index is the thing that names a track
+    once its key is gone, so a lost entry is a track nobody can get back.
+    """
+
+    with _index_lock:
+        data = read_index(index)
+        data[key] = entry
+        write_index(index, data)
+
+
+def write_index(index: Path, data: dict[str, Any]) -> None:
+    """Replace an index in one step.
+
+    write_text truncates first, so being killed halfway through left an empty
+    or half-written file, and this is the file that is meant to survive when
+    everything else has gone wrong. Same fix as the key: write beside it and
+    rename over.
+    """
+
+    index = Path(index)
+    tmp = index.with_name(index.name + '.tmp')
+    try:
+        tmp.write_text(json.dumps(data, indent=1), encoding='utf-8')
+        tmp.replace(index)
+    except OSError:
+        logger.debug('could not update {}', index)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _note(root: Path, sealed: Path, meta: dict[str, Any]) -> None:
     """Record in plain text what a sealed file is.
 
     The header is encrypted like everything else, so without this a lost key
-    would leave a folder nobody could even take an inventory of.
+    would leave a folder nobody could even take an inventory of. The video id
+    goes in as well: it is what lets a locked track be downloaded again as
+    exactly the same recording, rather than whatever a search turns up.
     """
 
-    index = Path(root) / 'dannify-library.json'
-    try:
-        existing = json.loads(index.read_text(encoding='utf-8')) if index.is_file() else {}
-        if not isinstance(existing, dict):
-            existing = {}
-    except Exception:
-        existing = {}
-    existing[sealed.relative_to(root).as_posix()] = {'title': title, 'artist': artist}
-    try:
-        index.write_text(json.dumps(existing, indent=1), encoding='utf-8')
-    except OSError:
-        pass
+    remember(Path(root) / INDEX, sealed.relative_to(root).as_posix(), {
+        'title': str(meta.get('title') or ''),
+        'artist': str(meta.get('artist') or ''),
+        'video_id': str(meta.get('video_id') or ''),
+    })
 
 
 def _tags_of(path: Path) -> dict[str, Any]:
@@ -929,7 +1078,7 @@ def _seal_pass(root, plain, done, on_progress, on_change) -> int:
             seal(path, target, meta)
             done['sealed'] += 1
             changed += 1
-            _note(root, target, meta['title'], meta['artist'])
+            _note(root, target, meta)
         except Exception:
             logger.opt(exception=True).warning('Could not seal {}; left alone', path)
             done['failed'] += 1
@@ -985,9 +1134,13 @@ def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
     for path in sorted(root.rglob('*' + SUFFIX)):
         if not path.is_file():
             continue
-        head = read_header(path)
-        if head is None:
-            done['skipped'] += 1  # not ours to read; leave it completely alone
+        head, problem = inspect(path)
+        if head is None or problem:
+            # Not ours to read, or not whole. Rewriting a track that was cut
+            # short would seal the shortened copy under a header that calls it
+            # complete, and then nothing could tell it was ever broken. Left
+            # completely alone for a repair to replace.
+            done['skipped'] += 1
             continue
         if int(head.get('v') or 1) >= FORMAT:
             continue
@@ -1064,7 +1217,7 @@ def _repair_pass(root, stale, bench, done, on_progress, on_change) -> None:
             done['repaired'] += 1
             done['saved'] += max(0, before - path.stat().st_size)
             changed += 1
-            _note(root, path, meta['title'], meta['artist'])
+            _note(root, path, meta)
         except Exception:
             logger.opt(exception=True).warning('Could not update {}; left as it was', path)
             done['failed'] += 1

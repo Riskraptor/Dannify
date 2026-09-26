@@ -57,6 +57,10 @@ async function load(force = false) {
       const tMap = new Map()
       for (const tr of tracks) {
         if (!tr || !tr.file) continue
+        // A saved copy that will not play is not a copy. Counted here, the
+        // song showed as downloaded everywhere and every play of it from
+        // search or home went to the broken file instead of streaming.
+        if (tr.problem) continue
         if (tr.video_id && /^[A-Za-z0-9_-]{11}$/.test(tr.video_id)) {
           vMap.set(tr.video_id, tr.file)
         }

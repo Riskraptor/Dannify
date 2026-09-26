@@ -8,6 +8,7 @@ import { toast } from '/src/model/toast'
 import { confirmDialog } from '/src/model/dialog'
 import { desktop } from '/src/desktop/bridge'
 import { copyText } from '/src/model/clipboard'
+import { repairFiles, repairStateOf } from '/src/model/repair'
 import { t } from '/src/i18n'
 
 // ---------------------------------------------------------------------------
@@ -34,10 +35,15 @@ export function localRow(tr) {
     album: tr.album || '',
     albumId: '',
     duration: tr.duration || 0,
-    cover: API.coverFileURL(tr.file),
+    // The file's date rides along so the address changes when the file
+    // does. A repaired track is a new file at the same path, and without
+    // this its row kept the blank artwork it had while it was broken.
+    cover: `${API.coverFileURL(tr.file)}&v=${Math.floor(tr.added || 0)}`,
     added: tr.added || 0,
     file: tr.file,
     explicit: false,
+    // 'locked' or 'damaged' when the backend found the file will not play.
+    problem: tr.problem || '',
     raw: tr,
   }
 }
@@ -133,6 +139,40 @@ export function isRowCurrent(row) {
   return !!id && (cur.song_id === id || cur.video_id === id)
 }
 
+// ---------------------------------------------------------------------------
+// Saved tracks that will not play
+// ---------------------------------------------------------------------------
+
+/** A saved track the backend found will not play. */
+export function needsRepair(row) {
+  return !!(row && row.kind === 'local' && row.problem)
+}
+
+export function repairRows(rows) {
+  repairFiles((rows || []).filter((r) => r.kind === 'local' && r.file).map((r) => r.file))
+}
+
+/** What pressing play on a broken track does instead of failing. */
+export function offerRepair(row) {
+  const title = row.title || ''
+  const state = repairStateOf(row.file)
+  if (state === 'queued' || state === 'working') {
+    toast(t('repair.stillWorking', { title }), { icon: 'ph:wrench' })
+    return
+  }
+  toast(t('repair.needsToast', { title }), {
+    tone: 'error',
+    timeout: 8000,
+    action: { label: t('repair.action'), run: () => repairRows([row]) },
+  })
+}
+
+// A queue never gets a broken track in it. Each one would stop playback with
+// an error and skip on, and a few in a row stopped it altogether.
+function playable(rows) {
+  return rows.filter((r) => !needsRepair(r))
+}
+
 /** Replace the queue with `rows` and start at `index`. */
 export function playRows(rows, index = 0) {
   if (!rows || !rows.length) return
@@ -142,36 +182,57 @@ export function playRows(rows, index = 0) {
     player.toggle()
     return
   }
-  player.setPlaylist(rows.map(rowToTrack), {
-    startIndex: Math.max(0, Math.min(index, rows.length - 1)),
-  })
+  const list = playable(rows)
+  if (!list.length) {
+    if (needsRepair(target)) offerRepair(target)
+    return
+  }
+  // Starting on a broken one (Play on a list whose first row is broken)
+  // starts on the next that works instead.
+  let start = list.indexOf(target)
+  if (start < 0) {
+    const after = rows.slice(index + 1).find((r) => !needsRepair(r))
+    start = after ? list.indexOf(after) : 0
+  }
+  player.setPlaylist(list.map(rowToTrack), { startIndex: start })
 }
 
 export function shuffleRows(rows) {
-  if (!rows || !rows.length) return
+  const list = playable(rows || [])
+  if (!list.length) return
   const player = usePlayer()
   player.setShuffle(true)
-  player.setPlaylist(rows.map(rowToTrack), {
-    startIndex: Math.floor(Math.random() * rows.length),
+  player.setPlaylist(list.map(rowToTrack), {
+    startIndex: Math.floor(Math.random() * list.length),
   })
 }
 
 export function playNext(rows) {
-  usePlayer().enqueue(rows.map(rowToTrack), { next: true })
+  const list = playable(rows)
+  if (!list.length) {
+    if (rows.length) offerRepair(rows[0])
+    return
+  }
+  usePlayer().enqueue(list.map(rowToTrack), { next: true })
   toast(
-    rows.length === 1
-      ? t('actions.willPlayNext', { title: rows[0].title })
-      : t('actions.willPlayNextMany', { count: rows.length }),
+    list.length === 1
+      ? t('actions.willPlayNext', { title: list[0].title })
+      : t('actions.willPlayNextMany', { count: list.length }),
     { icon: 'ph:queue' }
   )
 }
 
 export function addToQueue(rows) {
-  usePlayer().enqueue(rows.map(rowToTrack))
+  const list = playable(rows)
+  if (!list.length) {
+    if (rows.length) offerRepair(rows[0])
+    return
+  }
+  usePlayer().enqueue(list.map(rowToTrack))
   toast(
-    rows.length === 1
-      ? t('actions.addedToQueue', { title: rows[0].title })
-      : t('actions.addedToQueueMany', { count: rows.length }),
+    list.length === 1
+      ? t('actions.addedToQueue', { title: list[0].title })
+      : t('actions.addedToQueueMany', { count: list.length }),
     { icon: 'ph:list-plus' }
   )
 }
@@ -313,8 +374,24 @@ export function trackMenu(rows, ctx = {}) {
   )
   const link = single ? youtubeLink(single) : ''
   const videoId = single ? songVideoId(single) : ''
+  const broken = ctx.queue ? [] : locals.filter(needsRepair)
 
   const items = []
+  // First, when it applies: a broken track cannot be played, so the thing
+  // somebody opened this menu for is almost certainly this.
+  if (broken.length) {
+    items.push(
+      {
+        label:
+          broken.length === 1
+            ? t('repair.track')
+            : t('repair.tracks', { count: broken.length }),
+        icon: 'ph:wrench',
+        action: () => repairRows(broken),
+      },
+      { divider: true }
+    )
+  }
   if (ctx.queue && single) {
     items.push({
       label: t('actions.play'),

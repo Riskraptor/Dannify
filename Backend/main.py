@@ -875,6 +875,14 @@ def build_app() -> FastAPI:
             full.unlink()
         except Exception as exc:
             return {'deleted': False, 'error': str(exc)}
+        # A repair of this track still to come, or under way, must not put it
+        # back: it was deleted on purpose.
+        try:
+            from dannify import repair as _repair
+
+            _repair.jobs.forget(full.relative_to(base).as_posix())
+        except Exception:
+            logger.opt(exception=True).debug('could not drop a repair for {}', file)
         return {'deleted': True}
 
     @app.get('/cover')
@@ -1155,20 +1163,16 @@ def open_external(path: str | Path) -> dict[str, Any] | None:
         logger.info('asked to open a file that is not there: {}', path)
         return None
 
-    sealed = vault.is_sealed(target)
-    if sealed and not vault.read_header(target):
-        # Sealed, but not by this installation. Saying so is the only useful
-        # thing here: the alternative is a player that sits at 0:00 forever.
-        logger.warning('cannot open {}: sealed with a different key', target)
-        return {'error': 'other_key', 'name': target.name}
-    if not sealed and target.suffix.lower() not in {
-        '.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus',
-    }:
-        return None
-
-    head = (vault.read_header(target) or {}) if sealed else {}
-    stem = target.stem
-    guess_artist, _, guess_title = stem.partition(' - ')
+    def tell(track: dict[str, Any]) -> None:
+        if api.state.loop is None:
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(
+                api.state.connections.broadcast({'type': 'play_file', 'track': track}),
+                api.state.loop,
+            )
+        except Exception:
+            logger.opt(exception=True).debug('could not hand the file to the window')
 
     url = None
     rel = None
@@ -1179,6 +1183,36 @@ def open_external(path: str | Path) -> dict[str, Any] | None:
         url = '/downloads/' + quote(rel)
     except (ValueError, RuntimeError, OSError):
         rel = None
+
+    sealed = vault.is_sealed(target)
+    head: dict[str, Any] = {}
+    # A .dnf that does not even start like one is damaged too, and used to
+    # fall through to "not a file we play" and do nothing at all.
+    if sealed or target.suffix.lower() == vault.SUFFIX:
+        found, problem = vault.inspect(target)
+        if problem:
+            # Locked with another key, or damaged. Saying so is the only useful
+            # thing: the alternative is a player sitting at 0:00 for ever. This
+            # used to be returned and not sent, so the window never heard and
+            # a double-click did nothing whatsoever. A track in the library
+            # also says where it is, so the window can offer to repair it.
+            logger.warning('cannot open {}: {}', target, problem)
+            failed = {
+                'error': 'other_key' if problem == vault.LOCKED else 'damaged',
+                'name': target.name,
+                'file': rel,
+            }
+            tell(failed)
+            return failed
+        head = found or {}
+    elif target.suffix.lower() not in {
+        '.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus',
+    }:
+        return None
+
+    stem = target.stem
+    guess_artist, _, guess_title = stem.partition(' - ')
+
     if url is None:
         tickets = getattr(api.state, 'opened', None)
         if tickets is None:
@@ -1200,14 +1234,7 @@ def open_external(path: str | Path) -> dict[str, Any] | None:
         'duration': int(head.get('duration') or 0),
         'cover': ('/cover?file=' + quote(rel)) if rel else (url + '?cover=1'),
     }
-    if api.state.loop is not None:
-        try:
-            asyncio.run_coroutine_threadsafe(
-                api.state.connections.broadcast({'type': 'play_file', 'track': track}),
-                api.state.loop,
-            )
-        except Exception:
-            logger.opt(exception=True).debug('could not hand the file to the window')
+    tell(track)
     return track
 
 

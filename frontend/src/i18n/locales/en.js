@@ -307,7 +307,11 @@ export default {
   },
   health: {
     musicLocked:
-      'Saved music cannot be opened on this installation. {count} downloaded tracks are affected: they will show without artwork or album details and will not play. Your files are not damaged. This happens when the key belongs to a different Windows account or a different PC. Re-downloading a track fixes that track.',
+      '{count} saved track was locked with a key this installation does not have, so it will not play. This happens after moving to another PC or Windows account. | {count} saved tracks were locked with a key this installation does not have, so they will not play. This happens after moving to another PC or Windows account.',
+    tracksDamaged:
+      '{count} saved track is damaged and will not play. | {count} saved tracks are damaged and will not play.',
+    keyUnreadable:
+      'The key your saved music is locked with could not be read, so none of it will play and nothing new can be saved.',
     noKey:
       'Saved music is unavailable: this installation has no key and could not create one.',
     folderMissing:
@@ -319,6 +323,38 @@ export default {
     updateFailed:
       'Version {wanted} was downloaded but did not install: this is still {running}. Try the update again, and if it keeps happening, install {wanted} over the top from the releases page.',
   },
+  repair: {
+    action: 'Repair',
+    all: 'Repair all',
+    track: 'Repair track',
+    tracks: 'Repair {count} tracks',
+    hint: 'Repair downloads a fresh copy in the same place. | Repair downloads a fresh copy of each, in the same place.',
+    needs: 'This track will not play. Click to repair it.',
+    needsToast: '{title} will not play until it is repaired.',
+    stillWorking: '{title} is being repaired. It will play once that is done.',
+    queued: 'Waiting to be repaired',
+    working: 'Repairing',
+    failedRow: 'Could not repair this track. {why} Click to try again.',
+    progress: 'Repairing {done} of {total}',
+    stop: 'Stop',
+    doneAll: '{count} track repaired. | {count} tracks repaired.',
+    doneSome: 'Repaired {fixed} of {total}.',
+    failedSome: '{count} could not be repaired. | {count} could not be repaired.',
+    retry: 'Try again',
+    fixedOne: '{title} is repaired.',
+    fineOne: 'Nothing was wrong with {title}.',
+    failedOne: 'Could not repair {title}. {why}',
+    couldNotStart: 'Repair could not start. Try again in a moment.',
+    noKey: 'Nothing can be repaired: saved music cannot be locked on this installation.',
+    why: {
+      not_found: 'It could not be found online.',
+      offline: 'There is no internet connection.',
+      in_use: 'Something is using the file. Stop playing it and try again.',
+      no_key: 'Saved music cannot be locked on this installation.',
+      missing: 'The file is not there any more.',
+      failed: 'The download did not work.',
+    },
+  },
   player: {
     fileUnplayable: 'That file would not play. It may have been moved or deleted.',
     manyUnplayable:
@@ -327,6 +363,7 @@ export default {
       'That file is there but could not be read. It may be damaged.',
     fileOtherKey:
       '{name} was saved by a different installation of Dannify, so this one cannot open it.',
+    fileDamaged: '{name} is damaged and will not play.',
     title: 'Player',
     empty: 'Nothing to play yet',
     emptyHint: 'Search for music or open your library to start listening.',

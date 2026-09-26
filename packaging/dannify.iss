@@ -4,7 +4,7 @@
 ; Output: packaging\out\Dannify-Setup-<version>.exe
 
 #define MyAppName "Dannify"
-#define MyAppVersion "3.16.0"
+#define MyAppVersion "3.17.0"
 #define MyAppPublisher "Dannify"
 #define MyAppExeName "Dannify.exe"
 #define BuildDir "..\Backend\dist\Dannify"
@@ -97,6 +97,9 @@ Type: filesandordirs; Name: "{localappdata}\Dannify\WebView2"
 Type: filesandordirs; Name: "{localappdata}\Dannify\SignIn"
 Type: filesandordirs; Name: "{localappdata}\Dannify\updates"
 Type: filesandordirs; Name: "{localappdata}\Dannify\ytdlp-cache"
+; Copies of tracks that were repaired, kept a fortnight in case the key they
+; were locked with turns up. The repaired tracks themselves are in the music.
+Type: filesandordirs; Name: "{localappdata}\Dannify\replaced"
 Type: files; Name: "{localappdata}\Dannify\*.log"
 Type: files; Name: "{localappdata}\Dannify\account.json"
 Type: files; Name: "{localappdata}\Dannify\direct_cache.json"

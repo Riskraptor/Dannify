@@ -9,9 +9,21 @@ import {
   whenOnline,
 } from '/src/model/connectivity'
 import { toast } from '/src/model/toast'
+import { repairFiles } from '/src/model/repair'
 import { t } from '/src/i18n'
 
 const connectivity = useConnectivity()
+
+// The button on a "would not play" message for a saved track in the library.
+// *force* is for a file the backend thinks is fine: it failed here all the
+// same, and a fresh copy is still the fix.
+function repairAction(file, force = false) {
+  if (!file) return {}
+  return {
+    timeout: 9000,
+    action: { label: t('repair.action'), run: () => repairFiles([file], { force }) },
+  }
+}
 
 const _libraryIndex = useLibraryIndex()
 const _ui = useUi()
@@ -205,6 +217,10 @@ function restoreSession() {
   }
   syncMediaSession()
   if (track.type === 'stream') ensureStreamDuration(track)
+  // Lyrics are fetched when a track starts playing, and a restored one has
+  // not started: without this the panel said "No lyrics found" for the track
+  // in the player on every launch, until something else was played.
+  loadLyricsForCurrent()
   return true
 }
 
@@ -358,13 +374,21 @@ function ensureAudio() {
       // a file that is sitting right there.
       const src = audio.currentSrc
       const fallback = err && err.code === 3 ? 'fileUnreadable' : 'fileUnplayable'
+      // A file that is there and will not play can be repaired. One that is
+      // not there cannot: that is somebody having moved or deleted it.
+      const file = track.file && /\/downloads\//.test(src) ? track.file : ''
+      const say = (kind, status) =>
+        toast(t(`player.${kind}`), {
+          tone: 'error',
+          ...(kind === 'fileUnreadable' ? repairAction(file, status !== 409) : {}),
+        })
       fetch(src, { method: 'HEAD' })
-        .then((probe) =>
-          toast(t(`player.${probe.status === 409 ? 'fileUnreadable' : fallback}`), {
-            tone: 'error',
-          })
-        )
-        .catch(() => toast(t(`player.${fallback}`), { tone: 'error' }))
+        .then((probe) => {
+          if (probe.status === 409) say('fileUnreadable', 409)
+          else if (probe.status === 404) say('fileUnplayable', 404)
+          else say(fallback, probe.status)
+        })
+        .catch(() => say(fallback, 0))
       if (currentIndex.value < playlist.value.length - 1) next()
       else isPlaying.value = false
       return
@@ -820,9 +844,13 @@ function setPlaylist(files, options = {}) {
 window.addEventListener('dannify:play-file', (e) => {
   const track = e && e.detail
   if (!track) return
-  if (track.error === 'other_key') {
-    toast(t('player.fileOtherKey', { name: track.name || '' }), {
+  if (track.error) {
+    const key = track.error === 'other_key' ? 'player.fileOtherKey' : 'player.fileDamaged'
+    toast(t(key, { name: track.name || '' }), {
       tone: 'error',
+      // Only a track in the library can be repaired: it is put back where it
+      // was, and a file from anywhere else has no place in it to go back to.
+      ...repairAction(track.file || ''),
     })
     return
   }

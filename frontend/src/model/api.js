@@ -234,6 +234,17 @@ function health() {
   return API.get('/api/health')
 }
 
+// Saved tracks that will not play, downloaded again in place.
+function repairStatus() {
+  return API.get('/api/library/repair')
+}
+function repairTracks(payload) {
+  return API.post('/api/library/repair', payload)
+}
+function repairStop() {
+  return API.post('/api/library/repair/stop')
+}
+
 function listDownloads() {
   return API.get('/list')
 }
@@ -280,6 +291,9 @@ export default {
   download,
   downloadBatch,
   health,
+  repairStatus,
+  repairTracks,
+  repairStop,
   downloadFileURL,
   coverFileURL,
   listDownloads,

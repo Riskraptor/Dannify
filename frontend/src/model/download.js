@@ -104,6 +104,12 @@ API.ws_onmessage((event) => {
     )
     return
   }
+  // Tracks being repaired. Their own message, so they never turn up in the
+  // download list as if somebody had asked for new music.
+  if (data && data.type === 'repair') {
+    window.dispatchEvent(new CustomEvent('dannify:repair', { detail: data }))
+    return
+  }
   // A .dnf was double-clicked in Explorer. The shell worked out how to
   // reach it and sent the finished track down here, so there is nothing to
   // look up: play it.
