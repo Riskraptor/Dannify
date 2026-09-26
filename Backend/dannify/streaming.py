@@ -816,31 +816,90 @@ def open_proxy(
         if v:
             headers[name] = v
 
-    def _gen() -> Iterator[bytes]:
-        acquired = _PROXY_SEMA.acquire(timeout=15)
-        if not acquired:
-            try:
-                resp.close()
-            except Exception:
-                pass
-            logger.warning('proxy sema timeout for {}', video_id)
-            return
-        try:
-            for chunk in resp.iter_content(64 * 1024):
-                if chunk:
-                    yield chunk
-        except Exception:
-            # ConnectionReset etc. when the client closes early during
-            # a seek: completely normal, don't spam the log.
-            return
-        finally:
-            try:
-                resp.close()
-            except Exception:
-                pass
-            _PROXY_SEMA.release()
+    return resp.status_code, headers, _relay(video_id, resp, resp.url or target_url)
 
-    return resp.status_code, headers, _gen()
+
+def _span(resp) -> Optional[tuple[int, int]]:
+    """The first and last byte a response carries, when it says."""
+
+    try:
+        if resp.status_code == 206:
+            match = re.match(r'bytes (\d+)-(\d+)/', resp.headers.get('Content-Range', ''))
+            if match:
+                return int(match.group(1)), int(match.group(2))
+        elif resp.status_code == 200:
+            length = int(resp.headers.get('Content-Length') or 0)
+            if length > 0:
+                return 0, length - 1
+    except Exception:
+        pass
+    return None
+
+
+# How many times a stream is picked up again after the CDN drops it.
+RESUMES = 3
+
+
+def _relay(video_id: str, resp, source: str) -> Iterator[bytes]:
+    """Pass the CDN's bytes on to the player, picking up where it stopped.
+
+    The CDN sometimes closes a connection part way through a song. The bytes
+    promised to the player were then simply not all sent: the server logged
+    "Too little data for declared Content-Length", and the player got a cut
+    that it had to notice and recover from, which on a slow connection meant
+    a gap in the music. Now the missing part is asked for again from exactly
+    the byte where it stopped, and the player never knows.
+
+    A listener closing the stream (a seek, the next track) stops this
+    generator from the outside; that does not come through the except below.
+    """
+
+    if not _PROXY_SEMA.acquire(timeout=15):
+        try:
+            resp.close()
+        except Exception:
+            pass
+        logger.warning('proxy sema timeout for {}', video_id)
+        return
+    span = _span(resp)
+    current = resp
+    sent = 0
+    tries = 0
+    try:
+        while True:
+            try:
+                for chunk in current.iter_content(64 * 1024):
+                    if chunk:
+                        sent += len(chunk)
+                        yield chunk
+            except Exception:
+                pass  # the CDN let go part way: see whether anything is missing
+            if span is None or span[0] + sent > span[1]:
+                return  # everything was sent, or there is no knowing what was not
+            if tries >= RESUMES:
+                logger.info(
+                    'stream for {} ended {} bytes short', video_id,
+                    span[1] - span[0] + 1 - sent,
+                )
+                return
+            tries += 1
+            try:
+                current.close()
+            except Exception:
+                pass
+            try:
+                current = _http_get_range(source, f'bytes={span[0] + sent}-{span[1]}')
+            except Exception:
+                return
+            picked_up = _span(current)
+            if current.status_code != 206 or not picked_up or picked_up[0] != span[0] + sent:
+                return  # the CDN would not carry on from there
+    finally:
+        try:
+            current.close()
+        except Exception:
+            pass
+        _PROXY_SEMA.release()
 
 
 def open_stream(video_id: str, start_seconds: float = 0.0) -> tuple[str, Iterator[bytes]]:
