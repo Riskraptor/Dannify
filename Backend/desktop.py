@@ -2375,6 +2375,34 @@ def _wait_for_parent_exit() -> bool:
 # program, so nothing appears on screen while it works.
 
 
+# Windows refuses a rename while anything else has the file open, and just
+# after an app exits something often does for a moment: the virus scanner
+# looking over the program that just stopped, or the search indexer. The
+# first rename used to be the only try, so an update could fail on nothing
+# more than bad timing and come back as the old version, to be downloaded
+# and applied all over again. It keeps trying for about half a minute now.
+_BUSY_ERRORS = (5, 32, 33)  # access denied, sharing violation, lock violation
+
+
+def _patient_rename(src: Path, dst: Path, patience: float = 30.0) -> None:
+    """Rename, retrying while Windows says the file is busy. Uses nothing
+    that is not already loaded (see _apply_update_folder)."""
+
+    waited = 0.0
+    pause = 0.25
+    while True:
+        try:
+            src.rename(dst)
+            return
+        except OSError as exc:
+            busy = getattr(exc, 'winerror', None) in _BUSY_ERRORS
+            if not busy or waited >= patience:
+                raise
+        time.sleep(pause)
+        waited += pause
+        pause = min(pause * 2, 3.0)
+
+
 def _apply_update_folder(staging: Path) -> bool:
     """Copy a staged update over this installation. Runs in the helper.
 
@@ -2476,14 +2504,14 @@ def _apply_update_folder(staging: Path) -> bool:
             if had:
                 # A running executable cannot be overwritten, but it can be
                 # renamed out of the way: that includes this very file.
-                dest.rename(stale)
+                _patient_rename(dest, stale)
                 # Recorded here, between the two renames, not after both.
                 # Recorded after, an entry whose first rename worked and whose
                 # second failed was not in the list the rollback walks, so the
                 # original stayed parked at <name>.old and nothing put it back.
                 # For the entry sorted last that file is Dannify.exe.
                 done.append((dest, stale, had))
-            fresh.rename(dest)
+            _patient_rename(fresh, dest)
             if not had:
                 done.append((dest, stale, had))
         except Exception as exc:
@@ -2492,9 +2520,9 @@ def _apply_update_folder(staging: Path) -> bool:
             for gone, old, had in reversed(done):
                 try:
                     if gone.exists():
-                        gone.rename(gone.with_name(gone.name + '.new'))
+                        _patient_rename(gone, gone.with_name(gone.name + '.new'))
                     if had and old.exists():
-                        old.rename(gone)
+                        _patient_rename(old, gone)
                 except OSError:
                     logger_print('rollback failed for', gone.name)
             try:
@@ -3198,13 +3226,11 @@ _IID_IPROPERTYSTORE = '{886d8eeb-8cf2-4446-8d02-cdba1dbdcf99}'
 _TAG_DELAYS = (1.5, 5.0, 12.0, 30.0)
 
 
-class _GUID(ctypes.Structure):
-    _fields_ = [
-        ('a', ctypes.c_uint32),
-        ('b', ctypes.c_uint16),
-        ('c', ctypes.c_uint16),
-        ('d', ctypes.c_ubyte * 8),
-    ]
+# _GUID is the one defined for the taskbar near the top of this file. This
+# part used to define a second class of the same name, which silently replaced
+# the first when the module loaded: the taskbar code then asked the
+# replacement for a parse() it did not have, and the play, pause and skip
+# buttons on the taskbar thumbnail, and its progress bar, never appeared.
 
 
 class _PROPERTYKEY(ctypes.Structure):
@@ -3222,9 +3248,7 @@ class _PROPVARIANT(ctypes.Structure):
 
 
 def _guid(text: str) -> _GUID:
-    value = _GUID()
-    ole32.CLSIDFromString(ctypes.c_wchar_p(text), ctypes.byref(value))
-    return value
+    return _GUID.parse(text)
 
 
 def _our_process_tree() -> set[int]:

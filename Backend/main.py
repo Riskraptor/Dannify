@@ -711,6 +711,12 @@ def build_app() -> FastAPI:
     except Exception:
         logger.opt(exception=True).warning('could not join the music folder')
     _updates.init(DATABASE_DIR)
+    # This version is running, so whatever was downloaded to get here, or to
+    # get to an older one, has done its job. A newer one still waiting stays.
+    try:
+        _updates.prune_downloads(DATABASE_DIR / 'updates', __version__)
+    except Exception:
+        logger.opt(exception=True).debug('could not tidy old update downloads')
     api.state.downloader = Downloader(
         download_dir,
         audio_format=api.state.settings['format'],

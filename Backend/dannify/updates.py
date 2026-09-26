@@ -290,6 +290,7 @@ def prepare_delta(
     # the release is one small request; checking is a second of hashing; the
     # download is everything else.
     bar = Progress(progress)
+    staging: Optional[Path] = None
 
     try:
         bar.stage('Reading the release', 0.0, 0.04)
@@ -334,7 +335,45 @@ def prepare_delta(
         return staging
     except Exception as exc:
         logger.info('Partial update not possible ({}); using the installer', exc)
+        # Half a download is of no use to anybody, and it used to stay in the
+        # data folder for good once the installer had taken over.
+        if staging is not None:
+            shutil.rmtree(staging, ignore_errors=True)
         return None
+
+
+_DOWNLOADED = re.compile(r'^(?:delta-|Dannify-Setup-)(\d+(?:\.\d+)*)(?:\.exe)?(?:\.part)?$')
+
+
+def prune_downloads(dest_dir: Path, current: str) -> list[str]:
+    """Remove update downloads for this version or older. Returns their names.
+
+    An installer that had been run, and a partial update given up on in
+    favour of one, stayed in the data folder for good: tens of megabytes an
+    update, adding up. Anything for a version newer than the one running is
+    left exactly where it is, because that is an update waiting for the app to
+    close (or one that did not take, and will be tried again).
+    """
+
+    folder = Path(dest_dir)
+    if not folder.is_dir():
+        return []
+    removed = []
+    for item in folder.iterdir():
+        match = _DOWNLOADED.match(item.name)
+        if not match or is_newer(match.group(1), current):
+            continue
+        try:
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+        except OSError:
+            continue  # still open (an installer that has not quit yet): next start
+        removed.append(item.name)
+    if removed:
+        logger.info('Cleared old update downloads: {}', ', '.join(sorted(removed)))
+    return removed
 
 
 def _get_text(url: str) -> str:
