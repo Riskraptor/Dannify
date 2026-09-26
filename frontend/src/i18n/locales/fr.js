@@ -312,7 +312,11 @@ export default {
   },
   health: {
     musicLocked:
-      "La musique enregistrée ne peut pas être ouverte sur cette installation. {count} titres téléchargés sont concernés : ils apparaîtront sans pochette ni album et ne se liront pas. Vos fichiers ne sont pas endommagés. Cela arrive quand la clé appartient à un autre compte Windows ou à un autre PC. Retélécharger un titre le répare.",
+      "{count} titre enregistré a été verrouillé avec une clé que cette installation n'a pas, il ne se lira donc pas. Cela arrive après un passage à un autre PC ou à un autre compte Windows. | {count} titres enregistrés ont été verrouillés avec une clé que cette installation n'a pas, ils ne se liront donc pas. Cela arrive après un passage à un autre PC ou à un autre compte Windows.",
+    tracksDamaged:
+      '{count} titre enregistré est endommagé et ne se lira pas. | {count} titres enregistrés sont endommagés et ne se liront pas.',
+    keyUnreadable:
+      "La clé qui verrouille votre musique enregistrée n'a pas pu être lue : rien ne se lira et rien de nouveau ne pourra être enregistré.",
     noKey:
       "La musique enregistrée est indisponible : cette installation n'a pas de clé et n'a pas pu en créer une.",
     folderMissing:
@@ -324,6 +328,38 @@ export default {
     updateFailed:
       "La version {wanted} a été téléchargée mais ne s'est pas installée : ceci est toujours {running}. Réessayez la mise à jour, et si cela se reproduit, installez {wanted} par-dessus depuis la page des versions.",
   },
+  repair: {
+    action: 'Réparer',
+    all: 'Tout réparer',
+    track: 'Réparer le titre',
+    tracks: 'Réparer {count} titres',
+    hint: 'Réparer télécharge une nouvelle copie au même endroit. | Réparer télécharge une nouvelle copie de chacun, au même endroit.',
+    needs: 'Ce titre ne peut pas être lu. Cliquez pour le réparer.',
+    needsToast: "{title} ne se lira pas tant qu'il n'est pas réparé.",
+    stillWorking: '{title} est en cours de réparation. Il se lira une fois terminé.',
+    queued: 'En attente de réparation',
+    working: 'Réparation en cours',
+    failedRow: 'Impossible de réparer ce titre. {why} Cliquez pour réessayer.',
+    progress: 'Réparation {done} sur {total}',
+    stop: 'Arrêter',
+    doneAll: '{count} titre réparé. | {count} titres réparés.',
+    doneSome: '{fixed} sur {total} réparés.',
+    failedSome: "{count} n'a pas pu être réparé. | {count} n'ont pas pu être réparés.",
+    retry: 'Réessayer',
+    fixedOne: '{title} est réparé.',
+    fineOne: "{title} n'avait aucun problème.",
+    failedOne: 'Impossible de réparer {title}. {why}',
+    couldNotStart: "La réparation n'a pas pu démarrer. Réessayez dans un instant.",
+    noKey: 'Rien ne peut être réparé : la musique enregistrée ne peut pas être verrouillée sur cette installation.',
+    why: {
+      not_found: 'Il est introuvable en ligne.',
+      offline: 'Pas de connexion Internet.',
+      in_use: 'Le fichier est utilisé. Arrêtez la lecture et réessayez.',
+      no_key: 'La musique enregistrée ne peut pas être verrouillée sur cette installation.',
+      missing: "Le fichier n'est plus là.",
+      failed: "Le téléchargement n'a pas fonctionné.",
+    },
+  },
   player: {
     fileUnplayable: "Ce fichier n'a pas pu être lu. Il a peut-être été déplacé ou supprimé.",
     manyUnplayable:
@@ -332,6 +368,7 @@ export default {
       "Ce fichier est bien là mais n'a pas pu être lu. Il est peut-être endommagé.",
     fileOtherKey:
       "{name} a été enregistré par une autre installation de Dannify, celle-ci ne peut pas l'ouvrir.",
+    fileDamaged: '{name} est endommagé et ne se lira pas.',
     title: 'Lecteur',
     empty: 'Rien à lire pour le moment',
     emptyHint: 'Recherchez de la musique ou ouvrez votre bibliothèque pour commencer.',

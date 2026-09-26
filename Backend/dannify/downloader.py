@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import re as _re
@@ -563,23 +562,14 @@ def _remember(root: Path, sealed: Path, song: dict, video_id: str) -> None:
     bytes and turns that into "download these again".
     """
 
-    index = Path(root) / 'dannify-library.json'
-    try:
-        existing = json.loads(index.read_text(encoding='utf-8')) if index.is_file() else {}
-        if not isinstance(existing, dict):
-            existing = {}
-    except Exception:
-        existing = {}
+    from . import vault  # noqa: PLC0415
+
     artists = song.get('artists') or []
-    existing[sealed.name] = {
+    vault.remember(Path(root) / vault.INDEX, sealed.name, {
         'title': song.get('name', '') or '',
         'artist': artists[0] if artists else '',
         'video_id': video_id,
-    }
-    try:
-        index.write_text(json.dumps(existing, indent=1), encoding='utf-8')
-    except OSError:
-        logger.debug('could not update the recovery index')
+    })
 
 
 def _download_cover(url: str) -> Optional[bytes]:

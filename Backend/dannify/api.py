@@ -45,7 +45,7 @@ from . import lyrics_index
 from . import lyrics_offsets
 from . import lyrics_publish
 from . import explorer
-from . import m3u, providers, spotify, streaming, support, updates, vault
+from . import m3u, providers, repair, spotify, streaming, support, updates, vault
 from .downloader import Downloader
 from .monitor import PlaylistMonitorDB, check_playlist
 
@@ -248,7 +248,7 @@ def health() -> dict[str, Any]:
     # before then becomes unreadable while the app reports itself healthy.
     # That is the failure this whole endpoint exists to stop being invisible,
     # so it is the one it must actually test for.
-    sealed = unreadable = 0
+    sealed = locked = damaged = 0
     # Not while a conversion is running: a track being rewritten is unreadable
     # for the moment it takes, and telling somebody their library is locked
     # because the app is in the middle of fixing it would be its own bug.
@@ -256,23 +256,38 @@ def health() -> dict[str, Any]:
         try:
             for path in base.rglob('*' + vault.SUFFIX):
                 sealed += 1
-                if vault.read_header(path) is None:
-                    unreadable += 1
+                _, problem = vault.inspect(path)
+                if problem == vault.LOCKED:
+                    locked += 1
+                elif problem == vault.DAMAGED:
+                    damaged += 1
                 if sealed >= 4000:  # a library, not a disk scan
                     break
         except OSError:
             pass
 
+    # Both kinds are mended the same way, by downloading the track again, and
+    # that needs a key to seal the new copy with. Without one the window must
+    # not offer a button that cannot work.
+    fixable = vault.ready() and state.downloader is not None
     where = vault.state()
-    if unreadable:
+    if locked:
         problems.append({
             'code': 'music_locked',
-            'tracks': unreadable,
+            'tracks': locked,
             'of': sealed,
             'why': where,
+            'repairable': fixable,
         })
     elif where != 'ready':
         problems.append({'code': 'no_key', 'tracks': 0, 'why': where})
+    if damaged:
+        problems.append({
+            'code': 'tracks_damaged',
+            'tracks': damaged,
+            'of': sealed,
+            'repairable': fixable,
+        })
 
     # An update that did not take. The desktop shell writes down which version
     # it was about to install; if the app is running something else, the
@@ -1708,6 +1723,75 @@ async def artist_detail_endpoint(name: str) -> dict[str, Any]:
     if detail is None:
         raise HTTPException(status_code=404, detail='Artist not found')
     return detail
+
+
+# ---------------------------------------------------------------------------
+# Repairing saved tracks that will not play (see repair.py)
+# ---------------------------------------------------------------------------
+
+
+def _repair_context():
+    base = state.download_dir
+    if base is None:
+        return None
+    return Path(base), state.downloader, state.data_dir
+
+
+def _repair_notify(message: dict[str, Any]) -> None:
+    # Called from the repair threads; the sockets belong to the event loop.
+    loop = state.loop
+    if loop is None or loop.is_closed():
+        return
+    asyncio.run_coroutine_threadsafe(state.connections.broadcast(message), loop)
+
+
+def _repair_changed() -> None:
+    library_mod.invalidate_cache()
+    _repair_notify({'type': 'library_changed'})
+
+
+repair.jobs.configure(_repair_context, _repair_notify, _repair_changed)
+
+
+@router.get('/api/library/repair')
+def repair_status_endpoint() -> dict[str, Any]:
+    return repair.jobs.status()
+
+
+@router.post('/api/library/repair')
+async def repair_endpoint(
+    payload: Optional[dict[str, Any]] = Body(None),
+) -> dict[str, Any]:
+    """Download saved tracks again, in place.
+
+    ``{"all": true}`` repairs every track the library finds a problem with.
+    ``{"files": [...]}`` repairs those, and with ``"force": true`` does so even
+    when nothing looks wrong: the player asks for that after a file failed to
+    play for a reason the checks here cannot see.
+    """
+
+    body = payload if isinstance(payload, dict) else {}
+    if not vault.ready():
+        raise HTTPException(status_code=409, detail='no_key')
+    base = _require_download_dir()
+    if body.get('all'):
+        data = await asyncio.to_thread(library_mod.library, base)
+        files = [tr['file'] for tr in data.get('tracks', []) if tr.get('problem')]
+        force = False
+    else:
+        raw = body.get('files')
+        files = (
+            [f for f in raw if isinstance(f, str) and f.strip()]
+            if isinstance(raw, list)
+            else []
+        )
+        force = bool(body.get('force'))
+    return await asyncio.to_thread(repair.jobs.add, files, force)
+
+
+@router.post('/api/library/repair/stop')
+def repair_stop_endpoint() -> dict[str, Any]:
+    return repair.jobs.stop()
 
 
 @router.websocket('/api/ws')

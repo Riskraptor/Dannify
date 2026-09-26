@@ -79,6 +79,7 @@
             'is-selected': selected.has(row.key),
             'is-current': isRowCurrent(row),
             'is-cursor': focused && cursor === index,
+            'is-broken': !!row.problem,
           }"
           @mousedown="onRowDown($event, index)"
           @click="onRowClick($event, index)"
@@ -176,8 +177,32 @@
               />
             </button>
             <span class="tt-status">
+              <!-- A saved track that will not play: how its repair is going,
+                   or the button that starts one. -->
               <span
-                v-if="dlState(row) === 'active'"
+                v-if="fixState(row) === 'working'"
+                class="spinner h-3.5 w-3.5 border-[1.5px] text-accent"
+                :title="t('repair.working')"
+              />
+              <Icon
+                v-else-if="fixState(row) === 'queued'"
+                icon="ph:clock"
+                class="h-4 w-4 tt-waiting"
+                :title="t('repair.queued')"
+              />
+              <button
+                v-else-if="fixState(row) === 'broken'"
+                class="icon-btn h-7 w-7 text-danger hover:text-danger"
+                tabindex="-1"
+                :title="fixTitle(row)"
+                :aria-label="t('repair.track')"
+                @mousedown.stop
+                @click.stop="repairRows([row])"
+              >
+                <Icon icon="ph:wrench" class="h-4 w-4" />
+              </button>
+              <span
+                v-else-if="dlState(row) === 'active'"
                 class="spinner h-3.5 w-3.5 border-[1.5px] text-accent"
                 :title="t('downloads.statusDownloading')"
               />
@@ -245,7 +270,11 @@ import {
   deleteRows,
   goToAlbum,
   songVideoId,
+  needsRepair,
+  offerRepair,
+  repairRows,
 } from '/src/model/tracks'
+import { repairItemOf, reasonText } from '/src/model/repair'
 import { useI18n, currentLocale } from '/src/i18n'
 
 const props = defineProps({
@@ -403,6 +432,12 @@ function onMore(e, i) {
 }
 
 function play(i) {
+  // Playing a track that cannot play would start it, fail, and skip to the
+  // next one: say why and offer the fix instead, and leave the queue alone.
+  if (needsRepair(props.rows[i])) {
+    offerRepair(props.rows[i])
+    return
+  }
   if (props.onPlay) props.onPlay(i)
   else playRows(props.rows, i)
 }
@@ -502,6 +537,25 @@ function dlState(row) {
   if (item.isErrored()) return 'error'
   if (item.isDownloaded()) return 'done'
   return 'active'
+}
+
+// '' for anything that is fine, or not a saved track at all.
+function fixState(row) {
+  if (row.kind !== 'local') return ''
+  const item = repairItemOf(row.file)
+  if (item && (item.state === 'queued' || item.state === 'working')) return item.state
+  // Repaired, and the library has not been read again yet: no button for
+  // the second it takes, or it would offer to fix what was just fixed.
+  if (item && (item.state === 'fixed' || item.state === 'fine')) return ''
+  return row.problem ? 'broken' : ''
+}
+
+function fixTitle(row) {
+  const item = repairItemOf(row.file)
+  if (item && item.state === 'failed') {
+    return t('repair.failedRow', { why: reasonText(item.reason) })
+  }
+  return t('repair.needs')
 }
 
 function retryDownload(row) {
@@ -750,6 +804,15 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
 }
 .tt-liked {
   color: rgb(var(--c-accent));
+}
+/* A saved track that will not play: still listed, clearly not ready. */
+.tt-row.is-broken .tt-title,
+.tt-row.is-broken .tt-sub,
+.tt-row.is-broken .tt-art {
+  opacity: 0.5;
+}
+.tt-waiting {
+  color: rgb(var(--c-fg) / 0.5);
 }
 .tt-liked:hover {
   color: rgb(var(--c-accent));
