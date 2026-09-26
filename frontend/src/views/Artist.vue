@@ -86,7 +86,7 @@ const artist = ref(null)
 const loading = ref(false)
 
 const coverUrl = computed(() =>
-  artist.value && artist.value.cover ? API.coverFileURL(artist.value.cover) : ''
+  artist.value && artist.value.cover ? API.coverFileURL(artist.value.cover, artist.value.cover_v) : ''
 )
 
 const albums = computed(() =>

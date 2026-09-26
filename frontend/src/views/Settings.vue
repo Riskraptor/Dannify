@@ -490,6 +490,7 @@ import { useUi } from '/src/model/ui'
 import { usePlayer } from '/src/model/player'
 import { useAccount } from '/src/model/account'
 import { useUpdates } from '/src/model/updates'
+import { useConnectivity } from '/src/model/connectivity'
 import { desktop } from '/src/desktop/bridge'
 import { ZOOM_STEPS, currentZoom, setZoom } from '/src/desktop/shortcuts'
 import { toast } from '/src/model/toast'
@@ -504,6 +505,7 @@ const ui = useUi()
 const player = usePlayer()
 const account = useAccount()
 const updates = useUpdates()
+const connectivity = useConnectivity()
 const s = computed(() => sm.settings.value)
 
 const version = appVersion
@@ -558,7 +560,11 @@ const updateHint = computed(() => {
   if (updates.available.value) {
     return t('update.available', { version: updates.info.value.version })
   }
-  if (updates.lastError.value) return t('update.offline')
+  // Every failure used to be reported as the connection being down, which
+  // was wrong whenever the connection was fine and something else was not.
+  if (updates.lastError.value) {
+    return connectivity.online.value ? t('update.checkFailedLater') : t('update.offline')
+  }
   return t('update.upToDate', { version: version.value })
 })
 

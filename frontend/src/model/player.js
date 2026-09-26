@@ -845,8 +845,7 @@ window.addEventListener('dannify:play-file', (e) => {
   const track = e && e.detail
   if (!track) return
   if (track.error) {
-    const key = track.error === 'other_key' ? 'player.fileOtherKey' : 'player.fileDamaged'
-    toast(t(key, { name: track.name || '' }), {
+    toast(t('player.fileCantPlay', { name: track.name || '' }), {
       tone: 'error',
       // Only a track in the library can be repaired: it is put back where it
       // was, and a file from anywhere else has no place in it to go back to.

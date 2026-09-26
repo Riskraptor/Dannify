@@ -53,7 +53,7 @@
           <span class="sb-avatar">
             <img
               v-if="a.cover && !failed[a.name]"
-              :src="API.coverFileURL(a.cover)"
+              :src="API.coverFileURL(a.cover, a.cover_v)"
               alt=""
               loading="lazy"
               class="drag-none"

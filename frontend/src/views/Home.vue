@@ -167,7 +167,7 @@
         <MediaCard
           v-for="a in topArtists"
           :key="a.name"
-          :item="{ name: a.name, cover: a.cover ? API.coverFileURL(a.cover) : '' }"
+          :item="{ name: a.name, cover: a.cover ? API.coverFileURL(a.cover, a.cover_v) : '' }"
           kind="artist"
           :subtitle-text="t('nav.artistSongs', { count: a.count })"
           playable

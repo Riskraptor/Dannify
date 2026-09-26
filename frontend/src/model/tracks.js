@@ -38,7 +38,7 @@ export function localRow(tr) {
     // The file's date rides along so the address changes when the file
     // does. A repaired track is a new file at the same path, and without
     // this its row kept the blank artwork it had while it was broken.
-    cover: `${API.coverFileURL(tr.file)}&v=${Math.floor(tr.added || 0)}`,
+    cover: API.coverFileURL(tr.file, Math.floor(tr.added || 0)),
     added: tr.added || 0,
     file: tr.file,
     explicit: false,

@@ -48,6 +48,7 @@
     </div>
 
     <div class="tb-right">
+      <RepairIndicator />
       <DownloadIndicator />
       <UpdateButton />
       <button
@@ -97,6 +98,7 @@ import { useI18n } from '/src/i18n'
 import SearchBox from './SearchBox.vue'
 import WindowControls from './WindowControls.vue'
 import DownloadIndicator from './DownloadIndicator.vue'
+import RepairIndicator from './RepairIndicator.vue'
 import UpdateButton from './UpdateButton.vue'
 
 const { t } = useI18n()

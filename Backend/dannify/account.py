@@ -89,46 +89,93 @@ _state: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
+# The sign-in is kept encrypted to this Windows account on this PC, the same
+# way saved music is. It is a live Google session: whoever has these cookies
+# is signed in as this person, to YouTube and to everything else on the
+# account. Earlier versions wrote them to account.json in plain text, where
+# anything that could read a file in AppData could lift them.
+_FILE = 'account.dat'
+_LEGACY = 'account.json'
+
+
 def init(data_dir: Path) -> None:
     """Load a previously saved session (called once at startup)."""
 
-    path = Path(data_dir) / 'account.json'
+    from . import vault  # noqa: PLC0415
+
+    path = Path(data_dir) / _FILE
+    legacy = Path(data_dir) / _LEGACY
     _state['path'] = path
+    data = None
     try:
-        data = json.loads(path.read_text(encoding='utf-8'))
-        cookies = data.get('cookies') or {}
-        if isinstance(cookies, dict) and cookies.get('__Secure-3PAPISID'):
-            _state['cookies'] = cookies
-            _state['profile'] = data.get('profile') or {}
-            _state['gen'] += 1
-            logger.info(
-                'YouTube Music account restored ({})',
-                _state['profile'].get('name') or 'signed in',
-            )
-    except FileNotFoundError:
-        pass
+        if path.is_file():
+            data = json.loads(vault._unprotect(path.read_bytes()).decode('utf-8'))
+        elif legacy.is_file():
+            data = json.loads(legacy.read_text(encoding='utf-8'))
     except Exception:
         logger.opt(exception=True).debug('Could not read saved account')
+        data = None
+    if not isinstance(data, dict):
+        return
+    cookies = data.get('cookies') or {}
+    if not (isinstance(cookies, dict) and cookies.get('__Secure-3PAPISID')):
+        return
+    _state['cookies'] = cookies
+    _state['profile'] = data.get('profile') or {}
+    _state['gen'] += 1
+    logger.info(
+        'YouTube Music account restored ({})',
+        _state['profile'].get('name') or 'signed in',
+    )
+    # A session read from the old plain file is written encrypted, and the
+    # plain one goes only once the encrypted copy reads back the same.
+    if legacy.is_file() and _save() and _stored() == data.get('cookies'):
+        try:
+            legacy.unlink()
+        except OSError:
+            logger.opt(exception=True).debug('Could not remove the old account file')
 
 
-def _save() -> None:
+def _stored() -> Optional[dict]:
+    """The cookies as they are on disk now, or None."""
+
+    from . import vault  # noqa: PLC0415
+
+    path = _state.get('path')
+    try:
+        blob = vault._unprotect(Path(path).read_bytes())
+        return (json.loads(blob.decode('utf-8')) or {}).get('cookies')
+    except Exception:
+        return None
+
+
+def _save() -> bool:
+    """Write the session, encrypted. Returns whether it was written."""
+
+    from . import vault  # noqa: PLC0415
+
     path = _state.get('path')
     if not path:
-        return
+        return False
     try:
         if _state['cookies']:
+            raw = json.dumps(
+                {'cookies': _state['cookies'], 'profile': _state['profile']}
+            ).encode('utf-8')
+            blob = vault._protect(raw)
+            if vault._unprotect(blob) != raw:
+                return False
             tmp = Path(str(path) + '.tmp')
-            tmp.write_text(
-                json.dumps(
-                    {'cookies': _state['cookies'], 'profile': _state['profile']}
-                ),
-                encoding='utf-8',
-            )
+            tmp.write_bytes(blob)
             tmp.replace(path)
         else:
             Path(path).unlink(missing_ok=True)
+            # Signed out: an old plain copy must not outlive the session.
+            Path(path).with_name(_LEGACY).unlink(missing_ok=True)
+        return True
     except Exception:
         logger.opt(exception=True).debug('Could not persist account')
+        return False
 
 
 # ---------------------------------------------------------------------------

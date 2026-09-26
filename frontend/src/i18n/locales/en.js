@@ -88,8 +88,8 @@ export default {
     deleteCount: 'Delete {count} songs',
     deleteTitle: 'Delete this song?',
     deleteTitleMany: 'Delete {count} songs?',
-    deleteMessage: '“{title}” will be permanently removed from your computer.',
-    deleteMessageMany: 'These {count} files will be permanently removed from your computer.',
+    deleteMessage: '“{title}” will be moved to the Recycle Bin.',
+    deleteMessageMany: 'These {count} songs will be moved to the Recycle Bin.',
     deleted: 'Deleted “{title}”',
     deletedMany: 'Deleted {count} songs',
     startRadio: 'Start radio',
@@ -306,18 +306,14 @@ export default {
     help: 'Show this list',
   },
   health: {
-    musicLocked:
-      '{count} saved track was locked with a key this installation does not have, so it will not play. This happens after moving to another PC or Windows account. | {count} saved tracks were locked with a key this installation does not have, so they will not play. This happens after moving to another PC or Windows account.',
-    tracksDamaged:
-      '{count} saved track is damaged and will not play. | {count} saved tracks are damaged and will not play.',
-    keyUnreadable:
-      'The key your saved music is locked with could not be read, so none of it will play and nothing new can be saved.',
-    noKey:
-      'Saved music is unavailable: this installation has no key and could not create one.',
+    songsUnplayable:
+      '{count} saved song will not play. | {count} saved songs will not play.',
+    storageUnavailable:
+      'Saved songs cannot be opened right now, and new downloads cannot be saved. Restarting Dannify may help.',
     folderMissing:
       'The music folder is not there any more: {path}. Downloads and saved music will not work until it is back, or you pick another folder in Settings.',
     folderReadOnly:
-      'The music folder cannot be written to: {path}. Nothing can be downloaded or converted until that is fixed.',
+      'The music folder cannot be written to: {path}. Nothing can be downloaded until that is fixed.',
     checkFailed:
       'Dannify could not check itself just now. If anything looks wrong, close it from the notification area and open it again.',
     updateFailed:
@@ -326,18 +322,22 @@ export default {
   repair: {
     action: 'Repair',
     all: 'Repair all',
-    track: 'Repair track',
-    tracks: 'Repair {count} tracks',
-    hint: 'Repair downloads a fresh copy in the same place. | Repair downloads a fresh copy of each, in the same place.',
-    needs: 'This track will not play. Click to repair it.',
+    track: 'Repair song',
+    tracks: 'Repair {count} songs',
+    hint: 'Repair downloads it again, in the same place. | Repair downloads them again, in the same place.',
+    needs: 'This song will not play. Click to repair it.',
     needsToast: '{title} will not play until it is repaired.',
     stillWorking: '{title} is being repaired. It will play once that is done.',
     queued: 'Waiting to be repaired',
     working: 'Repairing',
-    failedRow: 'Could not repair this track. {why} Click to try again.',
+    failedRow: 'Could not repair this song. {why} Click to try again.',
     progress: 'Repairing {done} of {total}',
+    indicator: 'Repairing songs: {done} of {total}',
+    show: 'Show in library',
+    started: 'Repairing {count} song. You can keep listening. | Repairing {count} songs. You can keep listening.',
+    stopped: 'Repair stopped.',
     stop: 'Stop',
-    doneAll: '{count} track repaired. | {count} tracks repaired.',
+    doneAll: '{count} song repaired. | {count} songs repaired.',
     doneSome: 'Repaired {fixed} of {total}.',
     failedSome: '{count} could not be repaired. | {count} could not be repaired.',
     retry: 'Try again',
@@ -345,12 +345,12 @@ export default {
     fineOne: 'Nothing was wrong with {title}.',
     failedOne: 'Could not repair {title}. {why}',
     couldNotStart: 'Repair could not start. Try again in a moment.',
-    noKey: 'Nothing can be repaired: saved music cannot be locked on this installation.',
+    unavailable: 'Songs cannot be repaired right now.',
     why: {
       not_found: 'It could not be found online.',
       offline: 'There is no internet connection.',
       in_use: 'Something is using the file. Stop playing it and try again.',
-      no_key: 'Saved music cannot be locked on this installation.',
+      unavailable: 'Downloads cannot be saved right now.',
       missing: 'The file is not there any more.',
       failed: 'The download did not work.',
     },
@@ -361,9 +361,7 @@ export default {
       'Several saved files in a row would not play. Stopped there.',
     fileUnreadable:
       'That file is there but could not be read. It may be damaged.',
-    fileOtherKey:
-      '{name} was saved by a different installation of Dannify, so this one cannot open it.',
-    fileDamaged: '{name} is damaged and will not play.',
+    fileCantPlay: '{name} will not play.',
     title: 'Player',
     empty: 'Nothing to play yet',
     emptyHint: 'Search for music or open your library to start listening.',
@@ -459,7 +457,7 @@ export default {
     submit: 'Publish lyrics',
     solving: 'Publishing...',
     powSlow:
-      'This usually takes 10 - 30 seconds. Almost there.',
+      'This usually takes 10 to 30 seconds. Almost there.',
     success:
       'Published. Thank you: these lyrics are now shared with everyone playing this song.',
     failed: 'Could not publish lyrics. Please try again.',
@@ -546,7 +544,8 @@ export default {
     title: 'Updates',
     available: 'Version {version} is available',
     upToDate: 'Dannify {version} is up to date',
-    offline: 'Could not reach GitHub. Dannify will try again later.',
+    offline: 'No internet connection. Dannify will check for updates when it is back.',
+    checkFailedLater: 'Could not check for updates just now. Dannify will try again later.',
     checkNow: 'Check now',
     checkFailed: 'Could not check for updates.',
     downloadAndInstall: 'Update now',

@@ -88,8 +88,8 @@ export default {
     deleteCount: 'Supprimer {count} titres',
     deleteTitle: 'Supprimer ce titre ?',
     deleteTitleMany: 'Supprimer {count} titres ?',
-    deleteMessage: '« {title} » sera définitivement supprimé de votre ordinateur.',
-    deleteMessageMany: 'Ces {count} fichiers seront définitivement supprimés de votre ordinateur.',
+    deleteMessage: '« {title} » sera déplacé dans la Corbeille.',
+    deleteMessageMany: 'Ces {count} titres seront déplacés dans la Corbeille.',
     deleted: '« {title} » supprimé',
     deletedMany: '{count} titres supprimés',
     startRadio: 'Lancer la radio',
@@ -311,18 +311,14 @@ export default {
     help: 'Afficher cette liste',
   },
   health: {
-    musicLocked:
-      "{count} titre enregistré a été verrouillé avec une clé que cette installation n'a pas, il ne se lira donc pas. Cela arrive après un passage à un autre PC ou à un autre compte Windows. | {count} titres enregistrés ont été verrouillés avec une clé que cette installation n'a pas, ils ne se liront donc pas. Cela arrive après un passage à un autre PC ou à un autre compte Windows.",
-    tracksDamaged:
-      '{count} titre enregistré est endommagé et ne se lira pas. | {count} titres enregistrés sont endommagés et ne se liront pas.',
-    keyUnreadable:
-      "La clé qui verrouille votre musique enregistrée n'a pas pu être lue : rien ne se lira et rien de nouveau ne pourra être enregistré.",
-    noKey:
-      "La musique enregistrée est indisponible : cette installation n'a pas de clé et n'a pas pu en créer une.",
+    songsUnplayable:
+      '{count} titre enregistré ne se lit pas. | {count} titres enregistrés ne se lisent pas.',
+    storageUnavailable:
+      "Les titres enregistrés ne peuvent pas être ouverts pour le moment, et les nouveaux téléchargements ne peuvent pas être enregistrés. Redémarrer Dannify peut aider.",
     folderMissing:
       "Le dossier de musique n'existe plus : {path}. Les téléchargements et la musique enregistrée ne fonctionneront pas tant qu'il n'est pas revenu, ou qu'un autre dossier n'est pas choisi dans les réglages.",
     folderReadOnly:
-      "Impossible d'écrire dans le dossier de musique : {path}. Rien ne peut être téléchargé ou converti tant que ce n'est pas corrigé.",
+      "Impossible d'écrire dans le dossier de musique : {path}. Rien ne peut être téléchargé tant que ce n'est pas corrigé.",
     checkFailed:
       "Dannify n'a pas pu se vérifier pour le moment. Si quelque chose ne va pas, fermez-le depuis la zone de notification et rouvrez-le.",
     updateFailed:
@@ -333,14 +329,18 @@ export default {
     all: 'Tout réparer',
     track: 'Réparer le titre',
     tracks: 'Réparer {count} titres',
-    hint: 'Réparer télécharge une nouvelle copie au même endroit. | Réparer télécharge une nouvelle copie de chacun, au même endroit.',
-    needs: 'Ce titre ne peut pas être lu. Cliquez pour le réparer.',
+    hint: 'Réparer le télécharge à nouveau, au même endroit. | Réparer les télécharge à nouveau, au même endroit.',
+    needs: 'Ce titre ne se lit pas. Cliquez pour le réparer.',
     needsToast: "{title} ne se lira pas tant qu'il n'est pas réparé.",
     stillWorking: '{title} est en cours de réparation. Il se lira une fois terminé.',
     queued: 'En attente de réparation',
     working: 'Réparation en cours',
     failedRow: 'Impossible de réparer ce titre. {why} Cliquez pour réessayer.',
     progress: 'Réparation {done} sur {total}',
+    indicator: 'Réparation des titres : {done} sur {total}',
+    show: 'Afficher dans la bibliothèque',
+    started: 'Réparation de {count} titre. Vous pouvez continuer à écouter. | Réparation de {count} titres. Vous pouvez continuer à écouter.',
+    stopped: 'Réparation arrêtée.',
     stop: 'Arrêter',
     doneAll: '{count} titre réparé. | {count} titres réparés.',
     doneSome: '{fixed} sur {total} réparés.',
@@ -350,12 +350,12 @@ export default {
     fineOne: "{title} n'avait aucun problème.",
     failedOne: 'Impossible de réparer {title}. {why}',
     couldNotStart: "La réparation n'a pas pu démarrer. Réessayez dans un instant.",
-    noKey: 'Rien ne peut être réparé : la musique enregistrée ne peut pas être verrouillée sur cette installation.',
+    unavailable: 'Les titres ne peuvent pas être réparés pour le moment.',
     why: {
       not_found: 'Il est introuvable en ligne.',
       offline: 'Pas de connexion Internet.',
       in_use: 'Le fichier est utilisé. Arrêtez la lecture et réessayez.',
-      no_key: 'La musique enregistrée ne peut pas être verrouillée sur cette installation.',
+      unavailable: 'Les téléchargements ne peuvent pas être enregistrés pour le moment.',
       missing: "Le fichier n'est plus là.",
       failed: "Le téléchargement n'a pas fonctionné.",
     },
@@ -366,9 +366,7 @@ export default {
       "Plusieurs fichiers enregistrés de suite n'ont pas pu être lus. Arrêt ici.",
     fileUnreadable:
       "Ce fichier est bien là mais n'a pas pu être lu. Il est peut-être endommagé.",
-    fileOtherKey:
-      "{name} a été enregistré par une autre installation de Dannify, celle-ci ne peut pas l'ouvrir.",
-    fileDamaged: '{name} est endommagé et ne se lira pas.',
+    fileCantPlay: '{name} ne se lit pas.',
     title: 'Lecteur',
     empty: 'Rien à lire pour le moment',
     emptyHint: 'Recherchez de la musique ou ouvrez votre bibliothèque pour commencer.',
@@ -464,7 +462,7 @@ export default {
     submit: 'Publier les paroles',
     solving: 'Résolution du défi de sécurité…',
     powSlow:
-      "Cela prend generalement 10 a 30 secondes. Presque fini.",
+      "Cela prend généralement 10 à 30 secondes. Presque fini.",
     success:
       'Publie. Merci : ces paroles sont maintenant partagees avec tous ceux qui ecoutent ce morceau.',
     failed: 'Impossible de publier les paroles. Veuillez réessayer.',
@@ -551,7 +549,8 @@ export default {
     title: 'Mises à jour',
     available: 'La version {version} est disponible',
     upToDate: 'Dannify {version} est à jour',
-    offline: 'GitHub est injoignable - Dannify réessaiera plus tard.',
+    offline: 'Pas de connexion Internet. Dannify cherchera les mises à jour dès son retour.',
+    checkFailedLater: 'Impossible de chercher les mises à jour pour le moment. Dannify réessaiera plus tard.',
     checkNow: 'Vérifier',
     checkFailed: 'Impossible de vérifier les mises à jour.',
     downloadAndInstall: 'Mettre à jour',

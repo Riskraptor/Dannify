@@ -700,10 +700,16 @@ def build_app() -> FastAPI:
     from dannify import updates as _updates
 
     _support.init(DATABASE_DIR)
-    # The key saved music is encrypted with. Made once, kept for good; the
-    # uninstaller is told to leave it alone (see packaging/dannify.iss).
+    # What saved music is sealed with. Made once, kept for good; the
+    # uninstaller is told to leave it alone (see packaging/dannify.iss). Then
+    # joined to the music folder, which keeps its own copy, so the two can
+    # never again drift apart and leave the songs unopenable (see vault.attach).
     from dannify import vault as _vault
     _vault.init(DATABASE_DIR)
+    try:
+        _vault.attach(download_dir)
+    except Exception:
+        logger.opt(exception=True).warning('could not join the music folder')
     _updates.init(DATABASE_DIR)
     api.state.downloader = Downloader(
         download_dir,
@@ -871,10 +877,20 @@ def build_app() -> FastAPI:
             return {'deleted': False, 'error': 'Invalid path'}
         if not full.is_file():
             return {'deleted': False, 'error': 'File not found'}
-        try:
-            full.unlink()
-        except Exception as exc:
-            return {'deleted': False, 'error': str(exc)}
+        # To the Recycle Bin, with the song's lyrics file. Deleting used to be
+        # final, and the lyrics file was left behind on its own: a song
+        # removed by mistake was gone for good, while a stray .lrc beside
+        # nothing stayed in the folder for ever.
+        doomed = [full]
+        lyrics = full.with_suffix('.lrc')
+        if lyrics.is_file():
+            doomed.append(lyrics)
+        if not _recycle(doomed):
+            try:
+                for path in doomed:
+                    path.unlink(missing_ok=True)
+            except Exception as exc:
+                return {'deleted': False, 'error': str(exc)}
         # A repair of this track still to come, or under way, must not put it
         # back: it was deleted on purpose.
         try:
@@ -948,10 +964,7 @@ def build_app() -> FastAPI:
         # like nothing, which is not a state anybody can debug.
         head = vault.read_header(target)
         if head is None:
-            logger.error(
-                'cannot read {}: the wrong key for it, or it is damaged',
-                target.name,
-            )
+            logger.error('cannot open {}', target.name)
             await _Resp(status_code=409)(scope, receive, send)
             return
 
@@ -1141,6 +1154,49 @@ def build_app() -> FastAPI:
     return app
 
 
+def _recycle(paths: list[Path]) -> bool:
+    """Move files to the Recycle Bin. False when that could not be done.
+
+    SHFileOperation with FOF_ALLOWUNDO is what Explorer's own Delete does. On a
+    drive with no Recycle Bin it deletes outright, which is what the caller
+    would have done anyway.
+    """
+
+    if os.name != 'nt' or not paths:
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class SHFILEOPSTRUCTW(ctypes.Structure):
+            _fields_ = [
+                ('hwnd', wintypes.HWND),
+                ('wFunc', wintypes.UINT),
+                ('pFrom', wintypes.LPCWSTR),
+                ('pTo', wintypes.LPCWSTR),
+                ('fFlags', ctypes.c_ushort),
+                ('fAnyOperationsAborted', wintypes.BOOL),
+                ('hNameMappings', ctypes.c_void_p),
+                ('lpszProgressTitle', wintypes.LPCWSTR),
+            ]
+
+        fo_delete = 3
+        flags = 0x40 | 0x10 | 0x4 | 0x400  # ALLOWUNDO, NOCONFIRMATION, SILENT, NOERRORUI
+        # A list of paths, each ending in a nul, the whole ending in another.
+        names = ctypes.create_unicode_buffer('\0'.join(str(p) for p in paths) + '\0\0')
+        op = SHFILEOPSTRUCTW(
+            None, fo_delete, ctypes.cast(names, wintypes.LPCWSTR), None,
+            flags, False, None, None,
+        )
+        result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+        return result == 0 and not op.fAnyOperationsAborted and not any(
+            p.exists() for p in paths
+        )
+    except Exception:
+        logger.opt(exception=True).debug('could not use the Recycle Bin')
+        return False
+
+
 def open_external(path: str | Path) -> dict[str, Any] | None:
     """Work out how to play a file the shell handed us, and tell the window.
 
@@ -1197,11 +1253,7 @@ def open_external(path: str | Path) -> dict[str, Any] | None:
             # a double-click did nothing whatsoever. A track in the library
             # also says where it is, so the window can offer to repair it.
             logger.warning('cannot open {}: {}', target, problem)
-            failed = {
-                'error': 'other_key' if problem == vault.LOCKED else 'damaged',
-                'name': target.name,
-                'file': rel,
-            }
+            failed = {'error': 'unplayable', 'name': target.name, 'file': rel}
             tell(failed)
             return failed
         head = found or {}

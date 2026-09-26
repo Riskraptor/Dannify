@@ -220,6 +220,7 @@ export function useDownloadManager() {
             generate_m3u: generateM3u,
           }).catch((err) => {
             console.log('Batch submit failed:', err.message)
+            markFailed(songs)
           })
         } else {
           console.log('Opened Song:', songs)
@@ -232,6 +233,19 @@ export function useDownloadManager() {
       .finally(() => {
         loading.value = false
       })
+  }
+
+  // The batch never reached the backend. Those songs used to sit on "In
+  // Queue" for ever, waiting for news of a job nobody had started; marked
+  // failed, each gets the retry button every failed download has.
+  function markFailed(songs) {
+    for (const song of songs) {
+      const item = progressTracker.getBySong(song)
+      if (item && !item.isDownloaded()) {
+        item.message = ''
+        item.setError()
+      }
+    }
   }
 
   // Download an explicit list of songs (e.g. a user-picked subset of a
@@ -254,6 +268,7 @@ export function useDownloadManager() {
       generate_m3u: generateM3u,
     }).catch((err) => {
       console.log('Batch submit failed:', err.message)
+      markFailed(list)
     })
   }
 
