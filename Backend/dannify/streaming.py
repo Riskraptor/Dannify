@@ -181,6 +181,14 @@ def init_persistent_cache(data_dir: Path) -> None:
         logger.info('Stream cache loaded ({} fresh entries)', loaded)
 
 
+def clear_direct_cache() -> None:
+    """Forget every resolved stream address (Settings, Clear caches)."""
+
+    with _direct_lock:
+        _direct_cache.clear()
+        _persist_direct_cache_locked()
+
+
 def _persist_direct_cache_locked() -> None:
     """Write the in-memory direct cache to disk atomically."""
     if _direct_path is None:

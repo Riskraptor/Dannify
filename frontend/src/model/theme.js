@@ -20,13 +20,17 @@ const LIGHT_KEY = 'dn.theme.light'
 // `id` is the [data-theme] value minus the prefix; `swatch` is what the
 // picker paints, taken straight from the palette so the two cannot drift.
 export const THEMES = [
-  { id: 'dark', mode: 'dark', name: 'theme.midnight', bg: '#12121590', accent: '#1AD05C' },
+  { id: 'dark', mode: 'dark', name: 'theme.midnight', bg: '#121215', accent: '#1AD05C' },
   { id: 'graphite', mode: 'dark', name: 'theme.graphite', bg: '#16191E', accent: '#58A6FF' },
   { id: 'deepsea', mode: 'dark', name: 'theme.deepsea', bg: '#0E1821', accent: '#2DD4BF' },
   { id: 'orchid', mode: 'dark', name: 'theme.orchid', bg: '#18121F', accent: '#D674FF' },
   { id: 'ember', mode: 'dark', name: 'theme.ember', bg: '#1C1512', accent: '#FF963C' },
-  { id: 'light', mode: 'light', name: 'theme.paper', bg: '#FFFFFF', accent: '#0D853A' },
+  { id: 'aurora', mode: 'dark', name: 'theme.aurora', bg: '#111324', accent: '#818CF8' },
+  { id: 'rose', mode: 'dark', name: 'theme.rose', bg: '#1B1216', accent: '#FB7196' },
+  { id: 'forest', mode: 'dark', name: 'theme.forest', bg: '#0F1813', accent: '#84CC16' },
+  { id: 'light', mode: 'light', name: 'theme.paper', bg: '#FFFFFF', accent: '#14A84A' },
   { id: 'sand', mode: 'light', name: 'theme.sand', bg: '#FDFAF5', accent: '#A04C10' },
+  { id: 'sky', mode: 'light', name: 'theme.sky', bg: '#FAFCFF', accent: '#1D64D6' },
 ]
 
 const DARK_IDS = THEMES.filter((t) => t.mode === 'dark').map((t) => t.id)

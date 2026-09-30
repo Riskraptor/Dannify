@@ -54,7 +54,11 @@
         <MediaCard
           v-for="a in filtered"
           :key="a.name"
-          :item="{ name: a.name, cover: a.cover ? API.coverFileURL(a.cover, a.cover_v) : '' }"
+          :item="{
+            name: a.name,
+            cover: artistLinks.artistPhoto(a.name, 336),
+            fallback: a.cover ? API.coverFileURL(a.cover, a.cover_v) : '',
+          }"
           kind="artist"
           :subtitle-text="t('nav.artistSongs', { count: a.count })"
           playable
@@ -85,9 +89,10 @@ import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
 import { useLibrary } from '/src/model/library'
 import { useUi } from '/src/model/ui'
-import { localRow, playRows, shuffleRows } from '/src/model/tracks'
+import { localRow, playRows, shuffleRows, onArtistPage } from '/src/model/tracks'
 import { onRefresh } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
+import { useArtistLinks } from '/src/model/artistLinks'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
 import MediaCard from '/src/components/MediaCard.vue'
 import TrackTable from '/src/components/ui/TrackTable.vue'
@@ -100,6 +105,7 @@ const ui = useUi()
 const query = ref('')
 
 lib.ensureLoaded()
+const artistLinks = useArtistLinks()
 onRefresh(() => lib.refresh())
 
 const filtered = computed(() => {
@@ -119,7 +125,7 @@ const songMatches = computed(() => {
 
 function rowsFor(name) {
   return lib.tracks.value
-    .filter((tr) => tr.artist === name || (tr.artists || []).includes(name))
+    .filter((tr) => onArtistPage(tr, name))
     .map(localRow)
 }
 

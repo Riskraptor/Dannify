@@ -1134,7 +1134,6 @@ async function doSubmit() {
 function finishAndClose() {
   player.clipUnloop()
   loopLineIdx.value = -1
-  player.setPlaybackRate(1)
   player.noAutoAdvance.value = false
   emit('close')
 }
@@ -1176,6 +1175,11 @@ watch(
     if (!isOpen) {
       player.clipUnloop()
       loopLineIdx.value = -1
+      // Slow-mo is for syncing. Only Finish used to put the speed back, so
+      // closing any other way (the X, Escape, the backdrop, Cancel) left the
+      // player at 0.5x, and every track after it played that slowly until a
+      // restart. Here, every way out goes through it.
+      player.setPlaybackRate(1)
       player.noAutoAdvance.value = false
       unbindWindowKeys()
       const back = giveBack

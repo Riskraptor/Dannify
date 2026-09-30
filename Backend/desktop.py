@@ -819,7 +819,7 @@ class _Taskbar:
 # Dannify keeps playing when its window is gone, so the tray icon is a real
 # control surface, not a decoration: it shows what's playing, exposes
 # transport controls, and is the only way back to a window that was closed
-# to tray. Double-click restores, middle-click plays/pauses.
+# to tray. A click restores, middle-click plays/pauses, right-click is the menu.
 # ---------------------------------------------------------------------------
 # --- The tray menu, drawn by Windows ---------------------------------------
 #
@@ -933,17 +933,103 @@ class _NativeMenu:
                 logger.opt(exception=True).debug('tray menu action failed')
 
 
+# --- What the tray says ------------------------------------------------------
+#
+# Plain functions, so the wording and the limits can be tested without a
+# window, a tray or .NET.
+
+# NotifyIcon.Text refuses anything longer than 63 characters on the .NET
+# Framework the app runs on (4.8, which is what pythonnet loads; the 127 of
+# newer .NET does not apply). The tooltip used to be cut at 127, so any
+# title and artist longer than about 55 characters made the setter throw, the
+# throw was swallowed, and the tooltip went on naming whatever had played
+# before. "Dannify" plus the song has to fit in 63, and a long one is
+# shortened with an ellipsis instead.
+_TRAY_TIP_MAX = 63
+_MENU_TEXT_MAX = 64
+
+
+def _fit_text(text: str, limit: int) -> str:
+    """One line, at most *limit* characters, the cut marked with an ellipsis.
+
+    Tags read from files can carry line breaks and tabs, which a tooltip or a
+    menu row would otherwise print as they are.
+    """
+
+    flat = ' '.join(str(text or '').split())
+    if len(flat) <= limit:
+        return flat
+    return flat[: max(0, limit - 1)].rstrip() + '\N{HORIZONTAL ELLIPSIS}'
+
+
+def _track_label(title: str, artist: str) -> str:
+    """How the tray names a song: "Title · Artist".
+
+    It used to be "Title: Artist", which reads like a label and its value.
+    The middle dot is what the interface puts between details elsewhere.
+    """
+
+    title = ' '.join(str(title or '').split())
+    artist = ' '.join(str(artist or '').split())
+    if title and artist:
+        return f'{title} \N{MIDDLE DOT} {artist}'
+    return title
+
+
+def _tray_tooltip(track: str, idle: str) -> str:
+    """The hover text: the app's name, then what is playing (or not)."""
+
+    head = APP_TITLE + chr(10)
+    return head + _fit_text(track or idle, _TRAY_TIP_MAX - len(head))
+
+
+def _menu_text(label: str) -> str:
+    """A menu row's text, safe to hand to AppendMenuW.
+
+    Windows reads "&" in a menu item as "underline the next character", so a
+    song by Simon & Garfunkel appeared in the tray menu with the ampersand
+    gone and the space after it underlined. Doubling it is how a menu shows a
+    real one.
+    """
+
+    return _fit_text(label, _MENU_TEXT_MAX).replace('&', '&&')
+
+
+def _tray_menu(labels: dict, track: str, playing: bool, has_track: bool) -> list:
+    """The right-click menu, as (command, text, enabled, default) rows.
+
+    None is a separator. Built from the current state every time it opens,
+    so Play and Pause can never be the wrong way round.
+    """
+
+    return [
+        # The song is context, not a command: a greyed row at the top, as in
+        # every other player's tray menu.
+        ('track', _menu_text(track or labels['nowPlaying']), False, False),
+        None,
+        ('toggle', _menu_text(labels['pause' if playing else 'play']), has_track, False),
+        ('prev', _menu_text(labels['prev']), has_track, False),
+        ('next', _menu_text(labels['next']), has_track, False),
+        None,
+        ('show', _menu_text(labels['show']), True, True),
+        ('quit', _menu_text(labels['quit']), True, False),
+    ]
+
+
 class _Tray:
     LABEL_KEYS = ('nowPlaying', 'play', 'pause', 'prev', 'next', 'show', 'quit', 'hidden')
 
-    def __init__(self, api: 'DesktopApi'):
+    def __init__(self, api: 'DesktopApi', hint_shown: bool = False):
         self._api = api
         self._icon = None  # WinForms.NotifyIcon
-        self._items: dict[str, object] = {}
+        # An invisible window that owns the right-click menu (see install).
+        self._menu_owner = None
         self._track = ''
         self._playing = False
         self._has_track = False
-        self._told_user = False
+        # Whether the "still running here" notice has ever been shown. Kept
+        # with the window settings: it is said once, not once per launch.
+        self._told_user = bool(hint_shown)
         self.labels = {
             'nowPlaying': 'Nothing playing',
             'play': 'Play',
@@ -952,7 +1038,8 @@ class _Tray:
             'next': 'Next',
             'show': 'Open Dannify',
             'quit': 'Quit Dannify',
-            'hidden': 'Dannify is still playing here.',
+            'hidden': 'Dannify is still running here. Click the icon to open it, '
+                      'or right-click it to quit.',
         }
 
     @property
@@ -969,8 +1056,6 @@ class _Tray:
                 MouseButtons,
                 MouseEventHandler,
                 NotifyIcon,
-                ToolStripMenuItem,
-                ToolStripSeparator,
             )
 
             icon = NotifyIcon()
@@ -1000,41 +1085,75 @@ class _Tray:
                     logger.opt(exception=True).debug('tray click failed')
 
             icon.MouseUp += MouseEventHandler(_mouse_up)
+            # Clicking the one-time notice opens the window, as clicking any
+            # app's notification does. It used to do nothing at all.
+            icon.BalloonTipClicked += EventHandler(
+                lambda s, e: self._api._show_from_tray()
+            )
             icon.Visible = True
             self._icon = icon
+            self._make_menu_owner()
+            # Say what is playing straight away. A tray switched on in
+            # Settings mid-song used to read just "Dannify" until the next
+            # track, because the song arrived while there was no icon to tell.
+            self.refresh()
             return True
         except Exception as exc:
             logger_print('tray icon unavailable:', exc)
             return False
 
+    def _make_menu_owner(self) -> None:
+        """An invisible window of our own for the menu to belong to.
+
+        A popup menu only closes on an outside click if its owner is the
+        foreground window (see _NativeMenu.show). It used to borrow the main
+        window for that, and making the main window the foreground window
+        brings it to the front: right-clicking the tray icon while Dannify sat
+        behind other windows pulled the whole app over them just to show a
+        menu. NotifyIcon does its own menus this same way, with a window
+        nobody sees. If this fails the main window is still there to use.
+        """
+
+        if self._menu_owner is not None:
+            return
+        try:
+            from System.Windows.Forms import CreateParams, NativeWindow
+
+            owner = NativeWindow()
+            owner.CreateHandle(CreateParams())
+            self._menu_owner = owner
+        except Exception:
+            logger.opt(exception=True).debug('tray menu owner unavailable')
+
+    def _menu_hwnd(self) -> int:
+        owner = self._menu_owner
+        if owner is not None:
+            try:
+                handle = int(owner.Handle.ToInt64())
+                if handle:
+                    return handle
+            except Exception:
+                pass
+        return self._api._hwnd or 0
+
     def _popup_menu(self) -> None:
         """Right-click: show the real Windows menu."""
 
+        actions = {
+            'toggle': lambda: self._api._media('toggle'),
+            'prev': lambda: self._api._media('prev'),
+            'next': lambda: self._api._media('next'),
+            'show': self._api._show_from_tray,
+            'quit': self._api._quit,
+        }
         menu = _NativeMenu()
-        label = self._track or self.labels['nowPlaying']
-        # The track is context, not a command, so it is a disabled row at the
-        # top exactly as every other player's tray menu does it.
-        menu.add(label[:64], None, enabled=False)
-        menu.add_separator()
-        menu.add(
-            self.labels['pause' if self._playing else 'play'],
-            lambda: self._api._media('toggle'),
-            enabled=self._has_track,
-        )
-        menu.add(
-            self.labels['prev'],
-            lambda: self._api._media('prev'),
-            enabled=self._has_track,
-        )
-        menu.add(
-            self.labels['next'],
-            lambda: self._api._media('next'),
-            enabled=self._has_track,
-        )
-        menu.add_separator()
-        menu.add(self.labels['show'], self._api._show_from_tray, default=True)
-        menu.add(self.labels['quit'], self._api._quit)
-        menu.show(self._api._hwnd or 0)
+        for row in _tray_menu(self.labels, self._track, self._playing, self._has_track):
+            if row is None:
+                menu.add_separator()
+                continue
+            command, text, enabled, default = row
+            menu.add(text, actions.get(command), enabled=enabled, default=default)
+        menu.show(self._menu_hwnd())
 
     def apply_labels(self, labels: dict) -> None:
         for key in self.LABEL_KEYS:
@@ -1044,7 +1163,7 @@ class _Tray:
         self.refresh()
 
     def set_track(self, title: str, artist: str, playing: bool, has_track: bool) -> None:
-        self._track = f'{title}: {artist}' if title and artist else (title or '')
+        self._track = _track_label(title, artist)
         self._playing = playing
         self._has_track = has_track
         self.refresh()
@@ -1059,17 +1178,23 @@ class _Tray:
         if self._icon is None:
             return
         try:
-            label = self._track or self.labels['nowPlaying']
-            self._icon.Text = (APP_TITLE + chr(10) + label)[:127]
+            self._icon.Text = _tray_tooltip(self._track, self.labels['nowPlaying'])
         except Exception:
-            pass
-
+            logger.opt(exception=True).debug('tray tooltip not updated')
 
     def notify_hidden(self) -> None:
-        """One balloon, the first time the window vanishes into the tray."""
+        """Say where the window went: once, ever.
+
+        It used to be once per run, so anyone who closes the window out of
+        habit got the same balloon at the first close of every session, and
+        on Windows 10 and 11 each one also went to sit in the notification
+        centre. The first time is the one that explains; after that it is
+        known, so it is remembered with the window settings.
+        """
         if self._icon is None or self._told_user:
             return
         self._told_user = True
+        _write_prefs({'tray_hint_shown': True})
         try:
             from System.Windows.Forms import ToolTipIcon
 
@@ -1081,6 +1206,12 @@ class _Tray:
             pass
 
     def dispose(self) -> None:
+        owner, self._menu_owner = self._menu_owner, None
+        if owner is not None:
+            try:
+                owner.DestroyHandle()
+            except Exception:
+                pass
         icon, self._icon = self._icon, None
         if icon is None:
             return
@@ -1159,6 +1290,8 @@ class DesktopApi:
         # for anyone who had it on.
         if prefs.get('minimize_to_tray'):
             _write_prefs({'minimize_to_tray': False})
+        # The "still running here" notice has been seen before, on any launch.
+        self._tray_hint_shown = bool(prefs.get('tray_hint_shown'))
         self._hidden = False
         # When the browser engine's renderer last died, so a reload loop
         # cannot get going.
@@ -1187,7 +1320,7 @@ class DesktopApi:
         if not (_WIN and self._hwnd):
             return
         self._taskbar = _Taskbar(self._hwnd)
-        self._tray = _Tray(self)
+        self._tray = _Tray(self, hint_shown=self._tray_hint_shown)
         if self._close_to_tray:
             self._tray.install()
         self._frame = _CustomFrame(
@@ -3349,6 +3482,19 @@ def main() -> None:
             and api._hide_to_tray()
         ):
             return False
+        # Really going, so take the tray icon down now, here on the UI thread.
+        # It used to be left to the closed event, which pywebview runs on a
+        # thread of its own while this process is already on its way to
+        # os._exit a moment later; lose that race and the icon stays in the
+        # notification area, dead, until someone moves the mouse over it.
+        # Not while Windows is shutting down: this runs on its "may I?", which
+        # another program can still refuse, and the shell is taking every
+        # icon down with it anyway.
+        if api._tray is not None and not shutting_down:
+            try:
+                api._tray.dispose()
+            except Exception:
+                pass
         # Remember the restored geometry (and whether it was maximized).
         api._closing = True
         try:

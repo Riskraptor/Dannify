@@ -235,6 +235,13 @@ namespace Dannify.Setup.UI
             _sweeping = true;
             BarFill.Visibility = Visibility.Collapsed;
             BarSweep.Visibility = Visibility.Visible;
+            // Animations off in Windows: a still highlight says "working" just
+            // as well, without a bar sliding back and forth for ever.
+            if (!Visuals.Motion)
+            {
+                SweepShift.X = 130;
+                return;
+            }
             SweepShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(-120, 380, new Duration(TimeSpan.FromSeconds(1.25)))
             {
                 RepeatBehavior = RepeatBehavior.Forever,

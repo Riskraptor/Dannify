@@ -54,3 +54,24 @@ def test_sanitize_numbers_kept():
 
 def test_sanitize_hyphen_kept():
     assert _sanitize('Post-Malone') == 'Post-Malone'
+
+
+def test_sanitize_marks_a_device_name_before_its_dot():
+    # The device is whatever comes before the first dot.
+    assert _sanitize('Con.Air - Theme') == 'Con_.Air - Theme'
+    assert _sanitize('Aux') == 'Aux_'
+    assert _sanitize('Auxiliary') == 'Auxiliary'
+
+
+def test_sanitize_caps_the_length_on_a_word_boundary():
+    long_name = ', '.join(['Some Orchestra Member'] * 10) + ' - Symphony No. 9 in D minor'
+    out = _sanitize(long_name)
+    assert len(out) <= 120
+    assert not out.endswith((' ', ',', '.'))
+    assert _sanitize('x' * 400, 80) == 'x' * 80
+
+
+def test_sanitize_keeps_letters_in_any_script():
+    assert _sanitize('Beyoncé') == 'Beyoncé'
+    assert _sanitize('米津玄師') == '米津玄師'
+    assert _sanitize('P!nk') == 'P!nk'

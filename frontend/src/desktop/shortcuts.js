@@ -29,7 +29,12 @@ export const ZOOM_KEY = 'dn.zoom'
 export const ZOOM_STEPS = [0.9, 1, 1.1, 1.25]
 
 export function currentZoom() {
-  const v = parseFloat(localStorage.getItem(ZOOM_KEY) || '1')
+  let v = 1
+  try {
+    v = parseFloat(localStorage.getItem(ZOOM_KEY) || '1')
+  } catch {
+    // Storage that throws (a private window): the default size.
+  }
   return ZOOM_STEPS.includes(v) ? v : 1
 }
 

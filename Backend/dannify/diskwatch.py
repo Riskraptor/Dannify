@@ -38,7 +38,8 @@ _stop = threading.Event()
 
 
 def _run(base_of: Callable[[], Optional[Path]], notify: Callable[[], None]) -> None:
-    last: Optional[tuple[int, float]] = None
+    last: Optional[tuple] = None
+    told: Optional[tuple] = None
     interval = _MIN_INTERVAL
     quiet = 0
     while not _stop.is_set():
@@ -54,14 +55,22 @@ def _run(base_of: Callable[[], Optional[Path]], notify: Callable[[], None]) -> N
                 logger.opt(exception=True).debug('watch: could not read the folder')
                 current = None
             if current is not None:
-                if last is None:
+                # Also a change: the folder no longer matches what the window
+                # last read, even if it matches this loop's last look. A song
+                # downloaded and then deleted in Explorer between two looks
+                # left the folder as this loop last saw it, while the window,
+                # told about the download, went on listing a song that was gone.
+                served = library_mod.served_signature(base)
+                behind = served is not None and served != current and current != told
+                if last is None and not behind:
                     last = current
-                elif current != last:
+                elif current != last or behind:
                     logger.info(
                         'Music folder changed on disk ({} -> {} files)',
-                        last[0], current[0],
+                        (last or current)[0], current[0],
                     )
                     last = current
+                    told = current
                     quiet = 0
                     interval = _MIN_INTERVAL
                     library_mod.invalidate_cache()

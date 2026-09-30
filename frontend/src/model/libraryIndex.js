@@ -17,13 +17,23 @@ import API from '/src/model/api'
 const byVideoId = ref(new Map())
 const byKey = ref(new Map())
 const titleOnly = ref(new Map()) // normalised title alone: last-resort
+// When the index was last read from the server.
+const loadedAt = ref(0)
 let loaded = false
 let loadingPromise = null
+let again = null
 
+// Lower case, accents off, anything but a letter or digit a space. Letters in
+// any script: this used to keep a to z and 0 to 9 only, which turned every
+// Japanese, Korean or Cyrillic title into nothing. Two such songs then shared
+// one empty key, so pressing Play on one could play the other, and every one
+// of them showed as already downloaded.
 function norm(s) {
   return String(s || '')
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
 }
 
@@ -47,7 +57,23 @@ function videoIdFor(song) {
 
 async function load(force = false) {
   if (loaded && !force) return
-  if (loadingPromise) return loadingPromise
+  if (loadingPromise) {
+    // Asked to read again while a read is on its way: two downloads finishing
+    // close together. The second used to be dropped, and its song kept its
+    // Download button and streamed instead of playing the saved copy.
+    if (!force) return loadingPromise
+    if (!again) {
+      again = loadingPromise.then(() => {
+        again = null
+        return load(true)
+      })
+    }
+    return again
+  }
+  // Stamped with when it was asked for, not when it came back: a read that
+  // was already out when a download finished cannot know about that song,
+  // and must not count as having looked.
+  const askedAt = Date.now()
   loadingPromise = API.getLibrary()
     .then((res) => {
       const data = res.data || {}
@@ -64,8 +90,10 @@ async function load(force = false) {
         if (tr.video_id && /^[A-Za-z0-9_-]{11}$/.test(tr.video_id)) {
           vMap.set(tr.video_id, tr.file)
         }
-        const k = `${norm(tr.artist || '')}|${norm(tr.title || '')}`
-        kMap.set(k, tr.file)
+        const t0 = norm(tr.title || '')
+        // No title left to go on (an emoji, say): a key of nothing but the
+        // artist would claim every other such song by them.
+        if (t0) kMap.set(`${norm(tr.artist || '')}|${t0}`, tr.file)
         const t = norm(tr.title || '')
         // Title-only map: only meaningful titles (>=4 chars), so "Hey" doesn't
         // collide with every random track. First match wins.
@@ -75,6 +103,7 @@ async function load(force = false) {
       byKey.value = kMap
       titleOnly.value = tMap
       loaded = true
+      loadedAt.value = askedAt
     })
     .catch(() => {})
     .finally(() => {
@@ -88,7 +117,8 @@ function isDownloaded(song) {
   const vid = videoIdFor(song)
   if (vid && byVideoId.value.has(vid)) return true
   const key = keyForSong(song)
-  if (key && byKey.value.has(key)) return true
+  if (!key.split('|')[1]) return false
+  if (byKey.value.has(key)) return true
   // Title-only fallback is ONLY used when we have no artist hint at all.
   // Otherwise we'd flag songs as "already downloaded" just because a
   // different artist's track happens to share the title.
@@ -111,6 +141,7 @@ function localFileFor(song) {
     if (f) return f
   }
   const key = keyForSong(song)
+  if (!key.split('|')[1]) return ''
   const f = byKey.value.get(key)
   if (f) return f
   // Title-only is the LAST resort and ONLY fires when the caller had no
@@ -141,5 +172,6 @@ export function useLibraryIndex() {
     invalidate,
     byVideoId,
     byKey,
+    loadedAt,
   }
 }

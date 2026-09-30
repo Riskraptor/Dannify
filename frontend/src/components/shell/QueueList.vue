@@ -62,12 +62,11 @@ const current = computed(() => {
   return tr ? queueRow(tr, player.currentIndex.value) : null
 })
 
+// In the order the tracks will actually play: under shuffle that is the
+// shuffled order, not the rows below the current one.
 const upNext = computed(() => {
   const list = player.playlist.value
-  const start = player.currentIndex.value + 1
-  const out = []
-  for (let i = Math.max(0, start); i < list.length; i++) out.push(queueRow(list[i], i))
-  return out
+  return player.upcoming.value.map((i) => queueRow(list[i], i))
 })
 
 function openMenu(e, row) {

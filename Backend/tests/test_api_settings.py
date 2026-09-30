@@ -32,16 +32,21 @@ def test_default_organize_by_artist_is_true():
     assert DEFAULT_SETTINGS['organize_by_artist'] is True
 
 
-def test_default_generate_m3u_is_true():
-    assert DEFAULT_SETTINGS['generate_m3u'] is True
+def test_playlist_files_are_not_written_by_default():
+    # Saved songs play only in Dannify: an .m3u for other players would list
+    # files none of them can open.
+    assert DEFAULT_SETTINGS['generate_m3u'] is False
 
 
 def test_default_download_lyrics_is_true():
     assert DEFAULT_SETTINGS['download_lyrics'] is True
 
 
-def test_default_format_is_mp3():
-    assert DEFAULT_SETTINGS['format'] == 'mp3'
+def test_saved_songs_keep_the_stream_as_it_comes():
+    from dannify.api import INTERNAL_FORMAT
+
+    assert INTERNAL_FORMAT == 'm4a'
+    assert DEFAULT_SETTINGS['format'] == INTERNAL_FORMAT
 
 
 # ── _load_settings ────────────────────────────────────────────────────────────

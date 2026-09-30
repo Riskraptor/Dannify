@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import hmac as _hmac
 import logging
 import mimetypes
 import os
@@ -21,7 +22,6 @@ from typing import Any, Optional
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from load_dotenv import load_dotenv
@@ -252,7 +252,10 @@ WEB_GUI_LOCATION = os.getenv('WEB_GUI_LOCATION', str(_DEFAULT_WEB_GUI))
 _ffdir = _BUNDLE_DIR / 'media' if _FROZEN else _PROJECT_ROOT / 'packaging' / 'media'
 if _ffdir.is_dir():
     os.environ['PATH'] = str(_ffdir) + os.pathsep + os.environ.get('PATH', '')
-DEFAULT_HOST = os.getenv('HOST', '0.0.0.0')
+# This machine only, unless asked. It used to be every network the PC was
+# on, with no key, so anyone on the same Wi-Fi could read the library and
+# change the settings.
+DEFAULT_HOST = os.getenv('HOST', '127.0.0.1')
 
 
 def _local_ip() -> str:
@@ -282,10 +285,24 @@ DEFAULT_PORT = int(
 )
 
 
+# Paths the interface never routes to. An API call that matched no route used
+# to fall through to the interface and come back as index.html with a 200, so
+# the caller got a web page where it expected data: the artist page for
+# "AC/DC" did exactly that, and broke on it.
+def _not_ui(rel: str) -> bool:
+    # StaticFiles hands over an OS path: backslashes, on Windows.
+    rel = rel.replace('\\', '/').lstrip('/').lower()
+    return rel == 'api' or rel.startswith('api/')
+
+
 class SPAStaticFiles(StaticFiles):
     """Serve ``index.html`` for unknown paths so SPA routing works."""
 
     async def get_response(self, path: str, scope):
+        if _not_ui(path):
+            from starlette.exceptions import HTTPException as _StarletteHTTP
+
+            raise _StarletteHTTP(status_code=404)
         try:
             return await super().get_response(path, scope)
         except Exception:
@@ -318,6 +335,8 @@ class PackedUI:
 
     def _member(self, path: str) -> Optional[str]:
         rel = path.lstrip('/')
+        if _not_ui(rel):
+            return None
         if not rel or rel.endswith('/'):
             rel += 'index.html'
         name = f'ui/{rel}'
@@ -482,13 +501,9 @@ def build_app() -> FastAPI:
         redoc_url=None,
         openapi_url=None if _FROZEN else '/openapi.json',
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=['*'],
-        allow_credentials=True,
-        allow_methods=['*'],
-        allow_headers=['*'],
-    )
+    # No CORS. The interface is served from this same origin, and the
+    # development server proxies to it, so nothing legitimate ever makes a
+    # cross-origin call. It used to answer every origin, with credentials.
     # Search and home payloads run to tens of KB of JSON. Compressing them
     # costs a millisecond and pays for itself on every phone on the LAN.
     #
@@ -579,11 +594,20 @@ def build_app() -> FastAPI:
             path = scope.get('path', '')
             if token:
                 given, from_url = self._presented(scope)
-                if given != token and path not in _OPEN_PATHS:
+                if not _hmac.compare_digest(given.encode(), token.encode()) and (
+                    path not in _OPEN_PATHS
+                ):
                     await _refuse(scope, send)
                     return
             else:
-                from_url = False  # dev server: no shell, no key, no gate
+                # Development: no shell, no key. Still only for a page that
+                # thinks it is talking to this machine. A web page that points
+                # its own domain name at 127.0.0.1 (DNS rebinding) arrives with
+                # that name in Host, and is turned away.
+                from_url = False
+                if not _loopback_host(scope):
+                    await _refuse(scope, send)
+                    return
 
             if scope['type'] == 'websocket':
                 await self.inner(scope, receive, send)
@@ -607,6 +631,17 @@ def build_app() -> FastAPI:
                 await send(message)
 
             await self.inner(scope, receive, send_wrapper)
+
+    def _loopback_host(scope) -> bool:
+        for name, value in scope.get('headers') or ():
+            if name == b'host':
+                host = value.decode('latin-1').strip().lower()
+                if host.startswith('['):
+                    host = host[1:].split(']', 1)[0]
+                else:
+                    host = host.rsplit(':', 1)[0] if host.count(':') == 1 else host
+                return host in ('127.0.0.1', 'localhost', '::1')
+        return False
 
     async def _refuse(scope, send) -> None:
         if scope['type'] == 'websocket':
@@ -700,6 +735,9 @@ def build_app() -> FastAPI:
 
     _innertube.init(DATABASE_DIR)
     api.state.data_dir = DATABASE_DIR
+    from dannify import artist_links as _artist_links
+
+    _artist_links.init(DATABASE_DIR)
     # Donations and the GitHub updater are config-only: see
     # dannify/support.py and dannify/updates.py.
     from dannify import support as _support
@@ -725,8 +763,8 @@ def build_app() -> FastAPI:
         logger.opt(exception=True).debug('could not tidy old update downloads')
     api.state.downloader = Downloader(
         download_dir,
-        audio_format=api.state.settings['format'],
-        audio_bitrate=api.state.settings.get('bitrate', '320'),
+        audio_format=api.INTERNAL_FORMAT,
+        audio_bitrate=api.INTERNAL_BITRATE,
         output_template=api.state.settings['output'].replace(
             '.{output-ext}', ''
         ),
@@ -792,6 +830,21 @@ def build_app() -> FastAPI:
                 logger.opt(exception=True).debug('warm-up skipped')
 
         asyncio.create_task(_warm_up())
+
+        # Downloads are put together outside the music folder. One that was
+        # cut off by a crash or a power cut left its half-made copy there.
+        async def _tidy_benches() -> None:
+            await asyncio.sleep(5.0)
+            try:
+                from dannify.downloader import sweep_benches
+
+                gone = await asyncio.to_thread(sweep_benches)
+                if gone:
+                    logger.info('Removed {} unfinished download(s) left by an earlier run', gone)
+            except Exception:
+                logger.opt(exception=True).debug('could not tidy unfinished downloads')
+
+        asyncio.create_task(_tidy_benches())
 
         # Watch the music folder for changes made outside the app. Deleting an
         # album in Explorer used to leave it listed here until the next
@@ -1379,18 +1432,26 @@ def main() -> None:
     server = Server(config)
 
     logger.info('Starting Dannify {}', __version__)
-    if args.host in ('0.0.0.0', '::'):
+    if args.host not in ('127.0.0.1', 'localhost', '::1'):
+        # Open to other devices, so not open to anyone: a key, handed out in
+        # the address below. Without one the gate would answer only this
+        # machine (see _loopback_host), and the network address it printed
+        # led to a blank 404. DANNIFY_KEY keeps the same key across restarts
+        # so a bookmarked address keeps working.
+        import secrets as _secrets
+
+        key = os.getenv('DANNIFY_KEY', '').strip() or _secrets.token_urlsafe(24)
+        api.state.auth_token = key
         lan = _local_ip()
         logger.log(
             'SUCCESS',
-            'Open on this device:  http://localhost:{}',
-            args.port,
+            'Open on this device:  http://localhost:{}/?k={}',
+            args.port, key,
         )
         logger.log(
             'SUCCESS',
-            'Open on your network: http://{}:{}  (phone, TV, other PCs)',
-            lan,
-            args.port,
+            'Open on your network: http://{}:{}/?k={}  (phone, TV, other PCs)',
+            lan, args.port, key,
         )
     else:
         logger.info(

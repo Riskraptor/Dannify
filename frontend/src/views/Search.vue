@@ -21,6 +21,41 @@
       </Transition>
     </div>
 
+    <!-- Your own saved songs and artists first. Search used to look online
+         only, so finding something already saved meant scrolling past the
+         whole catalogue for it, and offline it found nothing at all. -->
+    <section
+      v-if="state.query && state.activeTab === 'all' && (localRows.length || localArtists.length)"
+      class="mine view-pad rise-in"
+    >
+      <h2 class="section-title">{{ t('search.inLibrary') }}</h2>
+      <div v-if="localArtists.length" class="mine-artists">
+        <router-link
+          v-for="a in localArtists"
+          :key="a.name"
+          :to="{ name: 'Artist', params: { name: a.name } }"
+          class="mine-artist"
+        >
+          <CoverImage
+            :src="artistLinks.artistPhoto(a.name, 96)"
+            :fallback="a.cover ? API.coverFileURL(a.cover, a.cover_v) : ''"
+            kind="artist"
+            round
+            class="h-8 w-8"
+          />
+          <span class="truncate">{{ a.name }}</span>
+        </router-link>
+      </div>
+      <TrackTable
+        v-if="localRows.length"
+        :rows="localRows"
+        :header="false"
+        :show-index="false"
+        :show-album="false"
+        :on-play="(i) => playRows(localRows, i)"
+      />
+    </section>
+
     <!-- Nothing typed yet: recent searches -->
     <template v-if="!state.query">
       <ViewHeader :title="t('nav.search')" :subtitle="t('explore.typeToBegin')" />
@@ -210,9 +245,10 @@ import { useSearchManager } from '/src/model/search'
 import { useRecent } from '/src/model/recent'
 import { reportNetworkFailure } from '/src/model/connectivity'
 import { useUi } from '/src/model/ui'
-import { songRow, playRows, trackMenu } from '/src/model/tracks'
+import { songRow, localRow, playRows, trackMenu } from '/src/model/tracks'
+import { useArtistLinks } from '/src/model/artistLinks'
 import { openContextMenu } from '/src/model/contextMenu'
-import { onRefresh } from '/src/model/useRefresh'
+import { onRefresh, onLibraryChanged } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
 import TrackTable from '/src/components/ui/TrackTable.vue'
 import MediaCard from '/src/components/MediaCard.vue'
@@ -258,6 +294,29 @@ const tabs = [
 ]
 
 const data = computed(() => state.value.data)
+
+// ----- Matches in the library ---------------------------------------------------
+const artistLinks = useArtistLinks()
+const localHits = ref({ tracks: [], artists: [] })
+let localToken = 0
+async function loadLocal(q) {
+  const query = (q || '').trim()
+  const mine = ++localToken
+  if (!query) {
+    localHits.value = { tracks: [], artists: [] }
+    return
+  }
+  try {
+    const res = await API.searchLibrary(query, 8)
+    if (mine === localToken) localHits.value = res.data || { tracks: [], artists: [] }
+  } catch {
+    // The library is on this machine; a failure here is not worth a message.
+  }
+}
+const localRows = computed(() => (localHits.value.tracks || []).slice(0, 4).map(localRow))
+const localArtists = computed(() => (localHits.value.artists || []).slice(0, 6))
+watch(() => state.value.query, loadLocal, { immediate: true })
+onLibraryChanged(() => loadLocal(state.value.query))
 const songRows = computed(() => data.value.songs.map(songRow))
 const counts = computed(() => ({
   songs: data.value.songs.length,
@@ -571,6 +630,30 @@ onRefresh(() => {
   .shelves {
     padding: 0 22px;
   }
+}
+.mine {
+  margin-bottom: 18px;
+}
+.mine-artists {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 8px;
+}
+.mine-artist {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 220px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgb(var(--c-tint) / 0.06);
+  transition: background-color 0.12s ease;
+}
+.mine-artist:hover {
+  background: rgb(var(--c-tint) / 0.11);
 }
 .recent-chip {
   display: inline-flex;

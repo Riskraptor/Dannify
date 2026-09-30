@@ -2,6 +2,18 @@
   <div class="pb-14">
     <ViewHeader :title="t('settings.title')" :subtitle="t('settings.subtitle')">
       <template #actions>
+        <!-- Find a setting by what it does, across every pane. -->
+        <div class="set-search">
+          <Icon icon="ph:magnifying-glass" class="set-search-icon" />
+          <input
+            v-model="query"
+            type="search"
+            class="field h-9 w-64 pl-9"
+            :placeholder="t('settings.searchPlaceholder')"
+            spellcheck="false"
+            @keydown.esc="query = ''"
+          />
+        </div>
         <transition name="fade">
           <span v-if="showSaved" class="pill-accent h-7 px-3 text-xs">
             <Icon icon="ph:check-bold" class="h-3.5 w-3.5" />
@@ -12,22 +24,25 @@
     </ViewHeader>
 
     <div class="settings view-pad">
-      <nav class="set-nav" :aria-label="t('settings.title')">
+      <nav class="set-nav" :class="{ 'is-muted': searching }" :aria-label="t('settings.title')">
         <button
           v-for="p in panes"
           :key="p.id"
           class="set-tab"
-          :class="{ 'is-active': pane === p.id }"
-          @click="pane = p.id"
+          :class="{ 'is-active': pane === p.id && !searching }"
+          @click="pickPane(p.id)"
         >
           <Icon :icon="p.icon" class="h-[18px] w-[18px]" />
           <span>{{ t(p.label) }}</span>
         </button>
       </nav>
 
-      <div class="set-pane">
+      <div ref="paneEl" class="set-pane">
+      <p v-if="searching && !matches" class="set-empty">
+        {{ t('settings.noMatches', { query: query.trim() }) }}
+      </p>
       <!-- Account -->
-      <section v-show="pane === 'general'">
+      <section v-show="showPane('general')">
         <h2 class="group-title">{{ t('account.title') }}</h2>
         <div class="row">
           <img
@@ -70,7 +85,7 @@
       </section>
 
       <!-- Appearance -->
-      <section v-show="pane === 'appearance'">
+      <section v-show="showPane('appearance')">
         <h2 class="group-title">{{ t('settings.appearance') }}</h2>
         <div class="row">
           <Icon icon="ph:palette" class="row-icon" />
@@ -101,15 +116,21 @@
             <p class="row-label">{{ t('settings.uiScale') }}</p>
             <p class="row-hint">{{ t('settings.uiScaleHint') }}</p>
           </div>
-          <select
-            class="field-select w-32"
-            :value="zoom"
-            @change="pickZoom(Number($event.target.value))"
-          >
-            <option v-for="step in zoomSteps" :key="step" :value="step">
-              {{ Math.round(step * 100) }}%
-            </option>
-          </select>
+          <div class="seg" role="radiogroup" :aria-label="t('settings.uiScale')">
+            <button
+              v-for="step in zoomSteps"
+              :key="step.value"
+              class="seg-item"
+              role="radio"
+              :aria-checked="zoom === step.value"
+              :class="{ 'is-active': zoom === step.value }"
+              :title="`${Math.round(step.value * 100)}%`"
+              @click="pickZoom(step.value)"
+            >
+              <span class="zoom-glyph" :style="{ fontSize: `${10 + (step.value - 0.9) * 16}px` }">Aa</span>
+              {{ t(step.label) }}
+            </button>
+          </div>
         </div>
         <!-- Palette. Separate from light/dark on purpose: picking a dark
              palette and leaving the mode on "System" should still follow
@@ -142,6 +163,19 @@
             </button>
           </div>
         </div>
+        <label class="row">
+          <Icon icon="ph:paint-brush-household" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('settings.matchArt') }}</p>
+            <p class="row-hint">{{ t('settings.matchArtHint') }}</p>
+          </div>
+          <input
+            type="checkbox"
+            class="switch"
+            :checked="accentFromArt"
+            @change="setAccentFromArt($event.target.checked)"
+          />
+        </label>
         <!-- Typeface. Two bundled faces plus whatever Windows offers, each
              previewed in itself so the choice is visible rather than a name. -->
         <div class="row is-stacked">
@@ -185,7 +219,7 @@
       </section>
 
       <!-- Windows integration -->
-      <section v-if="desktop.isDesktop" v-show="pane === 'general'">
+      <section v-if="desktop.isDesktop" v-show="showPane('general')">
         <h2 class="group-title">{{ t('settings.windowsSection') }}</h2>
         <label class="row">
           <Icon icon="ph:tray" class="row-icon" />
@@ -203,7 +237,7 @@
       </section>
 
       <!-- Playback -->
-      <section v-show="pane === 'playback'">
+      <section v-show="showPane('playback')">
         <h2 class="group-title">{{ t('settings.playback') }}</h2>
         <label class="row">
           <Icon icon="ph:microphone-stage" class="row-icon" />
@@ -226,10 +260,23 @@
             @change="player.setAutoplayRadio($event.target.checked)"
           />
         </label>
+        <label class="row">
+          <Icon icon="ph:equalizer" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('settings.normalize') }}</p>
+            <p class="row-hint">{{ t('settings.normalizeHint') }}</p>
+          </div>
+          <input
+            type="checkbox"
+            class="switch"
+            :checked="player.normalizeLoudness.value"
+            @change="player.setNormalizeLoudness($event.target.checked)"
+          />
+        </label>
       </section>
 
       <!-- Library -->
-      <section v-show="pane === 'library'">
+      <section v-show="showPane('library')">
         <h2 class="group-title">{{ t('settings.librarySection') }}</h2>
         <div class="row">
           <Icon icon="ph:folder" class="row-icon" />
@@ -262,35 +309,19 @@
         </label>
       </section>
 
-      <!-- Downloads -->
-      <section v-show="pane === 'library'">
+      <!-- Downloads. Format, quality and playlist files used to be chosen
+           here. Saved songs play only in Dannify, so what is inside them is
+           ours to pick (the stream as it comes, nothing converted), and a
+           playlist file for other players listed songs none of them can
+           open. -->
+      <section v-show="showPane('library')">
         <h2 class="group-title">{{ t('settings.downloadsSection') }}</h2>
         <div class="row">
-          <Icon icon="ph:file-audio" class="row-icon" />
+          <Icon icon="ph:seal-check" class="row-icon text-accent" />
           <div class="row-text">
-            <p class="row-label">{{ t('settings.format') }}</p>
-            <p class="row-hint">{{ t('settings.formatHint') }}</p>
+            <p class="row-label">{{ t('settings.savedFormat') }}</p>
+            <p class="row-hint">{{ t('settings.savedFormatHint') }}</p>
           </div>
-          <select class="field-select w-32" :value="s.format" @change="sm.update({ format: $event.target.value })">
-            <option v-for="fmt in sm.settingsOptions.format" :key="fmt" :value="fmt">{{ fmt.toUpperCase() }}</option>
-          </select>
-        </div>
-        <div class="row" :class="{ 'is-disabled': s.format === 'flac' }">
-          <Icon icon="ph:waveform" class="row-icon" />
-          <div class="row-text">
-            <p class="row-label">{{ t('settings.quality') }}</p>
-            <p class="row-hint">
-              {{ s.format === 'flac' ? t('settings.qualityIgnored') : t('settings.qualityHint') }}
-            </p>
-          </div>
-          <select
-            class="field-select w-32"
-            :value="s.bitrate"
-            :disabled="s.format === 'flac'"
-            @change="sm.update({ bitrate: $event.target.value })"
-          >
-            <option v-for="b in sm.settingsOptions.bitrate" :key="b" :value="b">{{ b }} kbps</option>
-          </select>
         </div>
         <div class="row">
           <Icon icon="ph:stack" class="row-icon" />
@@ -310,23 +341,48 @@
             </button>
           </div>
         </div>
-        <label class="row">
-          <Icon icon="ph:playlist" class="row-icon" />
+      </section>
+
+      <!-- Storage -->
+      <section v-show="showPane('library')">
+        <h2 class="group-title">{{ t('settings.storage') }}</h2>
+        <div class="row">
+          <Icon icon="ph:hard-drives" class="row-icon" />
           <div class="row-text">
-            <p class="row-label">{{ t('settings.generateM3u') }}</p>
-            <p class="row-hint">{{ t('settings.generateM3uHint') }}</p>
+            <p class="row-label">{{ t('settings.librarySize') }}</p>
+            <p class="row-hint">
+              {{
+                storage
+                  ? t('settings.librarySizeHint', {
+                      songs: t('artists.trackCount', { count: storage.songs }),
+                      size: formatBytes(storage.bytes),
+                      free: formatBytes(storage.free),
+                    })
+                  : t('settings.librarySizeLoading')
+              }}
+            </p>
+            <div v-if="storage && storage.free" class="usage" aria-hidden="true">
+              <span class="usage-fill" :style="{ width: `${usagePct}%` }" />
+            </div>
           </div>
-          <input
-            type="checkbox"
-            class="switch"
-            :checked="s.generate_m3u !== false"
-            @change="sm.update({ generate_m3u: $event.target.checked })"
-          />
-        </label>
+        </div>
+        <div class="row">
+          <Icon icon="ph:broom" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('settings.clearCaches') }}</p>
+            <p class="row-hint">
+              {{ t('settings.clearCachesHint', { size: storage ? formatBytes(storage.caches) : '…' }) }}
+            </p>
+          </div>
+          <button class="btn" :disabled="clearing" @click="clearCaches">
+            <span v-if="clearing" class="spinner h-4 w-4" />
+            {{ t('settings.clearCaches') }}
+          </button>
+        </div>
       </section>
 
       <!-- Lyrics -->
-      <section v-show="pane === 'lyrics'">
+      <section v-show="showPane('lyrics')">
         <h2 class="group-title">{{ t('settings.lyricsGroup') }}</h2>
         <label class="row">
           <Icon icon="ph:text-align-left" class="row-icon" />
@@ -369,7 +425,7 @@
       </section>
 
       <!-- Support -->
-      <section v-if="support.configured" v-show="pane === 'about'">
+      <section v-if="support.configured" v-show="showPane('about')">
         <h2 class="group-title">{{ t('support.title') }}</h2>
         <div class="row">
           <Icon icon="ph:coffee" class="row-icon text-accent" />
@@ -385,7 +441,7 @@
       </section>
 
       <!-- About -->
-      <section v-show="pane === 'about'">
+      <section v-show="showPane('about')">
         <h2 class="group-title">{{ t('settings.about') }}</h2>
         <div class="row">
           <img src="../assets/dannify.svg" alt="" class="row-icon h-6 w-6 drag-none" />
@@ -480,11 +536,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUpdated, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import API, { appVersion } from '/src/model/api'
 import { useSettingsManager } from '/src/model/settings'
 import { useTheme } from '/src/model/theme'
+import { accentFromArt, setAccentFromArt } from '/src/model/artAccent'
 import { useFonts } from '/src/model/fonts'
 import { useUi } from '/src/model/ui'
 import { usePlayer } from '/src/model/player'
@@ -521,8 +578,19 @@ const panes = [
   { id: 'lyrics', label: 'settings.lyricsGroup', icon: 'ph:microphone-stage' },
   { id: 'about', label: 'settings.about', icon: 'ph:info' },
 ]
-// Interface size lives here now, not on Ctrl and the scroll wheel.
-const zoomSteps = ZOOM_STEPS
+// Interface size lives here now, not on Ctrl and the scroll wheel. Named,
+// with a sample drawn at each size: a list of percentages said nothing about
+// what each would look like.
+const ZOOM_NAMES = {
+  0.9: 'settings.uiScaleCompact',
+  1: 'settings.uiScaleDefault',
+  1.1: 'settings.uiScaleComfortable',
+  1.25: 'settings.uiScaleLarge',
+}
+const zoomSteps = ZOOM_STEPS.map((value) => ({
+  value,
+  label: ZOOM_NAMES[value] || `${Math.round(value * 100)}%`,
+}))
 const zoom = ref(currentZoom())
 function pickZoom(step) {
   zoom.value = step
@@ -540,11 +608,62 @@ const noteLines = computed(() =>
 )
 
 const PANE_KEY = 'dn.settingsPane'
-const pane = ref(
-  panes.some((p) => p.id === localStorage.getItem(PANE_KEY))
-    ? localStorage.getItem(PANE_KEY)
-    : 'general'
-)
+function storedPane() {
+  try {
+    return localStorage.getItem(PANE_KEY)
+  } catch {
+    return null
+  }
+}
+const pane = ref(panes.some((p) => p.id === storedPane()) ? storedPane() : 'general')
+// ----- Search -------------------------------------------------------------
+// Typing looks through every pane at once and keeps only the rows that
+// mention it, by name or by description.
+const query = ref('')
+const searching = computed(() => query.value.trim().length > 0)
+const matches = ref(0)
+const paneEl = ref(null)
+
+function showPane(id) {
+  return searching.value || pane.value === id
+}
+function pickPane(id) {
+  query.value = ''
+  pane.value = id
+}
+
+function foldText(text) {
+  return String(text || '')
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+}
+
+async function filterRows() {
+  await nextTick()
+  const root = paneEl.value
+  if (!root) return
+  const words = foldText(query.value).split(/\s+/).filter(Boolean)
+  let shown = 0
+  for (const section of root.querySelectorAll(':scope > section')) {
+    const title = foldText((section.querySelector('.group-title') || {}).textContent)
+    let visible = 0
+    for (const row of section.querySelectorAll(':scope > .row, :scope > .up-notes, :scope > .up-flow')) {
+      const text = `${title} ${foldText(row.textContent)}`
+      const hit = !words.length || words.every((w) => text.includes(w))
+      row.hidden = !hit
+      if (hit) visible++
+    }
+    section.hidden = words.length > 0 && visible === 0
+    shown += visible
+  }
+  matches.value = shown
+}
+watch(query, filterRows)
+onUpdated(() => {
+  if (searching.value) filterRows()
+})
+
 watch(pane, (id) => {
   try {
     localStorage.setItem(PANE_KEY, id)
@@ -600,9 +719,61 @@ watch([() => theme.preference.value, () => locale.value, () => ui.autoOpenLyrics
   savedTimer = setTimeout(() => (showSaved.value = false), 1800)
 })
 
+// ----- Storage --------------------------------------------------------------
+const storage = ref(null)
+const clearing = ref(false)
+const usagePct = computed(() => {
+  const st = storage.value
+  if (!st || !st.free) return 0
+  return Math.max(1, Math.min(100, (st.bytes / (st.bytes + st.free)) * 100))
+})
+
+function formatBytes(n) {
+  const value = Number(n) || 0
+  if (value < 1024 * 1024) return `${Math.max(0, Math.round(value / 1024))} KB`
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(value < 10 * 1024 ** 2 ? 1 : 0)} MB`
+  return `${(value / 1024 ** 3).toFixed(1)} GB`
+}
+
+async function loadStorage() {
+  try {
+    const res = await API.getStorage()
+    storage.value = res.data || null
+  } catch {
+    storage.value = null
+  }
+}
+
+async function clearCaches() {
+  clearing.value = true
+  try {
+    await API.clearCaches()
+    toast(t('settings.cachesCleared'), { tone: 'success', icon: 'ph:broom' })
+    loadStorage()
+  } catch {
+    toast(t('settings.clearFailed'), { tone: 'error' })
+  } finally {
+    clearing.value = false
+  }
+}
+
+// Measured when its pane is opened, not on every visit to Settings: it walks
+// the whole music folder.
+watch(
+  () => pane.value === 'library' || searching.value,
+  (need) => {
+    if (need && !storage.value) loadStorage()
+  },
+  { immediate: true }
+)
+
 async function changeFolder() {
   const path = await sm.pickDownloadFolder()
-  if (path) toast(t('settings.folderChanged'), { tone: 'success' })
+  if (path) {
+    toast(t('settings.folderChanged'), { tone: 'success' })
+    storage.value = null
+    loadStorage()
+  }
 }
 
 // Tray behaviour lives in the native shell's config.
@@ -625,6 +796,52 @@ async function setTray(patch) {
 </script>
 
 <style scoped>
+.set-search {
+  position: relative;
+}
+.set-search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+  color: rgb(var(--c-fg) / 0.45);
+  pointer-events: none;
+}
+.set-nav.is-muted {
+  opacity: 0.5;
+}
+.set-empty {
+  padding: 28px 4px;
+  font-size: 14px;
+  color: rgb(var(--c-fg) / 0.6);
+}
+/* A row or a group the search left out. `hidden` alone loses to the display
+   the rows set for themselves. */
+.set-pane :deep([hidden]) {
+  display: none !important;
+}
+.zoom-glyph {
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.8;
+}
+.usage {
+  margin-top: 8px;
+  height: 5px;
+  max-width: 320px;
+  border-radius: 999px;
+  background: rgb(var(--c-tint) / 0.12);
+  overflow: hidden;
+}
+.usage-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: rgb(var(--c-accent));
+  transition: width 0.4s var(--ease-out);
+}
 .settings {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);

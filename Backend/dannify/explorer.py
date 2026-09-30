@@ -198,6 +198,25 @@ def search(query: str, limit: int = 20) -> dict[str, Any]:
     return _search_uncached(q, limit, cache_key)
 
 
+def search_artists(query: str, limit: int = 6) -> list[dict[str, Any]]:
+    """Artist results only, one request, and a failure is raised, not hidden.
+
+    For putting a name to an online artist (see artist_links): search() turns
+    every failure into an empty list, which there reads as "no such artist",
+    and an app started before the Wi-Fi was up would have written off every
+    artist in the library for a week.
+    """
+
+    rows = _ytm().search(query, filter='artists', limit=limit)
+    out = []
+    for r in rows or []:
+        if isinstance(r, dict):
+            card = _artist_card(r)
+            if card:
+                out.append(card)
+    return out
+
+
 def _search_uncached(
     q: str, limit: int, cache_key: Optional[str] = None
 ) -> dict[str, Any]:

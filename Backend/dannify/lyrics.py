@@ -59,6 +59,19 @@ from pathlib import Path as _Path
 
 _lyrics_cache: "_OrderedDict[str, Optional[Lyrics]]" = _OrderedDict()
 _lyrics_cache_lock = _threading.Lock()
+# One write of the cache file at a time.
+_persist_lock = _threading.Lock()
+# When a lookup last failed to reach the source at all, as opposed to reaching
+# it and hearing there are no lyrics. A time rather than a flag because the
+# lookups run on a pool of their own threads.
+_last_trouble = 0.0
+
+
+def _mark_trouble() -> None:
+    global _last_trouble
+    import time as _time
+
+    _last_trouble = _time.monotonic()
 _LYRICS_CACHE_MAX = 4096
 _cache_path: Optional[_Path] = None
 
@@ -89,13 +102,23 @@ def _persist_cache() -> None:
         return
 
     def _run() -> None:
+        # One writer at a time, and the file replaced whole. Two saves at once
+        # (a few downloads fetching lyrics together) used to write into the
+        # same file side by side, leaving the tail of the longer one behind the
+        # shorter: the next start read that as broken JSON and began with an
+        # empty cache.
         try:
-            with _lyrics_cache_lock:
-                snapshot = {
-                    k: (None if v is None else {'plain': v.plain, 'synced': v.synced})
-                    for k, v in _lyrics_cache.items()
-                }
-            _cache_path.write_text(_json.dumps(snapshot), encoding='utf-8')
+            with _persist_lock:
+                with _lyrics_cache_lock:
+                    snapshot = {
+                        k: (None if v is None else {'plain': v.plain, 'synced': v.synced})
+                        for k, v in _lyrics_cache.items()
+                    }
+                part = _cache_path.with_name(_cache_path.name + '.part')
+                part.write_text(_json.dumps(snapshot), encoding='utf-8')
+                import os as _os
+
+                _os.replace(part, _cache_path)
         except Exception:
             logger.opt(exception=True).debug('Could not persist lyrics cache')
 
@@ -119,8 +142,10 @@ def clear_cache(song: Optional[dict[str, Any]] = None) -> None:
     with _lyrics_cache_lock:
         if song is not None:
             _lyrics_cache.pop(_cache_key(song), None)
+            _versions_cache.pop(_cache_key(song), None)
         else:
             _lyrics_cache.clear()
+            _versions_cache.clear()
     _persist_cache()
 
 
@@ -139,7 +164,16 @@ def fetch(song: dict[str, Any], providers: list[str]) -> Optional[Lyrics]:
                 _lyrics_cache.move_to_end(key)
                 return _lyrics_cache[key]
 
+    import time as _time
+
+    started = _time.monotonic()
     result = _fetch_uncached(song, providers)
+
+    # "No lyrics" is only worth remembering when the source said so. One that
+    # could not be reached (offline, a timeout, the service having a bad
+    # minute) used to be written down as a miss, for good, across restarts.
+    if result is None and _last_trouble >= started:
+        return None
 
     if key.strip('|'):
         with _lyrics_cache_lock:
@@ -166,6 +200,7 @@ def _fetch_uncached(
             logger.warning(
                 'lyrics provider {!r} error: {}', name, exc.__class__.__name__
             )
+            _mark_trouble()
             continue
         if result and result.has_any():
             return result
@@ -185,8 +220,11 @@ def _get_json(url: str, params: dict[str, Any]) -> Optional[Any]:
         resp = _session.get(url, params=params, timeout=_TIMEOUT)
     except requests.RequestException as exc:
         logger.debug('lyrics GET {} failed: {}', url, exc.__class__.__name__)
+        _mark_trouble()
         return None
     if resp.status_code != 200:
+        if resp.status_code == 429 or resp.status_code >= 500:
+            _mark_trouble()
         return None
     try:
         return resp.json()
@@ -245,7 +283,11 @@ def _fetch_lrclib(song: dict[str, Any]) -> Optional[Lyrics]:
 
 
 def _norm(text: str) -> str:
-    return _re.sub(r'[^a-z0-9]+', ' ', (text or '').casefold()).strip()
+    # Letters in any script. The a-to-z version reduced a Japanese or Russian
+    # title to nothing, so no search result could ever match one.
+    from .library import fold  # noqa: PLC0415
+
+    return fold(text)
 
 
 # Canonicalize common spelling/typo variants so titles like "Never To Late"

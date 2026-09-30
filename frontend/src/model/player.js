@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, shallowRef, computed } from 'vue'
 import API from '/src/model/api'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 import { useUi } from '/src/model/ui'
@@ -67,6 +67,9 @@ const volume = ref(parseFloat(readStored(VOLUME_KEY) || '0.85'))
 const TARGET_LUFS = -7 // YouTube Music's target, not the video site's -14
 const MAX_ATTENUATION_DB = -24
 const trackGain = ref(1)
+// A setting ("Even out loudness"): on unless it has been turned off.
+const NORMALIZE_KEY = 'dannify-normalize'
+const normalizeLoudness = ref(readStored(NORMALIZE_KEY) !== '0')
 
 function gainFor(loudnessDb) {
   if (typeof loudnessDb !== 'number' || !Number.isFinite(loudnessDb)) return 1
@@ -79,7 +82,18 @@ function gainFor(loudnessDb) {
 // setting and the per-track gain can never get out of step.
 function applyVolume() {
   if (!audio) return
-  audio.volume = Math.max(0, Math.min(1, volume.value * trackGain.value))
+  const gain = normalizeLoudness.value ? trackGain.value : 1
+  audio.volume = Math.max(0, Math.min(1, volume.value * gain))
+}
+
+function setNormalizeLoudness(on) {
+  normalizeLoudness.value = !!on
+  try {
+    localStorage.setItem(NORMALIZE_KEY, on ? '1' : '0')
+  } catch {
+    // ignore
+  }
+  applyVolume()
 }
 const isMuted = ref(false)
 // Shuffle and repeat are a listening preference, not a per-session accident:
@@ -202,13 +216,21 @@ function restoreSession() {
   sessionRestored = true
   const blob = readSession()
   if (!blob) return false
-  playlist.value = blob.tracks
-  currentIndex.value = blob.index
+  // A file opened from Explorer plays through a one-off address that dies
+  // with the session it was made in. Restored, it was a dead link: the next
+  // start came up on a track that could only fail. Those are left out.
+  const opened = (tr) => String((tr && tr.url) || '').startsWith('/opened/')
+  if (opened(blob.tracks[blob.index])) return false
+  const tracks = blob.tracks.filter((tr) => !opened(tr))
+  const index = tracks.indexOf(blob.tracks[blob.index])
+  playlist.value = tracks
+  currentIndex.value = index
   if (shuffle.value) buildShuffleOrder()
-  const track = blob.tracks[blob.index]
+  const track = tracks[index]
   const at = Math.max(0, Number(blob.time) || 0)
   duration.value = track.duration || 0
   currentTime.value = at
+  frameTime.value = at
   const a = ensureAudio()
   try {
     a.src = track.url
@@ -266,6 +288,42 @@ const lyricsLines = ref([]) // [{ time, text }]
 const lyricsPlain = ref(null)
 const lyricsLoading = ref(false)
 const activeLyricIndex = ref(-1)
+// The playhead as the screen should draw it: read from the element every
+// frame while playing. `timeupdate` only fires about four times a second, so
+// the progress bar moved in visible steps and a lyric line could light up a
+// quarter of a second late. Only the bar and the lyric highlight follow this;
+// everything else stays on the slower clock and does not redraw every frame.
+const frameTime = ref(0)
+let frameLoop = 0
+
+function elementTime() {
+  if (!audio) return currentTime.value
+  const track = currentTrack.value
+  if (track && track.type === 'stream' && streamBaseOffset > 0) {
+    return streamBaseOffset + audio.currentTime
+  }
+  return audio.currentTime
+}
+
+function tick() {
+  frameLoop = 0
+  if (!audio || audio.paused || document.hidden) return
+  frameTime.value = elementTime()
+  updateActiveLyric(frameTime.value)
+  frameLoop = requestAnimationFrame(tick)
+}
+
+function startFrameClock() {
+  if (!frameLoop && typeof requestAnimationFrame === 'function') {
+    frameLoop = requestAnimationFrame(tick)
+  }
+}
+
+function stopFrameClock() {
+  if (frameLoop && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frameLoop)
+  frameLoop = 0
+  frameTime.value = currentTime.value
+}
 const lyricsOffset = ref(0) // seconds; positive = lyrics appear later
 const lyricsMeta = ref({ title: '', artist: '' }) // for saving offsets
 const lyricVersions = ref([]) // all synced versions [{synced, plain}]
@@ -274,8 +332,11 @@ const lyricVersionCount = ref(0) // how many versions exist
 let lyricsToken = 0
 
 let audio = null
-let shuffleOrder = []
-let shufflePos = 0
+// The shuffled play order: every queue index exactly once. What sits before
+// the playing track in it has played, what sits after it is still to come.
+// There is no separate position to keep in step: it is wherever the playing
+// track is. A ref, so "Up next" follows it.
+const shuffleOrder = shallowRef([])
 // Monotonic token bumped on every track change; async work checks it so stale
 // callbacks from a previous track are discarded (prevents wrong-song audio).
 let playGen = 0
@@ -299,6 +360,9 @@ function ensureAudio() {
     } else {
       currentTime.value = audio.currentTime
     }
+    // Paused, seeking or hidden: the frame clock is not running, so the slow
+    // clock is what the bar shows.
+    if (!frameLoop) frameTime.value = currentTime.value
     scheduleSessionSave()
     // Clip-loop wrap-around: if a region is active and the playhead has
     // crossed the end, jump back to the start. Used by the sync editor
@@ -395,8 +459,11 @@ function ensureAudio() {
       // A file that is there and will not play can be repaired. One that is
       // not there cannot: that is somebody having moved or deleted it.
       const file = track.file && /\/downloads\//.test(src) ? track.file : ''
+      // Named: two broken songs are two messages, each with its own Repair
+      // button. One wording for all of them merged them into a single
+      // message whose button repaired only the newer file.
       const say = (kind, status) =>
-        toast(t(`player.${kind}`), {
+        toast(t(`player.${kind}`, { title: track.title || t('common.unknownTrack') }), {
           tone: 'error',
           ...(kind === 'fileUnreadable' ? repairAction(file, status !== 409) : {}),
         })
@@ -407,7 +474,7 @@ function ensureAudio() {
           else say(fallback, probe.status)
         })
         .catch(() => say(fallback, 0))
-      if (currentIndex.value < playlist.value.length - 1) next()
+      if (hasNextInOrder()) next()
       else isPlaying.value = false
       return
     }
@@ -444,17 +511,32 @@ function ensureAudio() {
         return
       }
       toast(t('player.streamFailed'), { tone: 'error' })
-      if (currentIndex.value < playlist.value.length - 1) next()
+      if (hasNextInOrder()) next()
     })
   })
   audio.addEventListener('play', () => {
     isPlaying.value = true
     syncMediaSession()
+    startFrameClock()
   })
   audio.addEventListener('pause', () => {
     isPlaying.value = false
     syncMediaSession()
+    stopFrameClock()
   })
+  audio.addEventListener('seeked', () => {
+    frameTime.value = elementTime()
+  })
+  // Ended or failed without pausing: nothing to draw, so no loop either.
+  audio.addEventListener('ended', stopFrameClock)
+  audio.addEventListener('error', stopFrameClock)
+  audio.addEventListener('emptied', stopFrameClock)
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    // A hidden window draws nothing; the loop stops and picks up on return.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && audio && !audio.paused) startFrameClock()
+    })
+  }
   return audio
 }
 
@@ -635,7 +717,7 @@ async function loadLyricsForCurrent(forceRefresh = false) {
   }
 }
 
-function updateActiveLyric() {
+function updateActiveLyric(at) {
   const lines = lyricsLines.value
   if (!lines || lines.length === 0) {
     activeLyricIndex.value = -1
@@ -643,7 +725,8 @@ function updateActiveLyric() {
   }
   // Apply the per-song offset: positive = lyrics appear later, so we compare
   // against (currentTime - offset).
-  const tNow = currentTime.value - lyricsOffset.value
+  const now = typeof at === 'number' ? at : currentTime.value
+  const tNow = now - lyricsOffset.value
   let idx = -1
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].time <= tNow + 0.25) idx = i
@@ -724,14 +807,22 @@ function saveLyricsOffset() {
 async function switchLyricVersion(dir = 1) {
   const track = currentTrack.value
   if (!track) return
+  // The version list is a round trip, and the track can change while it is
+  // out. Nothing checked, so switching version and then skipping put the
+  // previous song's lyrics on the new one, and left its version list behind
+  // for the next switch to cycle through.
+  const token = lyricsToken
   if (lyricVersions.value.length === 0) {
     // Load all versions on demand.
+    let versions = []
     try {
       const res = await API.getLyricVersions(_lyricsParams(track))
-      lyricVersions.value = (res.data && res.data.versions) || []
+      versions = (res.data && res.data.versions) || []
     } catch {
-      lyricVersions.value = []
+      versions = []
     }
+    if (token !== lyricsToken || currentTrack.value !== track) return
+    lyricVersions.value = versions
     if (lyricVersions.value.length === 0) return
   }
   const n = lyricVersions.value.length
@@ -771,15 +862,33 @@ async function ensureStreamDuration(track) {
   }
 }
 
+// A saved song's loudness, from the same place a stream's comes from. Only
+// streams had it, so with "Even out loudness" on a mixed queue turned the
+// streamed songs down and left the saved ones loud: the opposite of the point.
+// Offline this fails quietly and the song plays at its own level.
+async function ensureLocalGain(track) {
+  if (!track || track.type !== 'local' || !track.video_id || track.gain !== undefined) return
+  try {
+    const res = await API.getStreamInfo(track.video_id)
+    track.gain = gainFor(res.data && res.data.loudness_db)
+    if (currentTrack.value === track) {
+      trackGain.value = track.gain
+      applyVolume()
+    }
+  } catch {
+    // unity gain
+  }
+}
+
 // Warm the next stream's cache file (and lyrics) so advancing the queue is
 // instant and lyrics are ready before the next track even starts.
 let prefetchTimer = null
-function prefetchNext(index) {
+function prefetchNext() {
   clearTimeout(prefetchTimer)
   prefetchTimer = setTimeout(() => {
-    const ni = index + 1
-    const nxt = playlist.value[ni]
-    if (!nxt) return
+    // The track that plays next, which under shuffle is not the next row.
+    const nxt = playlist.value[nextIndex()]
+    if (!nxt || nxt === currentTrack.value) return
     if (nxt.type === 'stream' && nxt.video_id) {
       // prefetch=1 → server transcodes the next track to cache in background.
       API.getStreamInfo(nxt.video_id, 1).catch(() => {})
@@ -847,17 +956,66 @@ function syncMediaSession() {
   }
 }
 
-function buildShuffleOrder() {
-  const indices = playlist.value.map((_, i) => i)
+function shuffled(indices) {
   for (let i = indices.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[indices[i], indices[j]] = [indices[j], indices[i]]
   }
-  shuffleOrder = indices
-  shufflePos =
-    currentIndex.value >= 0
-      ? Math.max(0, shuffleOrder.indexOf(currentIndex.value))
-      : 0
+  return indices
+}
+
+// A fresh shuffle, for a new queue or shuffle just switched on: *first* (the
+// track playing, or about to) leads and everything else follows in random
+// order. It used to be shuffled in with the rest, which only worked because
+// the order never ended: whatever landed ahead of it played on the way round.
+// Now that repeat off ends the order, that would never have played at all.
+function buildShuffleOrder(first = currentIndex.value) {
+  const n = playlist.value.length
+  const rest = []
+  for (let i = 0; i < n; i++) if (i !== first) rest.push(i)
+  shuffled(rest)
+  shuffleOrder.value = first >= 0 && first < n ? [first, ...rest] : rest
+}
+
+// Every queue edit keeps the order in step itself. This only catches a
+// queue that changed some other way, and it has to run before the edit.
+function ensureShuffleOrder() {
+  if (shuffleOrder.value.length !== playlist.value.length) buildShuffleOrder()
+}
+
+// Where the playing track sits in the shuffled order; -1 with nothing
+// loaded, which leaves the whole order still to come.
+function shufflePosition() {
+  return currentIndex.value >= 0 ? shuffleOrder.value.indexOf(currentIndex.value) : -1
+}
+
+// Queue edits under shuffle. Each of these used to throw the order away and
+// deal a new one: "Play next" landed anywhere, a track that had already
+// played could come round again, and Previous went somewhere random. They now
+// change only what the edit touches.
+//
+// *count* tracks were inserted into the queue at *at*: shift the indices at
+// and after it, and put the new ones straight after the playing track
+// ("Play next") or at the end of the order ("Add to queue"), or, for a batch
+// the listener did not pick one by one (a radio station), at the end in
+// random order. Returns the new indices in the order they will play.
+function addToShuffleOrder(at, count, { next = false, mix = false } = {}) {
+  ensureShuffleOrder()
+  const added = []
+  for (let k = 0; k < count; k++) added.push(at + k)
+  if (mix) shuffled(added)
+  const order = shuffleOrder.value.map((i) => (i >= at ? i + count : i))
+  order.splice(next ? shufflePosition() + 1 : order.length, 0, ...added)
+  shuffleOrder.value = order
+  return added
+}
+
+// The track at *index* is leaving the queue.
+function dropFromShuffleOrder(index) {
+  ensureShuffleOrder()
+  shuffleOrder.value = shuffleOrder.value
+    .filter((i) => i !== index)
+    .map((i) => (i > index ? i - 1 : i))
 }
 
 function setPlaylist(files, options = {}) {
@@ -871,12 +1029,15 @@ function setPlaylist(files, options = {}) {
   })
   playlist.value = tracks
   if (currentIndex.value >= tracks.length) currentIndex.value = -1
-  if (shuffle.value) buildShuffleOrder()
+  let start = null
   if (typeof options.startIndex === 'number') {
-    playAt(options.startIndex)
+    start = options.startIndex
   } else if (options.autoplay && tracks.length > 0 && currentIndex.value < 0) {
-    playAt(0)
+    start = 0
   }
+  // The track it starts on leads the new shuffle.
+  if (shuffle.value) buildShuffleOrder(start != null ? start : currentIndex.value)
+  if (start != null) playAt(start)
 }
 
 // A saved track opened from outside the app: double-clicked in Explorer, or
@@ -927,11 +1088,11 @@ function enqueue(items, { next: asNext = false } = {}) {
     .map(toTrack)
   if (!tracks.length) return
   const list = [...playlist.value]
-  const at =
-    asNext && currentIndex.value >= 0 ? currentIndex.value + 1 : list.length
+  const afterCurrent = asNext && currentIndex.value >= 0
+  const at = afterCurrent ? currentIndex.value + 1 : list.length
+  if (shuffle.value) addToShuffleOrder(at, tracks.length, { next: afterCurrent })
   list.splice(at, 0, ...tracks)
   playlist.value = list
-  if (shuffle.value) buildShuffleOrder()
   if (currentIndex.value < 0) playAt(at)
 }
 
@@ -943,33 +1104,63 @@ function enqueueNext(song) {
 function removeFromQueue(index) {
   if (index < 0 || index >= playlist.value.length) return
   if (index === currentIndex.value) {
-    // Removing the playing track: skip ahead first, then drop it.
+    // Removing the playing track: whatever Next would have played takes its
+    // place, in the play order, so under shuffle too. It used to be the next
+    // row, always started, even on a paused player; and removing the last
+    // track went back to the one before it and started that.
+    let succ = nextIndex()
+    if (succ === index) succ = -1 // a queue of one, under repeat all
+    const wasPlaying = isPlaying.value
     const list = [...playlist.value]
     list.splice(index, 1)
+    if (shuffle.value) dropFromShuffleOrder(index)
     playlist.value = list
-    if (list.length === 0) {
+    if (succ < 0) {
+      // Nothing after it: the queue is over, as it would be at the end.
       currentIndex.value = -1
       pause()
       return
     }
-    playAt(Math.min(index, list.length - 1))
+    playAt(succ > index ? succ - 1 : succ, { autoplay: wasPlaying })
     return
   }
   const list = [...playlist.value]
   list.splice(index, 1)
+  if (shuffle.value) dropFromShuffleOrder(index)
   playlist.value = list
   if (index < currentIndex.value) currentIndex.value -= 1
-  if (shuffle.value) buildShuffleOrder()
 }
 
-// Drop everything after the playing track.
+// Drop everything that would play after the playing track. Under shuffle
+// that is the rest of the shuffled order, not the rows below it: clearing by
+// row kept tracks that were still to come, and they played anyway.
 function clearUpcoming() {
   if (currentIndex.value < 0) {
     playlist.value = []
+    shuffleOrder.value = []
     return
   }
-  playlist.value = playlist.value.slice(0, currentIndex.value + 1)
-  if (shuffle.value) buildShuffleOrder()
+  if (!shuffle.value) {
+    playlist.value = playlist.value.slice(0, currentIndex.value + 1)
+    return
+  }
+  ensureShuffleOrder()
+  // What has played, and the playing track, in the order they played.
+  const kept = shuffleOrder.value.slice(0, shufflePosition() + 1)
+  const rows = [...kept].sort((a, b) => a - b)
+  const moved = new Map(rows.map((old, i) => [old, i]))
+  const list = playlist.value
+  playlist.value = rows.map((i) => list[i])
+  shuffleOrder.value = kept.map((i) => moved.get(i))
+  currentIndex.value = moved.get(currentIndex.value)
+}
+
+// Where the row at *i* ends up once the row at *from* moves to *to*.
+function movedIndex(i, from, to) {
+  if (i === from) return to
+  if (from < i && i <= to) return i - 1
+  if (to <= i && i < from) return i + 1
+  return i
 }
 
 function moveInQueue(from, to) {
@@ -977,12 +1168,13 @@ function moveInQueue(from, to) {
   if (from < 0 || from >= list.length || to < 0 || to >= list.length) return
   const [item] = list.splice(from, 1)
   list.splice(to, 0, item)
-  const cur = currentIndex.value
-  if (from === cur) currentIndex.value = to
-  else if (from < cur && to >= cur) currentIndex.value = cur - 1
-  else if (from > cur && to <= cur) currentIndex.value = cur + 1
+  // Under shuffle, moving a row does not change when the track plays.
+  if (shuffle.value) {
+    ensureShuffleOrder()
+    shuffleOrder.value = shuffleOrder.value.map((i) => movedIndex(i, from, to))
+  }
+  currentIndex.value = movedIndex(currentIndex.value, from, to)
   playlist.value = list
-  if (shuffle.value) buildShuffleOrder()
 }
 
 // Media keys can reach us twice (OS media session + keydown while focused).
@@ -999,22 +1191,22 @@ function mediaCommand(cmd) {
   else if (cmd === 'prev') prev()
 }
 
-function playAt(index) {
+// *autoplay* false loads the track and leaves it paused, for a change of
+// track the listener did not ask to hear (removing the playing one while
+// paused).
+function playAt(index, { autoplay = true } = {}) {
   if (index < 0 || index >= playlist.value.length) return
   const a = ensureAudio()
   currentIndex.value = index
-  if (shuffle.value) {
-    if (shuffleOrder.length !== playlist.value.length) buildShuffleOrder()
-    const pos = shuffleOrder.indexOf(index)
-    if (pos >= 0) shufflePos = pos
-  }
+  if (shuffle.value) ensureShuffleOrder()
   const track = playlist.value[index]
   // Bump the generation token so any in-flight async work (duration/lyrics
   // fetches, the previous stream's media events) from the prior track is
   // ignored: this prevents "wrong audio / wrong metadata" races when the
   // user switches tracks quickly.
   playGen += 1
-  isBuffering.value = track.type === 'stream'
+  // Nothing buffers until it is asked to play.
+  isBuffering.value = autoplay && track.type === 'stream'
   streamBaseOffset = 0
   // Point the element at the new track and let it do the rest. This used to
   // clear the src and call load() first, on the theory that the old buffer
@@ -1036,12 +1228,13 @@ function playAt(index) {
     // ignore
   }
   currentTime.value = 0
+  frameTime.value = 0
   duration.value = track.duration || 0
   // Reset lyrics immediately so the old song's lyrics don't linger.
   lyricsLines.value = []
   lyricsPlain.value = null
   activeLyricIndex.value = -1
-  a.play().catch(() => {})
+  if (autoplay) a.play().catch(() => {})
   loadLyricsForCurrent()
   syncMediaSession()
   rememberPlayed(track)
@@ -1069,16 +1262,20 @@ function playAt(index) {
   // duration so the progress bar + end time work.
   if (track.type === 'stream') {
     ensureStreamDuration(track)
+  } else {
+    ensureLocalGain(track)
   }
   // Warm the next track (stream cache + lyrics) regardless of type.
-  prefetchNext(index)
+  prefetchNext()
 }
 
 function play() {
   if (playlist.value.length === 0) return
   const a = ensureAudio()
   if (currentIndex.value < 0) {
-    playAt(0)
+    // The head of the play order: the first row, or under shuffle the first
+    // of the shuffled order, which is what "Up next" shows.
+    playAt(Math.max(0, nextIndex()))
     return
   }
   if (!a.src) {
@@ -1098,7 +1295,11 @@ function toggle() {
 
 function seek(seconds) {
   const a = ensureAudio()
-  const max = duration.value || 0
+  // Clamp to the end only once the end is known. A stream still waiting on
+  // its length reports 0, and clamping to that sent every seek (+10 s
+  // included) back to the start of the song.
+  const d = duration.value
+  const max = Number.isFinite(d) && d > 0 ? d : Infinity
   const clamped = Math.max(0, Math.min(max, seconds))
   // For BOTH local files AND streams: just move the playhead.
   // The byte-range proxy lets the browser request the right offset
@@ -1122,6 +1323,7 @@ function seek(seconds) {
     }
   }
   currentTime.value = clamped
+  frameTime.value = clamped
 }
 
 function seekRatio(ratio) {
@@ -1181,12 +1383,19 @@ function toggleMute() {
   if (audio) audio.muted = isMuted.value
 }
 
+// Under shuffle the shuffled order ends the way the list does. It used to
+// wrap round whatever the repeat setting, so with repeat off a shuffled queue
+// never ended, and autoplay radio never got its turn.
 function nextIndex() {
   if (playlist.value.length === 0) return -1
   if (shuffle.value) {
-    if (shuffleOrder.length !== playlist.value.length) buildShuffleOrder()
-    const nextPos = (shufflePos + 1) % shuffleOrder.length
-    return shuffleOrder[nextPos]
+    ensureShuffleOrder()
+    const order = shuffleOrder.value
+    const nextPos = shufflePosition() + 1
+    if (nextPos >= order.length) {
+      return repeatMode.value === 'all' ? order[0] : -1
+    }
+    return order[nextPos]
   }
   const i = currentIndex.value + 1
   if (i >= playlist.value.length) {
@@ -1195,12 +1404,28 @@ function nextIndex() {
   return i
 }
 
+// Whether anything follows the current track in the play order, not counting
+// a wrap-around. A track that will not play moves on only while this holds;
+// it used to ask whether a row followed it, which under shuffle is a
+// different question.
+function hasNextInOrder() {
+  if (shuffle.value) {
+    ensureShuffleOrder()
+    return shufflePosition() < shuffleOrder.value.length - 1
+  }
+  return currentIndex.value < playlist.value.length - 1
+}
+
 function prevIndex() {
   if (playlist.value.length === 0) return -1
   if (shuffle.value) {
-    if (shuffleOrder.length !== playlist.value.length) buildShuffleOrder()
-    const prevPos = (shufflePos - 1 + shuffleOrder.length) % shuffleOrder.length
-    return shuffleOrder[prevPos]
+    ensureShuffleOrder()
+    const order = shuffleOrder.value
+    const prevPos = shufflePosition() - 1
+    if (prevPos < 0) {
+      return repeatMode.value === 'all' ? order[order.length - 1] : order[0]
+    }
+    return order[prevPos]
   }
   const i = currentIndex.value - 1
   if (i < 0) {
@@ -1241,9 +1466,9 @@ async function extendWithRadio() {
     const songs = (res.data && res.data.songs) || []
     if (!songs.length || gen !== playGen) return gen !== playGen
     const at = playlist.value.length
+    const added = shuffle.value ? addToShuffleOrder(at, songs.length, { mix: true }) : null
     playlist.value = [...playlist.value, ...songs.map(trackFromSong)]
-    if (shuffle.value) buildShuffleOrder()
-    playAt(at)
+    playAt(added ? added[0] : at)
     return true
   } catch {
     return false
@@ -1261,8 +1486,10 @@ async function startRadio(song) {
     const res = await API.getRadio(seed)
     const songs = (res.data && res.data.songs) || []
     if (gen !== playGen) return false // the user started something else
-    if (songs.length) playlist.value = [...playlist.value, ...songs.map(trackFromSong)]
-    if (shuffle.value) buildShuffleOrder()
+    if (songs.length) {
+      if (shuffle.value) addToShuffleOrder(playlist.value.length, songs.length, { mix: true })
+      playlist.value = [...playlist.value, ...songs.map(trackFromSong)]
+    }
     return songs.length > 0
   } catch {
     return false
@@ -1324,8 +1551,11 @@ function cycleRepeat() {
 }
 
 function setShuffle(v) {
+  const was = shuffle.value
   shuffle.value = !!v
-  if (shuffle.value) buildShuffleOrder()
+  // Only switching it on deals a new order; saying "on" again keeps the one
+  // in play.
+  if (shuffle.value && !was) buildShuffleOrder()
   try {
     localStorage.setItem(SHUFFLE_KEY, shuffle.value ? '1' : '0')
   } catch {
@@ -1343,8 +1573,29 @@ const currentTrack = computed(() =>
     : null
 )
 
+// The queue indices still to play after the current track, in the order they
+// will play: the rest of the shuffled order under shuffle, the rows below
+// otherwise. "Up next" used to list the rows below even with shuffle on, so
+// the panel showed one thing and the player then played another.
+const upcoming = computed(() => {
+  const list = playlist.value
+  const cur = currentIndex.value
+  if (shuffle.value) {
+    const order = shuffleOrder.value
+    // Out of step only until the next move rebuilds it; the rows are the
+    // best guess until then.
+    if (order.length === list.length) {
+      return order.slice((cur >= 0 ? order.indexOf(cur) : -1) + 1)
+    }
+  }
+  const out = []
+  for (let i = Math.max(0, cur + 1); i < list.length; i++) out.push(i)
+  return out
+})
+
+// Drawn from the frame clock, so the bar glides instead of stepping.
 const progressPct = computed(() =>
-  duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0
+  duration.value > 0 ? Math.min(100, (frameTime.value / duration.value) * 100) : 0
 )
 
 // --- Global keyboard shortcuts (installed once) ---
@@ -1358,6 +1609,35 @@ function isTypingTarget(el) {
     tag === 'SELECT' ||
     el.isContentEditable
   )
+}
+
+// Space is how a keyboard presses whatever has focus: a button, a link, a
+// checkbox, a switch. Taking it for play/pause whenever there was a queue
+// meant none of those could be pressed from the keyboard.
+const SPACE_TAGS = new Set(['BUTTON', 'A', 'SUMMARY', 'AUDIO', 'VIDEO'])
+const SPACE_ROLES = new Set([
+  'button',
+  'link',
+  'checkbox',
+  'switch',
+  'radio',
+  'tab',
+  'option',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'slider',
+  'spinbutton',
+  'combobox',
+  'textbox',
+  'searchbox',
+  'treeitem',
+])
+function ownsSpace(el) {
+  if (!el) return false
+  if (isTypingTarget(el) || SPACE_TAGS.has(el.tagName)) return true
+  const role = typeof el.getAttribute === 'function' ? el.getAttribute('role') : null
+  return !!role && SPACE_ROLES.has(role.trim().split(/\s+/)[0].toLowerCase())
 }
 
 function installKeyboardShortcuts() {
@@ -1378,7 +1658,7 @@ function installKeyboardShortcuts() {
 
     switch (e.code) {
       case 'Space':
-        if (playlist.value.length === 0) return
+        if (playlist.value.length === 0 || ownsSpace(e.target)) return
         e.preventDefault()
         toggle()
         break
@@ -1480,6 +1760,7 @@ export function usePlayer() {
     isMuted,
     repeatMode,
     shuffle,
+    upcoming,
     // lyrics
     lyricsLines,
     lyricsPlain,
@@ -1522,6 +1803,8 @@ export function usePlayer() {
     // autoplay / radio
     autoplayRadio,
     setAutoplayRadio,
+    normalizeLoudness,
+    setNormalizeLoudness,
     startRadio,
     // sync-editor extras
     playbackRate,

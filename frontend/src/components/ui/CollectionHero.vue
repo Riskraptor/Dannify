@@ -22,7 +22,7 @@
     <div class="hero-inner view-pad">
       <div class="hero-cover">
         <slot name="cover">
-          <CoverImage :src="cover" :kind="kind" :round="round" radius="md" class="h-full w-full" eager />
+          <CoverImage :src="cover" :fallback="coverFallback" :kind="kind" :round="round" radius="md" class="h-full w-full" eager />
         </slot>
       </div>
       <div class="min-w-0 flex-1">
@@ -49,6 +49,8 @@ const props = defineProps({
   title: { type: String, required: true },
   label: { type: String, default: '' },
   cover: { type: String, default: '' },
+  // Drawn instead when `cover` cannot be loaded (an artist's web photo, offline).
+  coverFallback: { type: String, default: '' },
   kind: { type: String, default: 'album' },
   round: { type: Boolean, default: false },
   playable: { type: Boolean, default: true },
@@ -124,6 +126,9 @@ onBeforeUnmount(disconnect)
   background-position: center;
   filter: blur(40px) saturate(1.2) brightness(0.55);
   opacity: 0.9;
+  /* A layer of its own: blurred once and then moved, instead of blurred
+     again on every repaint while the page scrolls. */
+  will-change: transform;
 }
 [data-mode='light'] .hero-sticky-bg {
   filter: blur(40px) saturate(1.1) brightness(1.1);
@@ -147,6 +152,9 @@ onBeforeUnmount(disconnect)
   filter: blur(70px) saturate(1.35);
   opacity: 0.5;
   transform: scale(1.1);
+  /* A layer of its own: blurred once and then moved, instead of blurred
+     again on every repaint while the page scrolls. */
+  will-change: transform;
 }
 [data-mode='light'] .hero-bg {
   opacity: 0.35;

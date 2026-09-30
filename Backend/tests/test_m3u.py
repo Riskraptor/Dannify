@@ -20,10 +20,17 @@ def test_sanitize_strips_filesystem_unsafe_chars():
     assert m3u.sanitize_playlist_name('a/b\\c:d*e?f"g<h>i|j') == 'abcdefghij'
 
 
-def test_sanitize_drops_unicode_and_punctuation():
-    # Accents, emojis and punctuation are dropped per the spec
-    # (alphanumerics + space + hyphen + underscore only).
-    assert m3u.sanitize_playlist_name('Été: Café 🎵 #1') == 't Caf 1'
+def test_sanitize_keeps_letters_in_any_script_and_drops_punctuation():
+    # Accented and non-Latin letters are part of the name; emojis and
+    # punctuation are not.
+    assert m3u.sanitize_playlist_name('Été: Café 🎵 #1') == 'Été Café 1'
+    assert m3u.sanitize_playlist_name('日本のヒット') == '日本のヒット'
+    assert m3u.sanitize_playlist_name('Русский рок') == 'Русский рок'
+
+
+def test_sanitize_never_returns_a_device_name():
+    assert m3u.sanitize_playlist_name('Nul') == 'Nul_'
+    assert m3u.sanitize_playlist_name('com1') == 'com1_'
 
 
 def test_sanitize_empty_input_falls_back_to_default():
@@ -237,3 +244,26 @@ def test_write_overwrites_existing_m3u(tmp_path):
     )
     assert kept == 2
     assert 'b.mp3' in target.read_text(encoding='utf-8')
+
+
+def test_a_title_cannot_add_a_line(tmp_path):
+    _touch(tmp_path, 'A - x.dnf')
+    body, kept = m3u.build_m3u_content(
+        [{'filename': 'A - x.dnf', 'title': 'x' + chr(10) + '../../evil.exe', 'artist': 'A' + chr(13)}],
+        download_dir=tmp_path,
+    )
+    lines = body.splitlines()
+    assert kept == 1
+    assert len(lines) == 3  # header, EXTINF, path
+    assert lines[1].startswith('#EXTINF:')
+
+
+def test_a_track_outside_the_library_is_left_out(tmp_path):
+    outside = tmp_path.parent / 'outside.mp3'
+    outside.write_bytes(b'x')
+    lib = tmp_path / 'lib'
+    lib.mkdir()
+    body, kept = m3u.build_m3u_content(
+        [{'filename': '../outside.mp3', 'title': 't'}], download_dir=lib,
+    )
+    assert kept == 0

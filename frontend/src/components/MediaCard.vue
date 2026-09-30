@@ -6,6 +6,7 @@
     :title="item.name"
     @click="$emit('open')"
     @keydown.enter.prevent="$emit('open')"
+    @keydown.space.self.prevent="$emit('open')"
     @contextmenu="onMenu"
     @mouseenter="warmPageOnHover(kind, item.browse_id)"
     @mouseleave="cancelPageWarm()"
@@ -14,6 +15,7 @@
     <div class="mcard-art" :class="{ 'is-round': round }">
       <CoverImage
         :src="item.cover_url || item.cover || ''"
+        :fallback="item.fallback || ''"
         :kind="kind"
         :round="round"
         radius="md"

@@ -16,21 +16,37 @@ from typing import Iterable, Optional
 
 from loguru import logger
 
-_PLAYLIST_NAME_ALLOWED = re.compile(r'[^A-Za-z0-9 _-]+')
+# Letters and digits in any script, spaces, hyphens and underscores. It used to
+# be A to Z only: "Ete: Cafe" with its accents came out as "t Caf", and every
+# playlist named in Japanese, Korean or Cyrillic was called "playlist", each
+# one's .m3u written over the last.
+_PLAYLIST_NAME_ALLOWED = re.compile(r'[^\w \-]+')
+_RESERVED = frozenset(
+    ['CON', 'PRN', 'AUX', 'NUL']
+    + [f'COM{i}' for i in range(1, 10)]
+    + [f'LPT{i}' for i in range(1, 10)]
+)
+
+
+_CONTROL = re.compile(r'[\x00-\x1f\x7f]+')
 
 
 def sanitize_playlist_name(name: str) -> str:
     """Strip filesystem-unsafe characters from a playlist name.
 
-    Keeps alphanumerics, spaces, hyphens and underscores; drops the rest.
-    Returns ``'playlist'`` if nothing is left after sanitising so we
-    never produce an empty filename.
+    Keeps letters and digits (any script), spaces, hyphens and underscores;
+    drops the rest. Returns ``'playlist'`` if nothing is left after
+    sanitising so we never produce an empty filename.
     """
 
     if not name:
         return 'playlist'
     cleaned = _PLAYLIST_NAME_ALLOWED.sub('', name).strip()
-    cleaned = re.sub(r'\s+', ' ', cleaned)
+    cleaned = re.sub(r'\s+', ' ', cleaned)[:80].strip()
+    # "Nul" as a folder name is created without complaint and then nothing
+    # can be written inside it.
+    if cleaned.upper() in _RESERVED:
+        cleaned += '_'
     return cleaned or 'playlist'
 
 
@@ -66,11 +82,19 @@ def build_m3u_content(
         if not filename:
             continue
         path = (download_dir / filename).resolve()
+        # A track of the library, not any file the caller cares to name.
+        try:
+            path.relative_to(Path(download_dir).resolve())
+        except ValueError:
+            logger.warning('Skipping a track outside the library in M3U: {}', filename)
+            continue
         if not path.exists():
             logger.warning('Skipping missing track in M3U: {}', path)
             continue
-        title = (entry.get('title') or '').strip()
-        artist = (entry.get('artist') or '').strip()
+        # One line each. A title with a line break in it used to start a line
+        # of its own, which a player reads as another entry.
+        title = _CONTROL.sub(' ', entry.get('title') or '').strip()
+        artist = _CONTROL.sub(' ', entry.get('artist') or '').strip()
         duration = entry.get('duration')
         try:
             duration_int = int(duration) if duration is not None else -1

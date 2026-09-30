@@ -378,6 +378,7 @@ namespace Dannify.Setup.Core
                     string name = Path.GetFileName(dir).ToLowerInvariant();
                     if (name == "app" || name == "app-next" || name == "runtime" || name == "config" ||
                         name.StartsWith("app-old-", StringComparison.Ordinal) ||
+                        name.StartsWith("app-broken", StringComparison.Ordinal) ||
                         name.StartsWith("app.partial-", StringComparison.Ordinal) ||
                         name.StartsWith("app-next.", StringComparison.Ordinal) ||
                         name.StartsWith("runtime.old-", StringComparison.Ordinal) ||

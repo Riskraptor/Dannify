@@ -8,6 +8,13 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const SRC_DIR = fileURLToPath(new URL('./src', import.meta.url))
 
+// The version this interface is built as, from the one place it lives. The
+// page compares it with the app's to tell whether it is out of date itself.
+const APP_VERSION =
+  (readFileSync(new URL('../Backend/dannify/__init__.py', import.meta.url), 'utf8').match(
+    /__version__\s*=\s*'([^']+)'/
+  ) || [])[1] || ''
+
 // Bundle ONLY the Phosphor icons the app references, straight into the JS.
 // The desktop app must render every icon offline — the stock @iconify/vue
 // build would otherwise fetch each icon from api.iconify.design at runtime.
@@ -83,6 +90,7 @@ export default defineConfig({
   },
   define: {
     'process.env': {},
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
   },
   build: {
     // Shipping builds carry nothing that helps someone read the app back:

@@ -16,8 +16,22 @@ const error = ref(false)
 export const libraryEpoch = ref(0)
 
 let inflight = null
-async function refresh() {
-  if (inflight) return inflight
+let again = null
+function refresh() {
+  // A change that lands while a read is on its way may not be in what that
+  // read brings back. It used to be dropped: the finished download was
+  // announced while the list was still being read from its half-made state,
+  // and the sidebar kept that picture (no artwork, no album) until the app
+  // was restarted. One more read goes out after this one instead.
+  if (inflight) {
+    if (!again) {
+      again = inflight.then(() => {
+        again = null
+        return refresh()
+      })
+    }
+    return again
+  }
   loading.value = true
   inflight = Promise.all([API.getLibrary(), API.getArtists()])
     .then(([lib, art]) => {

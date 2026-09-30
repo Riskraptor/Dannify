@@ -73,6 +73,7 @@ Environment variables worth knowing:
 | `DANNIFY_LOG_LEVEL` | `debug` when something is wrong |
 | `DANNIFY_UPDATE_REPO` | Check a different `owner/name` for updates |
 | `DANNIFY_UPDATE_API` | A stand-in release server, for testing updates. `127.0.0.1` only |
+| `DANNIFY_KEY` | The key for `main.py` run on the network (`--host 0.0.0.0`). One is made up and printed if unset |
 
 A second copy needs its own `DANNIFY_DATA_DIR`. WebView2 will not open the
 same profile folder twice with different options, and you get a dead window
@@ -110,7 +111,10 @@ start, it goes back to the old one and skips that version.
 
 `python packaging\lifecycle.py` runs install, launch, update, restart,
 rollback and uninstall end to end in a sandbox that touches no real install,
-registry entry or library.
+registry entry or library. `upgrade`, `restart_previous`,
+`setup_over_previous` and `rollback_previous` do the same starting from the
+release before this one, the way people who already have Dannify will get the
+new version, and `migrate` does it from a 3.x folder.
 
 ## Releases
 

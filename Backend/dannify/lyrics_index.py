@@ -27,12 +27,15 @@ _index: dict[str, str] = {}  # key -> relative .lrc filename within base
 _index_path: Optional[Path] = None  # JSON sidecar (lives next to .lyrics/)
 _lyrics_base: Optional[Path] = None  # the .lyrics folder itself
 
-_KEY_INVALID = re.compile(r'[^a-z0-9]+')
 _FS_INVALID = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 
 
 def _norm(text: str) -> str:
-    return _KEY_INVALID.sub(' ', (text or '').casefold()).strip()
+    # Letters in any script: the a-to-z version gave every non-Latin song the
+    # same empty key, and showed one song's lyrics on another.
+    from .library import fold  # noqa: PLC0415
+
+    return fold(text)
 
 
 def _key(artist: str, title: str) -> str:

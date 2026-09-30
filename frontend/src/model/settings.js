@@ -7,10 +7,7 @@ import { t } from '/src/i18n'
 const settings = ref({
   audio_providers: [''],
   download_lyrics: true,
-  format: '',
-  bitrate: '320',
   output: '',
-  generate_m3u: true,
   organize_by_artist: false,
   max_parallel_downloads: 3,
   download_dir: '',
@@ -19,8 +16,6 @@ const settings = ref({
 
 const settingsOptions = {
   audio_providers: ['youtube', 'youtube-music'],
-  format: ['mp3', 'flac', 'ogg', 'opus', 'm4a'],
-  bitrate: ['128', '192', '256', '320'],
   max_parallel_downloads: [1, 2, 3, 5, 8],
   output: '{artists} - {title}.{output-ext}',
   lyrics_storage: ['sidecar', 'central'],

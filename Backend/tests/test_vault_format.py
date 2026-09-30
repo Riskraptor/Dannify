@@ -105,3 +105,49 @@ def test_something_else_with_the_extension_is_not_a_song(tmp_path):
     assert vault.inspect(path)[1] == vault.DAMAGED
     with pytest.raises(ValueError):
         b''.join(vault.open_range(path))
+
+
+def test_a_paused_stream_does_not_hold_the_file(tmp_path):
+    """Half-way through a response (a paused player stops reading), the song
+    can still be deleted: Windows refuses while a handle is open."""
+
+    import secrets as _secrets
+
+    from dannify import vault as _vault
+
+    saved = (_vault._master, _vault._keys, _vault._state)
+    _vault._master, _vault._keys, _vault._state = _secrets.token_bytes(32), [], 'ready'
+    try:
+        plain = tmp_path / 'A - x.mp3'
+        audio = bytes(range(256)) * 4096  # 1 MiB: several pieces
+        plain.write_bytes(b'ID3' + audio)
+        sealed = _vault.seal(plain, tmp_path / 'A - x.dnf', {'title': 'x'})
+        stream = _vault.open_range(sealed, 0)
+        first = next(stream)
+        assert first[:3] == b'ID3'
+        sealed.unlink()  # used to raise PermissionError [WinError 32]
+        assert not sealed.exists()
+        stream.close()
+    finally:
+        _vault._master, _vault._keys, _vault._state = saved
+
+
+def test_ranges_still_decrypt_correctly(tmp_path):
+    import secrets as _secrets
+
+    from dannify import vault as _vault
+
+    saved = (_vault._master, _vault._keys, _vault._state)
+    _vault._master, _vault._keys, _vault._state = _secrets.token_bytes(32), [], 'ready'
+    try:
+        payload = b'ID3' + _secrets.token_bytes(700_001)
+        plain = tmp_path / 'B - y.mp3'
+        plain.write_bytes(payload)
+        sealed = _vault.seal(plain, tmp_path / 'B - y.dnf', {'title': 'y'})
+        assert b''.join(_vault.open_range(sealed, 0)) == payload
+        for start, length in ((0, 10), (5, 1000), (262_139, 70_000), (699_990, None)):
+            got = b''.join(_vault.open_range(sealed, start, length))
+            want = payload[start:] if length is None else payload[start:start + length]
+            assert got == want, (start, length)
+    finally:
+        _vault._master, _vault._keys, _vault._state = saved

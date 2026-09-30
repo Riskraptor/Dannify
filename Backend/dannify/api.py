@@ -22,6 +22,7 @@ import asyncio
 import contextlib
 import json
 import re
+import shutil
 import threading
 from pathlib import Path
 from typing import Any, Optional
@@ -45,18 +46,30 @@ from . import lyrics_index
 from . import lyrics_offsets
 from . import lyrics_publish
 from . import explorer
+from . import artist_links
 from . import layout, m3u, providers, repair, spotify, streaming, support, updates, vault
 from .downloader import Downloader
 from .monitor import PlaylistMonitorDB, check_playlist
+
+# What a saved song is inside its container. Not a choice any more: every
+# saved song plays in Dannify and nowhere else, so the format inside is ours to
+# pick, and the best pick is the stream as YouTube sends it. Its AAC is kept
+# as it comes, not re-encoded into MP3 at a guessed bitrate: faster to save,
+# and nothing lost on the way. The bitrate only matters for the rare track
+# that arrives in another codec and has to be converted.
+INTERNAL_FORMAT = 'm4a'
+INTERNAL_BITRATE = '256'
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     'audio_providers': ['youtube-music'],
     'lyrics_providers': ['lrclib'],
     'download_lyrics': True,
-    'format': 'mp3',
-    'bitrate': '320',
+    'format': INTERNAL_FORMAT,
+    'bitrate': INTERNAL_BITRATE,
     'output': '{artists} - {title}.{output-ext}',
-    'generate_m3u': True,
+    # Off, and no longer offered: a playlist file for other players listed
+    # saved songs that none of them can open.
+    'generate_m3u': False,
     'max_parallel_downloads': 3,
     # On by default: a flat folder of a few hundred tracks is unusable
     # outside the app, and an artist folder is what every music player
@@ -93,8 +106,14 @@ class ConnectionManager:
         await ws.accept()
         self._clients[client_id] = ws
 
-    def disconnect(self, client_id: str) -> None:
-        self._clients.pop(client_id, None)
+    def disconnect(self, client_id: str, ws: Optional[WebSocket] = None) -> None:
+        # Only the socket that is going away. The window reconnects under the
+        # same id, often before the server has noticed the old one close, and
+        # the old one's clean-up used to take the new one with it: progress,
+        # library changes and opened files all stopped arriving while the
+        # window believed it was connected.
+        if ws is None or self._clients.get(client_id) is ws:
+            self._clients.pop(client_id, None)
 
     @property
     def connected(self) -> bool:
@@ -111,17 +130,18 @@ class ConnectionManager:
         try:
             await ws.send_text(json.dumps(message))
         except Exception:
-            self._clients.pop(client_id, None)
+            self.disconnect(client_id, ws)
 
     async def broadcast(self, message: dict[str, Any]) -> None:
-        dead: list[str] = []
+        text = json.dumps(message)
+        dead: list[tuple[str, WebSocket]] = []
         for client_id, ws in list(self._clients.items()):
             try:
-                await ws.send_text(json.dumps(message))
+                await ws.send_text(text)
             except Exception:
-                dead.append(client_id)
-        for client_id in dead:
-            self._clients.pop(client_id, None)
+                dead.append((client_id, ws))
+        for client_id, ws in dead:
+            self.disconnect(client_id, ws)
 
 
 class AppState:
@@ -409,8 +429,38 @@ _cancels: dict[str, threading.Event] = {}
 _MAX_JOBS = 400
 
 
+def _song_key(song: dict[str, Any]) -> str:
+    return str(song.get('song_id') or song.get('url') or id(song))
+
+
+def _in_flight(song_id: str) -> bool:
+    job = state.download_jobs.get(song_id)
+    return bool(job) and job.get('status') in ('queued', 'downloading')
+
+
+async def _wait_for_job(song_id: str) -> Optional[str]:
+    """The file an in-flight download of this song ends with, once it does.
+
+    The same song asked for again while it is already on its way (an album
+    saved while one of its songs was downloading on its own, "Download all"
+    pressed twice) used to start a second run under the same id. That one
+    replaced the first run's stop switch, so taking the song off the queue
+    stopped only the newer run: the other carried on and saved it anyway.
+    """
+
+    while True:
+        job = state.download_jobs.get(song_id)
+        if job is None:
+            return None  # taken off the queue
+        if job.get('status') == 'done':
+            return job.get('filename')
+        if job.get('status') == 'error':
+            raise RuntimeError(job.get('message') or 'download failed')
+        await asyncio.sleep(0.5)
+
+
 def _register_job(song: dict[str, Any], status: str = 'queued') -> str:
-    song_id = str(song.get('song_id') or song.get('url') or id(song))
+    song_id = _song_key(song)
     if len(state.download_jobs) >= _MAX_JOBS:
         finished = [k for k, j in state.download_jobs.items() if j.get('status') in ('done', 'error')]
         for key in finished[: max(1, len(finished) // 2)]:
@@ -442,18 +492,9 @@ async def _run_download(
         return None  # taken off the queue before it started
     job = state.download_jobs.get(song_id)
     if job is None:
-        song_id = _register_job(song, status='downloading')
+        song_id = _register_job(song, status='queued')
         job = state.download_jobs[song_id]
-    else:
-        job['status'] = 'downloading'
     cancel = _cancels.setdefault(song_id, threading.Event())
-
-    await state.connections.broadcast({
-        'song': song,
-        'progress': 0,
-        'message': '',
-        'status': 'downloading',
-    })
 
     def progress(pct: float, message: str) -> None:
         j = state.download_jobs.get(song_id)
@@ -475,6 +516,16 @@ async def _run_download(
         async with sem if sem is not None else contextlib.nullcontext():
             if cancel.is_set():
                 return None  # removed while it waited for a free slot
+            # Downloading from here, not from when it was asked for. Every
+            # song of a batch used to say "Downloading" while all but a few
+            # were still waiting for a free slot.
+            job['status'] = 'downloading'
+            await state.connections.broadcast({
+                'song': song,
+                'progress': 0,
+                'message': '',
+                'status': 'downloading',
+            })
             filename = await loop.run_in_executor(
                 None,
                 lambda: state.downloader.download(
@@ -484,10 +535,17 @@ async def _run_download(
     except Exception as exc:
         if cancel.is_set():
             logger.info('Download stopped: {}', song_id)
-            state.download_jobs.pop(song_id, None)
-            _cancels.pop(song_id, None)
+            # Only its own entries. Taken off the list and put straight back,
+            # the song already has a new job and a new stop switch under the
+            # same id, and clearing those left the new run untracked: gone
+            # from the list, and impossible to stop.
+            if state.download_jobs.get(song_id) is job:
+                state.download_jobs.pop(song_id, None)
+            if _cancels.get(song_id) is cancel:
+                _cancels.pop(song_id, None)
             return None
-        _cancels.pop(song_id, None)
+        if _cancels.get(song_id) is cancel:
+            _cancels.pop(song_id, None)
         logger.exception('Download failed for {}', song_id)
         job['status'] = 'error'
         job['message'] = f'Error: {exc}'
@@ -499,7 +557,8 @@ async def _run_download(
         })
         raise
 
-    _cancels.pop(song_id, None)
+    if _cancels.get(song_id) is cancel:
+        _cancels.pop(song_id, None)
     job['status'] = 'done'
     job['filename'] = filename
     job['progress'] = 100
@@ -546,10 +605,13 @@ async def download_endpoint(
         song.get('year'),
         song.get('release_date'),
     )
-    song_id = _register_job(song, status='downloading')
-
+    song_id = _song_key(song)
     try:
-        filename = await _run_download(song, song_id)
+        if _in_flight(song_id):
+            filename = await _wait_for_job(song_id)
+        else:
+            song_id = _register_job(song, status='queued')
+            filename = await _run_download(song, song_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return filename
@@ -560,6 +622,7 @@ async def _process_batch(
     job_ids: list[str],
     playlist_url: str,
     generate_m3u: bool,
+    following: Optional[set[str]] = None,
 ) -> None:
     # Resolve the playlist name up-front so all tracks land in a single,
     # per-playlist sub-folder. Loose batches (e.g. albums or unrelated
@@ -578,17 +641,21 @@ async def _process_batch(
                 'Failed to resolve playlist name for {}', playlist_url
             )
 
-    async def _bounded(song: dict[str, Any], song_id: str) -> dict[str, Any]:
+    async def _bounded(song: dict[str, Any], song_id: str, follow: bool) -> dict[str, Any]:
         try:
-            filename = await _run_download(
-                song, song_id, subdir=playlist_subdir
-            )
+            if follow:
+                filename = await _wait_for_job(song_id)
+            else:
+                filename = await _run_download(song, song_id, subdir=playlist_subdir)
         except Exception:
             filename = None
         return {'song': song, 'filename': filename}
 
     results = await asyncio.gather(
-        *[_bounded(s, sid) for s, sid in zip(songs, job_ids)],
+        *[
+            _bounded(s, sid, sid in (following or ()))
+            for s, sid in zip(songs, job_ids)
+        ],
         return_exceptions=False,
     )
 
@@ -641,16 +708,26 @@ async def download_batch_endpoint(request: Request) -> dict[str, Any]:
             status_code=400, detail='songs must be a non-empty list'
         )
     playlist_url = str(payload.get('playlist_url') or '')
-    generate_m3u = bool(payload.get('generate_m3u', True))
+    # Never: see DEFAULT_SETTINGS['generate_m3u'].
+    generate_m3u = False
 
     valid_songs: list[dict[str, Any]] = []
     job_ids: list[str] = []
+    following: set[str] = set()
     for song in songs:
         if not isinstance(song, dict):
             continue
-        song_id = _register_job(song, status='queued')
+        song_id = _song_key(song)
+        if song_id in job_ids:
+            continue  # listed twice in the same batch
         valid_songs.append(song)
         job_ids.append(song_id)
+        if _in_flight(song_id):
+            # Already on its way: this batch waits for that run instead of
+            # starting another one (see _wait_for_job).
+            following.add(song_id)
+            continue
+        _register_job(song, status='queued')
         await state.connections.broadcast({
             'song': song,
             'progress': 0,
@@ -662,7 +739,7 @@ async def download_batch_endpoint(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail='No valid songs in batch')
 
     task = asyncio.create_task(
-        _process_batch(valid_songs, job_ids, playlist_url, generate_m3u)
+        _process_batch(valid_songs, job_ids, playlist_url, generate_m3u, following)
     )
 
     def _log_batch_failure(t: asyncio.Task) -> None:
@@ -760,7 +837,12 @@ async def write_playlist_m3u_endpoint(request: Request) -> dict[str, Any]:
 # Settings the interface has no business seeing. Where lyrics come from is an
 # implementation detail: there is no picker for it, nothing renders it, and a
 # name travelling to the UI is a name that ends up in the shipped bundle.
-_PRIVATE_SETTINGS = ('lyrics_providers', 'audio_providers')
+_PRIVATE_SETTINGS = (
+    'lyrics_providers', 'audio_providers',
+    # Fixed now (see INTERNAL_FORMAT). An old settings file may still hold a
+    # choice from when they were offered; it is kept, and not used.
+    'format', 'bitrate', 'generate_m3u',
+)
 
 
 @router.get('/api/settings')
@@ -778,73 +860,85 @@ async def update_settings_endpoint(
         payload = {}
     if isinstance(payload, dict):
         # download_dir is special: validate THEN apply live (no restart).
+        # Off the event loop: joining a folder walks all of it, and on a big
+        # library or a network drive that held every stream, every search and
+        # the websocket until it finished.
         if 'download_dir' in payload:
-            new_dir = _coerce_download_dir(payload['download_dir'])
-            if new_dir is not None:
-                state.download_dir = new_dir
-                if state.downloader is not None:
-                    state.downloader.download_dir = new_dir
-                    new_dir.mkdir(parents=True, exist_ok=True)
-                # Re-point the central lyrics index at the new folder
-                # (no-op if storage mode is 'sidecar', it just exists).
-                lyrics_index.init(new_dir)
-                # And join it, so songs already in it open and new ones are
-                # sealed the way that folder's songs are.
-                try:
-                    vault.attach(new_dir)
-                except Exception:
-                    logger.opt(exception=True).warning('could not join {}', new_dir)
-                # Drop the library cache so the new location is scanned.
-                library_mod.invalidate_cache()
-                state.settings['download_dir'] = str(new_dir)
-                # Broadcast so the frontend re-loads its library index.
-                if state.loop is not None:
-                    asyncio.run_coroutine_threadsafe(
-                        state.connections.broadcast(
-                            {'type': 'library_changed'}
-                        ),
-                        state.loop,
-                    )
+            await asyncio.to_thread(_apply_download_dir, payload['download_dir'])
 
         if 'lyrics_storage' in payload:
             mode = str(payload['lyrics_storage']).strip().lower()
             if mode in ('sidecar', 'central'):
                 state.settings['lyrics_storage'] = mode
+                # Downloads use it from now, not from the next start.
+                if state.downloader is not None:
+                    state.downloader.lyrics_storage = mode
 
         for key, value in payload.items():
-            if key in ('download_dir', 'lyrics_storage'):
-                continue  # already handled above
+            if key in ('download_dir', 'lyrics_storage') or key in _PRIVATE_SETTINGS:
+                continue  # handled above, or not the window's to set
             if key in DEFAULT_SETTINGS:
                 state.settings[key] = value
-        if state.downloader is not None:
-            fmt = payload.get('format')
-            if isinstance(fmt, str) and fmt:
-                state.downloader.audio_format = fmt
-            bitrate = payload.get('bitrate')
-            if isinstance(bitrate, str) and bitrate:
-                state.downloader.audio_bitrate = bitrate
-            output = payload.get('output')
-            if isinstance(output, str) and output:
-                state.downloader.output_template = output.replace(
-                    '.{output-ext}', ''
-                )
-            if 'lyrics_providers' in payload or 'download_lyrics' in payload:
-                state.downloader.lyrics_providers = (
-                    _effective_lyrics_providers(state.settings)
-                )
-            if 'organize_by_artist' in payload:
-                state.downloader.organize_by_artist = bool(
-                    payload['organize_by_artist']
-                )
-        if 'max_parallel_downloads' in payload:
-            try:
-                count = max(1, int(payload['max_parallel_downloads']))
-                state.download_semaphore = asyncio.Semaphore(count)
-            except (TypeError, ValueError):
-                pass
+        _apply_to_downloader(payload)
     if state.settings_path is not None:
-        _save_settings(state.settings_path, state.settings)
-    return state.settings
+        await asyncio.to_thread(_save_settings, state.settings_path, state.settings)
+    # The same view GET gives: the private ones stay private here too.
+    return get_settings_endpoint()
+
+
+def _apply_download_dir(value: Any) -> None:
+    """Move the library to *value*, live. Runs on a worker thread."""
+
+    new_dir = _coerce_download_dir(value)
+    if new_dir is None:
+        return
+    state.download_dir = new_dir
+    if state.downloader is not None:
+        state.downloader.download_dir = new_dir
+        new_dir.mkdir(parents=True, exist_ok=True)
+    # Re-point the central lyrics index at the new folder
+    # (no-op if storage mode is 'sidecar', it just exists).
+    lyrics_index.init(new_dir)
+    # And join it, so songs already in it open and new ones are
+    # sealed the way that folder's songs are.
+    try:
+        vault.attach(new_dir)
+    except Exception:
+        logger.opt(exception=True).warning('could not join {}', new_dir)
+    # Drop the library cache so the new location is scanned.
+    library_mod.invalidate_cache()
+    state.settings['download_dir'] = str(new_dir)
+    # Broadcast so the frontend re-loads its library index.
+    if state.loop is not None:
+        asyncio.run_coroutine_threadsafe(
+            state.connections.broadcast({'type': 'library_changed'}),
+            state.loop,
+        )
+
+
+def _apply_to_downloader(payload: dict[str, Any]) -> None:
+    """Hand the settings that shape a download to the downloader, live."""
+
+    if state.downloader is not None:
+        output = payload.get('output')
+        if isinstance(output, str) and output:
+            state.downloader.output_template = output.replace(
+                '.{output-ext}', ''
+            )
+        if 'lyrics_providers' in payload or 'download_lyrics' in payload:
+            state.downloader.lyrics_providers = (
+                _effective_lyrics_providers(state.settings)
+            )
+        if 'organize_by_artist' in payload:
+            state.downloader.organize_by_artist = bool(
+                payload['organize_by_artist']
+            )
+    if 'max_parallel_downloads' in payload:
+        try:
+            count = max(1, int(payload['max_parallel_downloads']))
+            state.download_semaphore = asyncio.Semaphore(count)
+        except (TypeError, ValueError):
+            pass
 
 
 @router.post('/api/settings/pick-folder')
@@ -1273,14 +1367,10 @@ def _lyrics_from_file(
     re-queries the source.
     """
 
-    base = state.download_dir
-    if base is None:
+    if state.download_dir is None:
         raise HTTPException(status_code=500, detail='Library not ready')
-    base = base.resolve()
-    try:
-        full = (base / file).resolve()
-        full.relative_to(base)
-    except (ValueError, RuntimeError):
+    full = _library_file(file)
+    if full is None:
         raise HTTPException(status_code=400, detail='Invalid path')
 
     # Prefer a stored .lrc (sidecar OR central index) unless reloading.
@@ -1445,7 +1535,10 @@ async def lyrics_endpoint(
         )
         # Attach the crowd-sourced prefs using the file's own tags.
         try:
-            meta = library_mod._read_tags((state.download_dir / file))
+            where = _library_file(file)
+            if where is None:
+                raise ValueError('not in the library')
+            meta = library_mod._read_tags(where)
             prefs = lyrics_offsets.get_prefs(
                 meta.get('title', ''), meta.get('artist', '')
             )
@@ -1539,9 +1632,10 @@ async def lyrics_versions_endpoint(
     """
 
     song: dict[str, Any]
-    if file and state.download_dir is not None:
+    where = _library_file(file) if file else None
+    if where is not None:
         try:
-            meta = library_mod._read_tags((state.download_dir / file))
+            meta = library_mod._read_tags(where)
             song = {
                 'name': meta.get('title') or '',
                 'artists': meta.get('artists')
@@ -1714,6 +1808,31 @@ def _require_download_dir() -> Path:
     return state.download_dir
 
 
+def _library_file(file: str) -> Optional[Path]:
+    """*file* inside the music folder, or None if it names anywhere else.
+
+    Checked by its shape before anything touches the disk: resolving a
+    network path (a UNC name, host and share) is already a connection to that
+    host, and the lyrics endpoints used to join whatever they were given onto
+    the music folder and read its tags, which answers for any file on the
+    machine.
+    """
+
+    base = state.download_dir
+    if base is None or not file:
+        return None
+    rel = Path(str(file).replace(chr(92), '/'))
+    if rel.is_absolute() or rel.drive or rel.anchor or '..' in rel.parts or ':' in str(file):
+        return None
+    root = Path(base).resolve()
+    try:
+        full = (root / rel).resolve()
+        full.relative_to(root)
+    except (ValueError, RuntimeError, OSError):
+        return None
+    return full
+
+
 @router.get('/api/library')
 async def library_endpoint() -> dict[str, Any]:
     base = _require_download_dir()
@@ -1734,7 +1853,101 @@ async def artists_endpoint() -> list[dict[str, Any]]:
     return await asyncio.to_thread(library_mod.artists, base)
 
 
-@router.get('/api/artists/{name}')
+# ---------------------------------------------------------------------------
+# Storage: what the library takes up, and the caches that can go
+# ---------------------------------------------------------------------------
+
+_CACHE_FILES = ('lyrics_cache.json', 'direct_cache.json', 'artist_links.json')
+_CACHE_DIRS = ('ytdlp-cache',)
+
+
+def _size_of(path: Path) -> int:
+    try:
+        if path.is_file():
+            return path.stat().st_size
+        return sum(p.stat().st_size for p in path.rglob('*') if p.is_file())
+    except OSError:
+        return 0
+
+
+@router.get('/api/storage')
+async def storage_endpoint() -> dict[str, Any]:
+    base = _require_download_dir()
+
+    def measure() -> dict[str, Any]:
+        songs = size = 0
+        for path in base.rglob('*'):
+            if path.suffix.lower() in library_mod._AUDIO_EXTS and path.is_file():
+                songs += 1
+                try:
+                    size += path.stat().st_size
+                except OSError:
+                    pass
+        data = Path(state.data_dir) if state.data_dir else None
+        caches = 0
+        if data is not None:
+            caches = sum(_size_of(data / n) for n in _CACHE_FILES + _CACHE_DIRS)
+        try:
+            free = shutil.disk_usage(base).free
+        except OSError:
+            free = 0
+        return {'songs': songs, 'bytes': size, 'free': free, 'caches': caches}
+
+    return await asyncio.to_thread(measure)
+
+
+@router.post('/api/storage/clear-caches')
+async def clear_caches_endpoint() -> dict[str, Any]:
+    """Forget what is only kept to be quick: looked-up lyrics, stream
+    addresses, YouTube's player code and artist pictures. Never the music,
+    and never lyrics anybody wrote or saved beside a song."""
+
+    def clear() -> None:
+        lyrics_mod.clear_cache()
+        streaming.clear_direct_cache()
+        artist_links.clear()
+        if state.data_dir:
+            for name in _CACHE_DIRS:
+                folder = Path(state.data_dir) / name
+                shutil.rmtree(folder, ignore_errors=True)
+                folder.mkdir(parents=True, exist_ok=True)
+
+    await asyncio.to_thread(clear)
+    return {'cleared': True}
+
+
+@router.get('/api/artists-online/links')
+async def artist_links_endpoint() -> dict[str, Any]:
+    """The online identity (page id and picture) of every artist in the library.
+
+    What is not known yet is looked up in the background; ``pending`` says how
+    many, and asking again shortly picks them up.
+    """
+
+    base = _require_download_dir()
+    names = [a['name'] for a in await asyncio.to_thread(library_mod.artists, base)]
+    links, pending = await asyncio.to_thread(artist_links.known, names)
+    return {'links': links, 'pending': pending}
+
+
+@router.get('/api/artists-online/page')
+async def artist_online_page_endpoint(name: str = Query(...)) -> dict[str, Any]:
+    """Everything a saved artist has released, for the rest of their page."""
+
+    found = await asyncio.to_thread(artist_links.link, name)
+    if not found:
+        raise HTTPException(status_code=404, detail='Artist not found online')
+    try:
+        page = await asyncio.to_thread(explorer.artist, found['id'])
+    except Exception as exc:
+        logger.opt(exception=True).info('online page for {} failed', name)
+        raise HTTPException(status_code=502, detail='unavailable') from exc
+    return page
+
+
+# `:path`, because a name can hold a slash: "AC/DC" arrives as AC%2FDC and is
+# decoded before routing, which a plain parameter does not match.
+@router.get('/api/artists/{name:path}')
 async def artist_detail_endpoint(name: str) -> dict[str, Any]:
     base = _require_download_dir()
     detail = await asyncio.to_thread(library_mod.artist_detail, base, name)
@@ -1821,9 +2034,9 @@ async def websocket_endpoint(
         while True:
             await ws.receive_text()
     except WebSocketDisconnect:
-        state.connections.disconnect(client_id)
+        state.connections.disconnect(client_id, ws)
     except Exception:
-        state.connections.disconnect(client_id)
+        state.connections.disconnect(client_id, ws)
 
 
 # ---------------------------------------------------------------------------
@@ -2114,7 +2327,10 @@ async def update_download_endpoint(
             raise HTTPException(status_code=502, detail='update_failed') from exc
         return {'path': str(staged), 'version': info.get('version', ''), 'kind': 'staged'}
 
-    url = str(payload.get('url') or info.get('download_url') or '')
+    # Only ever the address the release itself names. The interface used to
+    # be able to send one of its own, and whatever came back was offered to
+    # run as the installer.
+    url = str(info.get('download_url') or '')
     if not url:
         raise HTTPException(status_code=404, detail='no_download')
     dest = Path(state.data_dir or Path.home()) / 'updates'

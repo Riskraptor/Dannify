@@ -1,8 +1,8 @@
 <template>
   <span class="cover" :class="[round ? 'rounded-full' : radiusClass]">
     <img
-      v-if="src && !failed"
-      :key="src"
+      v-if="shown && !failed"
+      :key="shown"
       :src="src1x"
       :srcset="srcset"
       alt=""
@@ -12,9 +12,9 @@
       class="drag-none"
       :class="{ 'is-loaded': loaded }"
       @load="loaded = true"
-      @error="failed = true"
+      @error="onError"
     />
-    <Icon v-if="!src || failed || !loaded" :icon="fallbackIcon" class="cover-fallback" />
+    <Icon v-if="!shown || failed || !loaded" :icon="fallbackIcon" class="cover-fallback" />
     <slot />
   </span>
 </template>
@@ -26,6 +26,9 @@ import { libraryEpoch } from '/src/model/library'
 
 const props = defineProps({
   src: { type: String, default: '' },
+  // Tried when `src` fails: an artist's photo comes from the web, and offline
+  // the cover of one of their saved songs is still there.
+  fallback: { type: String, default: '' },
   kind: { type: String, default: 'track' }, // track | album | artist | playlist
   round: { type: Boolean, default: false },
   radius: { type: String, default: 'md' }, // sm | md | lg
@@ -50,20 +53,33 @@ function atSize(url, px) {
 const failed = ref(false)
 const loaded = ref(false)
 const retry = ref(0)
+const usingFallback = ref(false)
+// What is drawn: the picture asked for, or the fallback once that failed.
+const shown = computed(() => (usingFallback.value ? props.fallback : props.src || props.fallback))
 watch(
-  () => props.src,
+  () => [props.src, props.fallback],
   () => {
     failed.value = false
     loaded.value = false
     retry.value = 0
+    usingFallback.value = false
   }
 )
+
+function onError() {
+  if (!usingFallback.value && props.fallback && props.src && props.fallback !== props.src) {
+    usingFallback.value = true
+    loaded.value = false
+    return
+  }
+  failed.value = true
+}
 
 // A saved song's picture that failed is tried again whenever the library is
 // read again. It failed because the song would not open, and the usual reason
 // the library changes is that it has just been repaired. Pictures from the
 // web are left alone: those fail for reasons a reload does not change.
-const isLocal = computed(() => String(props.src || '').startsWith('/cover'))
+const isLocal = computed(() => String(shown.value || '').startsWith('/cover'))
 watch(libraryEpoch, () => {
   if (failed.value && isLocal.value) {
     failed.value = false
@@ -73,12 +89,12 @@ watch(libraryEpoch, () => {
 })
 
 const src1x = computed(() => {
-  const url = atSize(props.src, props.size)
+  const url = atSize(shown.value, props.size)
   return retry.value && isLocal.value ? `${url}&r=${retry.value}` : url
 })
 const srcset = computed(() => {
-  if (!props.size || src1x.value === props.src || isLocal.value) return undefined
-  return `${src1x.value} 1x, ${atSize(props.src, props.size * 2)} 2x`
+  if (!props.size || src1x.value === shown.value || isLocal.value) return undefined
+  return `${src1x.value} 1x, ${atSize(shown.value, props.size * 2)} 2x`
 })
 
 const radiusClass = computed(

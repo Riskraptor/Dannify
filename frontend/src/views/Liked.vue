@@ -97,6 +97,7 @@ import {
   downloadRows,
   isRowCurrent,
   isRowDownloaded,
+  isRowDownloading,
 } from '/src/model/tracks'
 import { onRefresh } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
@@ -112,9 +113,12 @@ const libIndex = useLibraryIndex()
 const busy = ref(false)
 const rows = computed(() => account.liked.value.map(songRow))
 
+// Songs neither saved nor already on their way. Counting the ones on their
+// way kept "Download all" up during the batch, and pressing it again sent
+// every one of them a second time.
 const pendingCount = computed(() => {
   void libIndex.byVideoId.value
-  return rows.value.filter((r) => !isRowDownloaded(r)).length
+  return rows.value.filter((r) => !isRowDownloaded(r) && !isRowDownloading(r)).length
 })
 
 const totalDuration = computed(() => {

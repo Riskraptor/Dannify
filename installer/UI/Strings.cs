@@ -68,6 +68,14 @@ namespace Dannify.Setup.UI
 
         public static string StopTitle => T("Stop installing?", "Arrêter l'installation" + Nb + "?");
         public static string StopText => T("Nothing will be changed on your PC.", "Rien ne sera modifié sur votre PC.");
+        public static string StopUpdateTitle => T("Stop updating?", "Arrêter la mise à jour" + Nb + "?");
+        public static string StopUpdateText => T("Dannify stays on the version you have now.", "Dannify reste sur la version actuelle.");
+
+        // What the taskbar and Alt+Tab call these windows. They were all
+        // "Dannify", next to the app's own window of the same name.
+        public static string WindowSetup => T("Dannify Setup", "Installation de Dannify");
+        public static string WindowRemove => T("Remove Dannify", "Supprimer Dannify");
+        public static string WindowUpdating => T("Updating Dannify", "Mise à jour de Dannify");
         public static string Stop => T("Stop", "Arrêter");
         public static string KeepGoing => T("Keep going", "Continuer");
 
@@ -106,6 +114,8 @@ namespace Dannify.Setup.UI
         public static string MusicStays(string folder) => T("Your music stays in " + folder + ".", "Votre musique reste dans " + folder + ".");
         public static string MusicStaysGeneric => T("Your music stays where it is.", "Votre musique reste où elle est.");
         public static string AlsoSettings => T("Also remove my settings", "Supprimer aussi mes réglages");
+        public static string SignInGoes => T("Your sign-in is removed either way: sign in again after reinstalling.",
+            "Votre connexion est supprimée dans tous les cas : reconnectez-vous après une réinstallation.");
         public static string Remove => T("Remove", "Supprimer");
         public static string RemovedTitle => T("Dannify was removed", "Dannify a été supprimé");
         public static string MusicStill(string folder) => T("Your music is still in " + folder + ".", "Votre musique est toujours dans " + folder + ".");

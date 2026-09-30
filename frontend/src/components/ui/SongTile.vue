@@ -7,6 +7,7 @@
     :title="`${row.title}. ${row.artistText}`"
     @click="$emit('play')"
     @keydown.enter.prevent="$emit('play')"
+    @keydown.space.self.prevent="$emit('play')"
     @contextmenu="onMenu"
     @mouseenter="warmOnHover(row.raw)"
     @mouseleave="cancelHoverWarm()"

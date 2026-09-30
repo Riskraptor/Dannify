@@ -5,7 +5,10 @@ from __future__ import annotations
 import os
 import re
 import re as _re
+import shutil
+import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -64,10 +67,28 @@ _RESERVED_NAMES = frozenset(
 )
 
 
-def _sanitize(text: str) -> str:
+# A whole path has to fit in the 260 characters Windows still holds most
+# programs to, music folder and artist folder included. A classical track with
+# eight credited artists and a long movement title came to 353 characters for
+# the name alone, and could not be saved at all.
+_NAME_LIMIT = 120
+_FOLDER_LIMIT = 80
+
+
+def _sanitize(text: str, limit: int = _NAME_LIMIT) -> str:
     safe = _INVALID_FS_CHARS.sub('', text or '').strip().strip('.').strip()
-    if safe.split('.')[0].strip().upper() in _RESERVED_NAMES:
-        safe += '_'
+    if len(safe) > limit:
+        cut = safe[:limit]
+        # On a word boundary when there is one reasonably close.
+        space = cut.rfind(' ')
+        if space >= limit * 0.6:
+            cut = cut[:space]
+        safe = cut.rstrip(' ,;&-').rstrip('.').strip()
+    # The device name is whatever comes before the first dot, so that is where
+    # the mark goes: "Con.Air" used to become "Con.Air_", still a device.
+    head, dot, rest = safe.partition('.')
+    if head.strip().upper() in _RESERVED_NAMES:
+        safe = f'{head.rstrip()}_{dot}{rest}'
     return safe or 'unknown'
 
 
@@ -75,20 +96,61 @@ class DownloadStopped(Exception):
     """The download was taken off the queue while it ran."""
 
 
-def _drop_partials(target_dir: Path, basename: str) -> None:
-    """What a stopped download left under its name. A saved song stays, and so
-    does a lyrics file, which may belong to one."""
+# Where a song is put together before it is sealed. A download used to happen
+# in the music folder itself: the raw stream, then a plain untagged .mp3, then
+# the tags and the lyrics, then the seal. The folder watcher saw every one of
+# those, so the library was read while the song was half made. A new artist
+# turned up in the sidebar with no picture (it pointed at a file with no art
+# yet, which was gone a moment later), the song showed twice with no album,
+# and the picture never came back until the app was restarted. Now nothing
+# reaches the music folder until it is a finished, sealed track.
+_BENCH_PREFIXES = ('dnf-dl-', 'dnf-repair-')
+# The encoder's name for a format where it differs from the file's. "ogg" is
+# a container: the encoder only knows the codec inside it, and every download
+# with OGG chosen in Settings failed on the unknown name.
+_ENCODER_NAMES = {'ogg': 'vorbis'}
+# What the encoder can hand back for the formats on offer.
+_AUDIO_SUFFIXES = frozenset({'.mp3', '.m4a', '.flac', '.ogg', '.opus', '.aac', '.wav'})
 
-    import glob as _glob
 
-    for leftover in target_dir.glob(f'{_glob.escape(basename)}.*'):
-        name = leftover.name.lower()
-        if name.endswith('.dnf') or name.endswith('.lrc') or not leftover.is_file():
+def _bench() -> Path:
+    return Path(tempfile.mkdtemp(prefix=_BENCH_PREFIXES[0]))
+
+
+def sweep_benches(max_age: float = 6 * 3600) -> int:
+    """Remove benches a crash or a power cut left behind.
+
+    Only old ones: a second copy of the app may be using a fresh one right now.
+    """
+
+    removed = 0
+    root = Path(tempfile.gettempdir())
+    cutoff = time.time() - max_age
+    try:
+        entries = list(root.iterdir())
+    except OSError:
+        return 0
+    for entry in entries:
+        if not entry.name.startswith(_BENCH_PREFIXES):
             continue
         try:
-            leftover.unlink()
+            if not entry.is_dir() or entry.stat().st_mtime > cutoff:
+                continue
         except OSError:
-            pass
+            continue
+        shutil.rmtree(entry, ignore_errors=True)
+        removed += 1
+    return removed
+
+
+def _move_beside(source: Path, target: Path) -> None:
+    """Move *source* onto *target*, across drives if it has to."""
+
+    try:
+        os.replace(source, target)
+    except OSError:
+        shutil.copyfile(source, target)
+        source.unlink(missing_ok=True)
 
 
 _target_locks: dict[str, threading.Lock] = {}
@@ -106,21 +168,35 @@ def _lock_for(target: Path) -> threading.Lock:
         return lock
 
 
-def _already_saved(target_dir: Path, basename: str, video_id: str) -> Optional[Path]:
-    """A saved copy of this very song under this name, if one is there and plays."""
+def _placement(target_dir: Path, basename: str, video_id: str) -> tuple[str, Optional[Path]]:
+    """The name this recording is saved under, and its copy if it is already there.
+
+    Two different recordings can share an artist and a title: an "Intro" on
+    each of an artist's albums, a live take and the studio one. They used to
+    share a file name too, so saving the second sealed it straight over the
+    first, lyrics and all, and the first was simply gone. A name that holds a
+    different recording that plays is left alone; this one gets " (2)", and
+    so on. A copy that will not play is replaced: that is what downloading it
+    again is for.
+    """
 
     from . import vault  # noqa: PLC0415
 
-    sealed = target_dir / f'{basename}{vault.SUFFIX}'
-    if not sealed.is_file():
-        return None
-    try:
-        head, problem = vault.inspect(sealed)
-    except Exception:
-        return None
-    if problem or not head or not video_id or head.get('video_id') != video_id:
-        return None
-    return sealed
+    name = basename
+    for number in range(2, 100):
+        sealed = target_dir / f'{name}{vault.SUFFIX}'
+        if not sealed.is_file():
+            return name, None
+        try:
+            head, problem = vault.inspect(sealed)
+        except Exception:
+            head, problem = None, 'unreadable'
+        if problem or not head:
+            return name, None
+        if video_id and head.get('video_id') == video_id:
+            return name, sealed
+        name = f'{basename} ({number})'
+    return name, None
 
 
 # Order matters: yt-dlp tries clients top-to-bottom and uses the first one
@@ -242,7 +318,22 @@ class Downloader:
     @staticmethod
     def _artist_subdir(song: dict[str, Any]) -> str:
         artists = song.get('artists') or []
-        return _sanitize(artists[0] if artists else 'unknown')
+        return _sanitize(artists[0] if artists else 'unknown', _FOLDER_LIMIT)
+
+    def _target(self, song: dict[str, Any], subdir: Optional[str]) -> tuple[Path, str]:
+        """The folder a song goes in, and its prefix relative to the library.
+
+        An artist's folder is named after the artist, letters and all. It used
+        to go through the playlist-name filter as well, which keeps only
+        A to Z: "Beyonce" lost its accent, "P!nk" became "Pnk", and every
+        artist written in another script, Japanese, Korean, Cyrillic, landed
+        in one shared folder called "playlist".
+        """
+
+        if self.organize_by_artist:
+            folder = self._artist_subdir(song)
+            return self.download_dir / folder, f'{folder}/'
+        return self._resolve_target_dir(subdir)
 
     def _format_basename(self, song: dict[str, Any]) -> str:
         artists = ', '.join(song.get('artists') or []) or 'Unknown Artist'
@@ -275,16 +366,23 @@ class Downloader:
         ``download_dir`` (``<subdir>/<file>.<ext>``).
         """
 
+        import glob as _glob
+
+        from . import vault  # noqa: PLC0415
+
         basename = self._format_basename(song)
-        effective_subdir = (
-            self._artist_subdir(song) if self.organize_by_artist else subdir
-        )
-        target_dir, prefix = self._resolve_target_dir(effective_subdir)
-        primary = target_dir / f'{basename}.{self.audio_format}'
-        if primary.exists():
-            return f'{prefix}{primary.name}'
-        for candidate in target_dir.glob(f'{basename}.*'):
-            if candidate.is_file():
+        target_dir, prefix = self._target(song, subdir)
+        # Saved songs are containers: that is the copy to find first.
+        for primary in (
+            target_dir / f'{basename}{vault.SUFFIX}',
+            target_dir / f'{basename}.{self.audio_format}',
+        ):
+            if primary.exists():
+                return f'{prefix}{primary.name}'
+        # Escaped: "Song [Live]" is a pattern to glob, and matched nothing.
+        # Audio only: the lyrics file beside a song shares its name.
+        for candidate in sorted(target_dir.glob(f'{_glob.escape(basename)}.*')):
+            if candidate.is_file() and candidate.suffix.lower() in _AUDIO_SUFFIXES:
                 return f'{prefix}{candidate.name}'
         return None
 
@@ -355,10 +453,7 @@ class Downloader:
         stage(2.0, 'Preparing')
 
         basename = self._format_basename(song)
-        effective_subdir = (
-            self._artist_subdir(song) if self.organize_by_artist else subdir
-        )
-        target_dir, rel_prefix = self._resolve_target_dir(effective_subdir)
+        target_dir, rel_prefix = self._target(song, subdir)
         target_dir.mkdir(parents=True, exist_ok=True)
 
         # One download at a time per file name. Two downloads of the same song
@@ -368,21 +463,26 @@ class Downloader:
         # cleaned up after itself by deleting the song the other had just
         # saved. The second now waits, and then finds the song already there.
         with _lock_for(target_dir / basename):
-            already = _already_saved(target_dir, basename, video_id)
+            basename, already = _placement(target_dir, basename, video_id)
             if already is not None:
                 stage(100.0, 'Done')
                 return f'{rel_prefix}{already.name}'
             if cancel is not None and cancel.is_set():
                 raise DownloadStopped()
+            bench = _bench()
             try:
                 return self._fetch_and_seal(
-                    song, video_id, target_dir, rel_prefix, basename, stage, progress_cb, cancel,
+                    song, video_id, target_dir, rel_prefix, basename, stage, progress_cb,
+                    cancel, bench,
                 )
             except BaseException:
                 if cancel is not None and cancel.is_set():
-                    _drop_partials(target_dir, basename)
                     raise DownloadStopped() from None
                 raise
+            finally:
+                # Whatever the download left, finished or not. The music folder
+                # never saw any of it.
+                shutil.rmtree(bench, ignore_errors=True)
 
     def _fetch_and_seal(  # noqa: PLR0913, PLR0914, PLR0915
         self,
@@ -394,10 +494,17 @@ class Downloader:
         stage: Callable[[float, str], None],
         progress_cb: Optional[ProgressCallback],
         cancel: Optional[threading.Event] = None,
+        bench: Optional[Path] = None,
     ) -> str:
-        """Download, tag and seal one song. Called with its file name locked."""
+        """Download, tag and seal one song. Called with its file name locked.
 
-        out_template = str(target_dir / f'{basename}.%(ext)s')
+        Everything up to the seal happens on *bench*, a folder of this
+        download's own outside the music folder. The only thing that ever
+        arrives in *target_dir* is the finished container, and its lyrics.
+        """
+
+        work = Path(bench) if bench is not None else target_dir
+        out_template = str(work / f'{basename}.%(ext)s')
 
         def hook(data: dict[str, Any]) -> None:
             # Raised outside the try below on purpose: yt-dlp stops the
@@ -430,13 +537,19 @@ class Downloader:
                 logger.opt(exception=True).debug('progress hook error')
 
         ydl_opts = {
-            'format': 'bestaudio/best',
+            # AAC in MP4 when there is one, so it is kept as it comes rather
+            # than converted (see INTERNAL_FORMAT in api.py).
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',
             'outtmpl': out_template,
             'quiet': True,
             'noprogress': True,
             'logger': _YtdlpLogger(),
             'noplaylist': True,
-            'nocheckcertificate': True,
+            # Certificates are checked. They were not, on this one connection
+            # of all of them: the one that carries the signed-in YouTube
+            # session and fetches the player code that then gets run. Anyone
+            # on the same Wi-Fi could have read the first and replaced the
+            # second.
             'overwrites': True,
             # A partial file from an earlier attempt is not resumed: a retry
             # can match a different video, and the two would be spliced.
@@ -467,7 +580,7 @@ class Downloader:
             'postprocessors': [
                 {
                     'key': 'FFmpegExtractAudio',
-                    'preferredcodec': self.audio_format,
+                    'preferredcodec': _ENCODER_NAMES.get(self.audio_format, self.audio_format),
                     'preferredquality': self.audio_bitrate,
                 }
             ],
@@ -536,13 +649,21 @@ class Downloader:
         if cancel is not None and cancel.is_set():
             raise DownloadStopped()
 
-        final_path = target_dir / f'{basename}.{self.audio_format}'
+        final_path = work / f'{basename}.{self.audio_format}'
         if not final_path.exists():
-            # yt-dlp sometimes uses the upstream extension for opus/m4a
-            for candidate in target_dir.glob(f'{basename}.*'):
-                if candidate.is_file():
+            # yt-dlp sometimes keeps the upstream extension for opus/m4a.
+            # Compared by name rather than globbed: a title with brackets in
+            # it ("Song [Live]") is a pattern to glob, and matched nothing.
+            for candidate in sorted(work.iterdir()) if work.is_dir() else ():
+                if (
+                    candidate.is_file()
+                    and candidate.stem == basename
+                    and candidate.suffix.lower() in _AUDIO_SUFFIXES
+                ):
                     final_path = candidate
                     break
+        if not final_path.is_file():
+            raise RuntimeError('The download finished but left no audio file.')
 
         # ── Genre enrichment via iTunes Search API ──────────────
         if not song.get('genre'):
@@ -650,19 +771,27 @@ class Downloader:
             # in when the song had none.
             if artists:
                 meta['artists'] = list(artists)
-            sealed = vault.seal(
-                final_path, final_path.with_suffix(vault.SUFFIX), meta,
-            )
+            target = target_dir / f'{basename}{vault.SUFFIX}'
+            sealed = vault.seal(final_path, target, meta)
         except Exception as exc:
             logger.opt(exception=True).error('Could not seal {}', final_path)
             # Only what this attempt wrote. seal() puts a finished container
             # in place with one rename at the very end, so a .dnf already
             # there is an earlier, good copy of this song and it stays.
             final_path.unlink(missing_ok=True)
-            final_path.with_suffix(vault.SUFFIX + '.part').unlink(missing_ok=True)
+            (target_dir / f'{basename}{vault.SUFFIX}.part').unlink(missing_ok=True)
             raise RuntimeError(
                 'This song downloaded but could not be saved, so it was not kept.'
             ) from exc
+
+        # The lyrics file was written beside the plain copy on the bench. It
+        # belongs beside the song.
+        lyric = work / f'{basename}.lrc'
+        if work != target_dir and lyric.is_file():
+            try:
+                _move_beside(lyric, target_dir / lyric.name)
+            except OSError:
+                logger.opt(exception=True).warning('Could not keep the lyrics for {}', sealed)
         try:
             _remember(self.download_dir, sealed, song, video_id)
         except Exception:

@@ -995,30 +995,35 @@ def open_range(path: Path, start: int = 0, length: Optional[int] = None):
             raise StorageUnavailable('this song cannot be opened here')
         key = _derive(master, nonce)
 
-        total = max(0, size - base)
-        start = max(0, min(start, total))
-        remaining = total - start if length is None else min(length, total - start)
+    total = max(0, size - base)
+    start = max(0, min(start, total))
+    remaining = total - start if length is None else min(length, total - start)
 
-        # Begin on a block boundary so the keystream lines up, then drop the
-        # few bytes before the real start.
-        aligned = (start // BLOCK) * BLOCK
-        lead = start - aligned
-        f.seek(base + aligned)
-        at = aligned
-        while remaining > 0:
-            want = lead + remaining
+    # Begin on a block boundary so the keystream lines up, then drop the
+    # few bytes before the real start.
+    aligned = (start // BLOCK) * BLOCK
+    lead = start - aligned
+    at = aligned
+    # The file is opened for each piece, not held for the whole response. A
+    # paused player stops reading halfway through one, and the handle it held
+    # meant Windows would not let the song be deleted or repaired for as long
+    # as it sat there paused.
+    while remaining > 0:
+        want = lead + remaining
+        with open(path, 'rb') as f:
+            f.seek(base + at)
             chunk = f.read(min(1 << 18, want + (BLOCK - want % BLOCK) % BLOCK))
-            if not chunk:
-                break
-            clear = _xor(key, nonce, chunk, at)
-            at += len(chunk)
-            if lead:
-                clear = clear[lead:]
-                lead = 0
-            if len(clear) > remaining:
-                clear = clear[:remaining]
-            remaining -= len(clear)
-            yield clear
+        if not chunk:
+            break
+        clear = _xor(key, nonce, chunk, at)
+        at += len(chunk)
+        if lead:
+            clear = clear[lead:]
+            lead = 0
+        if len(clear) > remaining:
+            clear = clear[:remaining]
+        remaining -= len(clear)
+        yield clear
 
 
 PLAIN_EXTS = {'.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus'}
@@ -1498,9 +1503,16 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
         )
         return done
 
+    # Only what this app downloaded. Every download carries its video id in a
+    # tag of its own, so that is the test. This used to take every audio file
+    # in the folder: point the app at an existing Music folder and somebody's
+    # whole collection was turned into files only this one install can play,
+    # the originals deleted, their own playlists rewritten to match. A plain
+    # file beside its own container is ours too, left behind by a seal that
+    # could not delete it; that one is only ever removed once proved identical.
     plain = [
         p for p in root.rglob('*')
-        if p.is_file() and p.suffix.lower() in PLAIN_EXTS
+        if p.is_file() and p.suffix.lower() in PLAIN_EXTS and _made_here(p)
     ]
     if not plain:
         return done
@@ -1529,6 +1541,19 @@ def migrate(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
         done['sealed'], done['skipped'], done['failed'],
     )
     return done
+
+
+def _made_here(path: Path) -> bool:
+    """Whether a plain audio file is one of this app's own downloads."""
+
+    if path.with_suffix(SUFFIX).exists():
+        return True
+    try:
+        from . import library  # noqa: PLC0415  (circular at module level)
+
+        return bool(library._read_video_id_tag(path))
+    except Exception:
+        return False
 
 
 def _seal_pass(root, plain, done, on_progress, on_change) -> int:
