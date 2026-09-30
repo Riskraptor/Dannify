@@ -60,3 +60,12 @@ def test_storage_counts_the_library_and_clearing_keeps_music(tmp_path, monkeypat
     assert (music / 'A' / 'A - x.dnf').read_bytes() == b'x' * 1000
     assert (music / 'A' / 'A - x.lrc').read_text(encoding='utf-8') == '[00:01.00]mine'
     assert list((data / 'ytdlp-cache').iterdir()) == []
+
+
+def test_lyrics_are_not_written_for_a_song_that_is_gone(library):
+    gone = library / 'A' / 'A - deleted.dnf'
+    api._persist_lyrics(gone, 'A', 'deleted', '[00:01.00]la')
+    assert not gone.with_suffix('.lrc').exists()
+    here = library / 'A' / 'x.dnf'
+    api._persist_lyrics(here, 'A', 'x', '[00:01.00]la')
+    assert here.with_suffix('.lrc').read_text(encoding='utf-8') == '[00:01.00]la'

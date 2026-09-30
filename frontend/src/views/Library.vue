@@ -98,6 +98,8 @@
         show-added
         sortable
         deletable
+        selectable
+        selection-bar
         :sort-key="sortKey"
         :sort-dir="sortDir"
         @sort="setSort"

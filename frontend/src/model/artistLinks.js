@@ -52,6 +52,10 @@ function ensure() {
 }
 
 if (typeof window !== 'undefined') {
+  window.addEventListener('dannify:artists-refreshed', () => {
+    tries = 0
+    load()
+  })
   // A new artist in the library is a new name to find.
   window.addEventListener('dannify:library-changed', () => {
     if (!started) return

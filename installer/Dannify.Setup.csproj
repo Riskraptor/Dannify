@@ -40,7 +40,7 @@
     <Description>Dannify</Description>
     <Copyright>Dannify</Copyright>
     <!-- Stamped by packaging\build.ps1 from Backend\dannify\__init__.py. -->
-    <Version>4.1.0</Version>
+    <Version>4.1.1</Version>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <!-- The SDK appends the git commit to the product version by default.
          The source is private; its commit ids have no business in a file

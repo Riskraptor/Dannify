@@ -47,6 +47,7 @@ from . import lyrics_offsets
 from . import lyrics_publish
 from . import explorer
 from . import artist_links
+from . import details as details_mod
 from . import layout, m3u, providers, repair, spotify, streaming, support, updates, vault
 from .downloader import Downloader
 from .monitor import PlaylistMonitorDB, check_playlist
@@ -1328,6 +1329,11 @@ def _persist_lyrics(full: Path, artist: str, title: str, text: str) -> None:
     """Write *text* as the .lrc for this track in the user-chosen location."""
     if not text:
         return
+    # The song itself has to be there. Lyrics for one deleted a moment ago
+    # (still on screen, still paused) used to be written beside its old name,
+    # leaving a lyrics file behind with nothing to belong to.
+    if not full.is_file():
+        return
     mode = _lyrics_storage_mode()
     try:
         if mode == 'central':
@@ -1914,6 +1920,93 @@ async def clear_caches_endpoint() -> dict[str, Any]:
 
     await asyncio.to_thread(clear)
     return {'cleared': True}
+
+
+# ---------------------------------------------------------------------------
+# Refreshing saved songs' details, and artists'
+# ---------------------------------------------------------------------------
+
+_details_lock: Optional[asyncio.Lock] = None
+
+
+@router.post('/api/library/details')
+async def refresh_details_endpoint(
+    payload: Optional[dict[str, Any]] = Body(None),
+) -> dict[str, Any]:
+    """Fetch the details of saved songs again, around the same audio.
+
+    ``{"files": [...]}``. Runs in the background, one song at a time; the
+    window hears how it goes over the websocket (``type: details``).
+    """
+
+    global _details_lock
+    body = payload if isinstance(payload, dict) else {}
+    if not vault.ready():
+        raise HTTPException(status_code=409, detail='storage_unavailable')
+    wanted = [f for f in (body.get('files') or []) if isinstance(f, str)][:2000]
+    paths = [(f, p) for f, p in ((f, _library_file(f)) for f in wanted) if p is not None and p.is_file()]
+    if not paths:
+        raise HTTPException(status_code=400, detail='no_files')
+    if _details_lock is None:
+        _details_lock = asyncio.Lock()
+    root = Path(state.download_dir).resolve()
+    providers_ = list(getattr(state.downloader, 'lyrics_providers', None) or [])
+
+    async def run() -> None:
+        async with _details_lock:
+            updated = failed = 0
+            reasons: dict[str, int] = {}
+            for index, (rel, path) in enumerate(paths, 1):
+                outcome, why = await asyncio.to_thread(details_mod.refresh, root, path, providers_)
+                if outcome == details_mod.UPDATED:
+                    updated += 1
+                else:
+                    failed += 1
+                    reasons[why] = reasons.get(why, 0) + 1
+                await state.connections.broadcast({
+                    'type': 'details', 'file': rel, 'state': outcome,
+                    'done': index, 'total': len(paths),
+                })
+                # The library shows each one as it lands, in batches.
+                if outcome == details_mod.UPDATED and index % 10 == 0:
+                    library_mod.invalidate_cache()
+                    await state.connections.broadcast({'type': 'library_changed'})
+            library_mod.invalidate_cache()
+            await state.connections.broadcast({
+                'type': 'details', 'finished': True,
+                'updated': updated, 'failed': failed, 'reasons': reasons,
+            })
+            await state.connections.broadcast({'type': 'library_changed'})
+
+    task = asyncio.create_task(run())
+    task.add_done_callback(
+        lambda t: t.cancelled() or not t.exception()
+        or logger.opt(exception=t.exception()).error('details refresh crashed')
+    )
+    return {'queued': len(paths)}
+
+
+@router.post('/api/artists-online/refresh')
+async def refresh_artists_endpoint(
+    payload: Optional[dict[str, Any]] = Body(None),
+) -> dict[str, Any]:
+    """Look artists up again: their picture and their online page.
+
+    ``{"names": [...]}``, or every artist in the library when there are none.
+    """
+
+    body = payload if isinstance(payload, dict) else {}
+    names = [n for n in (body.get('names') or []) if isinstance(n, str) and n.strip()]
+    if not names:
+        base = _require_download_dir()
+        names = [a['name'] for a in await asyncio.to_thread(library_mod.artists, base)]
+    for name in names:
+        known = artist_links._links.get(library_mod.fold(name)) or {}
+        if known.get('id'):
+            explorer.forget_artist(known['id'])
+    await asyncio.to_thread(artist_links.forget, names)
+    links, pending = await asyncio.to_thread(artist_links.known, names)
+    return {'links': links, 'pending': pending}
 
 
 @router.get('/api/artists-online/links')

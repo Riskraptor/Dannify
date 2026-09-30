@@ -232,6 +232,15 @@ function clearCaches() {
   return API.post('/api/storage/clear-caches')
 }
 
+// Fetch saved songs' details again, around the same audio (see details.py).
+function refreshDetails(files) {
+  return API.post('/api/library/details', { files })
+}
+// Look artists up again: their picture and their online page.
+function refreshArtists(names) {
+  return API.post('/api/artists-online/refresh', { names })
+}
+
 function getArtistLinks() {
   return API.get('/api/artists-online/links')
 }
@@ -419,6 +428,8 @@ export default {
   getArtistOnline,
   getStorage,
   clearCaches,
+  refreshDetails,
+  refreshArtists,
   exploreSearch,
   exploreArtist,
   exploreAlbum,

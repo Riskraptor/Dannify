@@ -980,7 +980,8 @@ def open_range(path: Path, start: int = 0, length: Optional[int] = None):
         nonce = f.read(NONCE_LEN)
         head_len = int.from_bytes(f.read(4), 'little')
         base = 4 + NONCE_LEN + 4 + head_len
-        size = os.fstat(f.fileno()).st_size
+        first = os.fstat(f.fileno())
+        size = first.st_size
         # The key that opened this file last time, when it has not changed
         # since: a seek is a new range request, and trying every key against
         # the header on each one would be all the work of opening it again.
@@ -1011,6 +1012,12 @@ def open_range(path: Path, start: int = 0, length: Optional[int] = None):
     while remaining > 0:
         want = lead + remaining
         with open(path, 'rb') as f:
+            # Replaced while it played (its details were refreshed): the rest
+            # of the old song is not in this file any more, and reading on
+            # would play the new one's bytes through the old one's key.
+            now = os.fstat(f.fileno())
+            if now.st_size != first.st_size or now.st_mtime_ns != first.st_mtime_ns:
+                break
             f.seek(base + at)
             chunk = f.read(min(1 << 18, want + (BLOCK - want % BLOCK) % BLOCK))
         if not chunk:

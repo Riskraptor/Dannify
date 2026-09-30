@@ -247,6 +247,38 @@
         </div>
       </template>
     </VirtualList>
+
+    <!-- What can be done with the ticked songs. It used to take a right-click
+         on a selection nobody could see how to make; now ticking a box brings
+         this up, and it stays in view while the list scrolls. -->
+    <transition name="selbar">
+      <div v-if="selectionBar && selectedRows.length" class="selbar" role="toolbar" @mousedown.stop>
+        <span class="selbar-count">{{ t('selection.count', { count: selectedRows.length }) }}</span>
+        <button class="selbar-btn" @click="playRows(selectedRows, 0, { toggle: false })">
+          <Icon icon="ph:play-fill" class="h-4 w-4" />
+          <span>{{ t('actions.play') }}</span>
+        </button>
+        <button class="selbar-btn" @click="addToQueue(selectedRows)">
+          <Icon icon="ph:list-plus" class="h-4 w-4" />
+          <span>{{ t('actions.addToQueue') }}</span>
+        </button>
+        <button v-if="selectedLocals.length" class="selbar-btn" @click="refreshRowDetails(selectedLocals)">
+          <Icon icon="ph:arrows-clockwise" class="h-4 w-4" />
+          <span>{{ t('details.refresh') }}</span>
+        </button>
+        <button
+          v-if="deletable && selectedLocals.length"
+          class="selbar-btn is-danger"
+          @click="deleteSelected"
+        >
+          <Icon icon="ph:trash" class="h-4 w-4" />
+          <span>{{ t('common.delete') }}</span>
+        </button>
+        <button class="selbar-close" :title="t('selection.clear')" @click="clearSelection">
+          <Icon icon="ph:x-bold" class="h-4 w-4" />
+        </button>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -273,6 +305,8 @@ import {
   needsRepair,
   offerRepair,
   repairRows,
+  addToQueue,
+  refreshRowDetails,
 } from '/src/model/tracks'
 import { repairItemOf, reasonText } from '/src/model/repair'
 import { useI18n, currentLocale } from '/src/i18n'
@@ -289,6 +323,8 @@ const props = defineProps({
   sortKey: { type: String, default: '' },
   sortDir: { type: String, default: 'asc' },
   selectable: { type: Boolean, default: false }, // checkbox column
+  // A bar of actions for the ticked rows (play, queue, refresh, delete).
+  selectionBar: { type: Boolean, default: false },
   deletable: { type: Boolean, default: false }, // Delete key removes local files
   stickyOffset: { type: Number, default: 0 },
   // Custom play handler(index). Defaults to "replace the queue with rows".
@@ -344,6 +380,11 @@ const gridCols = computed(() => {
 
 // ----- selection ------------------------------------------------------------
 const selectedRows = computed(() => shown.value.filter((r) => selected.value.has(r.key)))
+const selectedLocals = computed(() => selectedRows.value.filter((r) => r.kind === 'local' && r.file))
+
+async function deleteSelected() {
+  if (await deleteRows(selectedLocals.value)) clearSelection()
+}
 const allSelected = computed(
   () => shown.value.length > 0 && selected.value.size === shown.value.length
 )
@@ -630,6 +671,77 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
 .tt {
   position: relative;
   outline: none;
+}
+.selbar {
+  position: sticky;
+  bottom: 14px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: 100%;
+  margin: 10px auto 0;
+  padding: 6px 6px 6px 16px;
+  border-radius: 999px;
+  background: rgb(var(--c-elev));
+  border: 1px solid rgb(var(--c-tint) / 0.1);
+  box-shadow: var(--shadow-pop);
+}
+.selbar-count {
+  margin-right: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.selbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: rgb(var(--c-fg) / 0.85);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.selbar-btn:hover {
+  background: rgb(var(--c-tint) / 0.08);
+  color: rgb(var(--c-fg));
+}
+.selbar-btn.is-danger:hover {
+  color: rgb(var(--c-danger));
+}
+.selbar-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 2px;
+  border-radius: 999px;
+  color: rgb(var(--c-fg) / 0.6);
+}
+.selbar-close:hover {
+  background: rgb(var(--c-tint) / 0.08);
+  color: rgb(var(--c-fg));
+}
+/* Narrow: icons only, so the bar never runs off the edge. */
+@media (max-width: 640px) {
+  .selbar-btn span {
+    display: none;
+  }
+}
+.selbar-enter-active,
+.selbar-leave-active {
+  transition: opacity 0.16s ease, transform 0.18s var(--ease-out);
+}
+.selbar-enter-from,
+.selbar-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
 .tt-head,
 .tt-row {

@@ -136,6 +136,11 @@ API.ws_onmessage((event) => {
     window.dispatchEvent(new CustomEvent('dannify:repair', { detail: data }))
     return
   }
+  // Saved songs having their details fetched again (see details.js).
+  if (data && data.type === 'details') {
+    window.dispatchEvent(new CustomEvent('dannify:details', { detail: data }))
+    return
+  }
   // A .dnf was double-clicked in Explorer. The shell worked out how to
   // reach it and sent the finished track down here, so there is nothing to
   // look up: play it.
