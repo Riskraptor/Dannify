@@ -55,6 +55,15 @@ def init(data_dir: Path) -> None:
         logger.opt(exception=True).debug('artist links unreadable; starting afresh')
 
 
+def forget(names: list[str]) -> None:
+    """Look these artists up again (their picture or page changed)."""
+
+    with _lock:
+        for name in names:
+            _links.pop(fold(name), None)
+    _save()
+
+
 def clear() -> None:
     """Forget every artist's link and picture; they are found again."""
 

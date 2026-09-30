@@ -6,6 +6,10 @@
       :subtitle="lib.artists.value.length ? t('artists.count', { count: lib.artists.value.length }) : t('artists.subtitle')"
     >
       <template v-if="lib.artists.value.length" #actions>
+        <button class="btn btn-pill h-8 text-xs" :disabled="refreshing" @click="refreshPictures">
+          <Icon icon="ph:arrows-clockwise" class="h-4 w-4" :class="{ 'animate-spin': refreshing }" />
+          {{ t('details.refreshPictures') }}
+        </button>
         <div class="filter">
           <Icon icon="ph:magnifying-glass" class="filter-icon" />
           <input
@@ -93,6 +97,7 @@ import { localRow, playRows, shuffleRows, onArtistPage } from '/src/model/tracks
 import { onRefresh } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
 import { useArtistLinks } from '/src/model/artistLinks'
+import { refreshArtists } from '/src/model/details'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
 import MediaCard from '/src/components/MediaCard.vue'
 import TrackTable from '/src/components/ui/TrackTable.vue'
@@ -106,6 +111,16 @@ const query = ref('')
 
 lib.ensureLoaded()
 const artistLinks = useArtistLinks()
+const refreshing = ref(false)
+async function refreshPictures() {
+  refreshing.value = true
+  try {
+    await refreshArtists([])
+    await artistLinks.load()
+  } finally {
+    refreshing.value = false
+  }
+}
 onRefresh(() => lib.refresh())
 
 const filtered = computed(() => {
@@ -139,6 +154,11 @@ function artistMenu(a) {
     { label: t('actions.shuffle'), icon: 'ph:shuffle', action: () => shuffleRows(rowsFor(a.name)) },
     { divider: true },
     { label: t('actions.openArtist'), icon: 'ph:user', action: () => open(a) },
+    {
+      label: t('details.refresh'),
+      icon: 'ph:arrows-clockwise',
+      action: () => refreshArtists([a.name], rowsFor(a.name).map((r) => r.file)),
+    },
     {
       label: t('actions.searchOnline'),
       icon: 'ph:globe',

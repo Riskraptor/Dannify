@@ -72,6 +72,13 @@ def _cache_get(key: str, refresh=None) -> Optional[Any]:
     return value
 
 
+def forget_artist(browse_id: str) -> None:
+    """Drop an artist's cached page, so the next visit asks YouTube again."""
+
+    with _lock:
+        _cache.pop(f'artist::{browse_id}', None)
+
+
 def _cache_put(key: str, value: Any) -> None:
     with _lock:
         _cache[key] = (time.time(), value)

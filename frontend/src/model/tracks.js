@@ -9,6 +9,7 @@ import { confirmDialog } from '/src/model/dialog'
 import { desktop } from '/src/desktop/bridge'
 import { copyText } from '/src/model/clipboard'
 import { repairFiles, repairStateOf } from '/src/model/repair'
+import { refreshDetailsFor } from '/src/model/details'
 import { t } from '/src/i18n'
 
 // ---------------------------------------------------------------------------
@@ -300,6 +301,23 @@ export function downloadRows(rows) {
   // thing to dismiss.
 }
 
+/**
+ * Fetch these saved songs' details again (title, artists, album, artwork).
+ * The one that is playing is left for later: its file is rewritten, and the
+ * rest of it would stop mid-song.
+ */
+export function refreshRowDetails(rows) {
+  const player = usePlayer()
+  const playing = player.currentTrack.value && player.currentTrack.value.file
+  const files = rows.filter((r) => r.kind === 'local' && r.file && !needsRepair(r)).map((r) => r.file)
+  const now = files.filter((f) => f !== playing)
+  if (files.length && !now.length) {
+    toast(t('details.playingSkipped'), { icon: 'ph:info' })
+    return
+  }
+  return refreshDetailsFor(now)
+}
+
 export async function deleteRows(rows) {
   const files = rows.filter((r) => r.kind === 'local' && r.file)
   if (!files.length) return false
@@ -526,6 +544,15 @@ export function trackMenu(rows, ctx = {}) {
         if (await copyText(link)) toast(t('actions.linkCopied'), { icon: 'ph:link' })
       },
     },
+    locals.length > 0 &&
+      !ctx.queue && {
+        label:
+          locals.length === 1
+            ? t('details.refreshOne')
+            : t('details.refreshMany', { count: locals.length }),
+        icon: 'ph:arrows-clockwise',
+        action: () => refreshRowDetails(locals),
+      },
     locals.length > 0 &&
       !ctx.queue && { divider: true },
     locals.length > 0 &&

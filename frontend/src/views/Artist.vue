@@ -45,6 +45,15 @@
           <button class="icon-btn is-round h-10 w-10" :title="t('artist.shuffle')" @click="shuffleRows(allRows)">
             <Icon icon="ph:shuffle" class="h-6 w-6" />
           </button>
+          <button
+            class="btn btn-pill"
+            :title="t('details.artistHint')"
+            :disabled="detailsRunning"
+            @click="refreshThisArtist"
+          >
+            <Icon icon="ph:arrows-clockwise" class="h-4 w-4" :class="{ 'animate-spin': detailsRunning }" />
+            {{ t('details.refresh') }}
+          </button>
         </template>
       </CollectionHero>
 
@@ -59,6 +68,8 @@
           :sticky-offset="56"
           show-album
           deletable
+          selectable
+          selection-bar
           :on-play="(i) => playRows(allRows, i)"
         />
       </section>
@@ -178,6 +189,7 @@ import {
 } from '/src/model/tracks'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 import { useArtistLinks } from '/src/model/artistLinks'
+import { refreshArtists, detailsRunning } from '/src/model/details'
 import { onRefresh, onLibraryChanged } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
 import CollectionHero from '/src/components/ui/CollectionHero.vue'
@@ -299,6 +311,17 @@ const shownUnsaved = computed(() => unsavedRows.value.slice(0, moreLimit.value))
 const GHOST_WIDTHS = ['72%', '54%', '83%', '61%', '77%', '48%']
 function ghostWidth(n) {
   return { width: GHOST_WIDTHS[(n - 1) % GHOST_WIDTHS.length] }
+}
+
+// Their picture and online page looked up again, and every saved song of
+// theirs brought up to date: one button for "this artist looks wrong".
+async function refreshThisArtist() {
+  if (!artist.value) return
+  const playing = player.currentTrack.value && player.currentTrack.value.file
+  const files = allRows.value.map((r) => r.file).filter((f) => f && f !== playing)
+  await refreshArtists([artist.value.name], files)
+  await artistLinks.load()
+  loadOnline(true)
 }
 
 onMounted(async () => {
