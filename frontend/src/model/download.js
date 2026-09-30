@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import API from '/src/model/api'
 import { toast } from '/src/model/toast'
 import { t } from '/src/i18n'
-import { useSettingsManager } from '/src/model/settings'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 
 const STATUS = {
@@ -14,6 +13,25 @@ const STATUS = {
 }
 
 const downloadQueue = ref([])
+
+// Songs taken off the list a moment ago. A progress message the server had
+// already sent for one used to arrive after the removal and put the row
+// straight back, stuck on "Downloading" for ever, since the server had
+// stopped it. Asking for the song again clears it.
+const removedIds = new Map()
+const REMOVED_FOR = 60000
+
+function wasRemoved(song) {
+  const id = song && song.song_id
+  if (id === undefined) return false
+  const at = removedIds.get(id)
+  if (at === undefined) return false
+  if (Date.now() - at > REMOVED_FOR) {
+    removedIds.delete(id)
+    return false
+  }
+  return true
+}
 
 class DownloadItem {
   constructor(song) {
@@ -29,6 +47,9 @@ class DownloadItem {
   }
   setDownloaded() {
     this.web_status = STATUS.DOWNLOADED
+    // When it finished. Once the library has been read after this, the
+    // library is the authority on whether the song is still there.
+    this.completedAt = Date.now()
   }
   setError() {
     this.web_status = STATUS.ERROR
@@ -52,6 +73,9 @@ class DownloadItem {
   isErrored() {
     return this.web_status === STATUS.ERROR
   }
+  isPending() {
+    return this.web_status === STATUS.QUEUED || this.web_status === STATUS.DOWNLOADING
+  }
   wsUpdate(message) {
     this.progress = message.progress
     this.message = message.message
@@ -65,15 +89,15 @@ export function useProgressTracker() {
     )
   }
   function appendSong(song) {
+    removedIds.delete(song && song.song_id)
     let downloadItem = new DownloadItem(song)
     downloadQueue.value.push(downloadItem)
   }
   function removeSong(song) {
-    console.log('removing', song, song.song_id)
+    removedIds.set(song.song_id, Date.now())
     downloadQueue.value = downloadQueue.value.filter(
       (downloadItem) => downloadItem.song.song_id !== song.song_id
     )
-    console.log(downloadQueue.value)
   }
 
   function getBySong(song) {
@@ -132,10 +156,15 @@ API.ws_onmessage((event) => {
       // ignore
     }
     window.dispatchEvent(new CustomEvent('dannify:library-changed'))
+    // Back after the connection dropped: whatever finished or failed in the
+    // gap was said to nobody, and its row would sit at its last percentage.
+    if (data.reconnected) _hydrateFromServer(true)
     if (!data.song) return
   }
+  if (!data || !data.song) return
   let item = progressTracker.getBySong(data.song)
   if (!item) {
+    if (wasRemoved(data.song)) return
     progressTracker.appendSong(data.song)
     item = progressTracker.getBySong(data.song)
     if (!item) return
@@ -161,16 +190,37 @@ API.ws_onerror((event) => {
   console.log('websocket error:', event)
 })
 
-async function _hydrateFromServer() {
+// Read the server's list of jobs. With `update`, rows already shown are
+// brought up to date too: that is the catch-up after a dropped connection.
+async function _hydrateFromServer(update = false) {
   try {
     const res = await API.getQueue()
     const jobs = res.data || []
+    if (update) {
+      // Waiting or downloading here, and gone from the server (it restarted
+      // while the connection was down): nothing is coming for it. Said so,
+      // with the retry every failed download has, rather than left on its
+      // last percentage, which also stopped it being asked for again.
+      const live = new Set(jobs.filter((j) => j && j.song).map((j) => j.song.song_id))
+      for (const item of downloadQueue.value) {
+        if (item.isPending() && !live.has(item.song.song_id)) {
+          item.message = ''
+          item.setError()
+        }
+      }
+    }
     for (const job of jobs) {
-      if (downloadQueue.value.some((i) => i.song.song_id === job.song.song_id))
+      if (!job || !job.song) continue
+      const shown = downloadQueue.value.find((i) => i.song.song_id === job.song.song_id)
+      if (shown) {
+        if (update) _applyJob(shown, job)
         continue
+      }
+      if (wasRemoved(job.song)) continue
       const item = new DownloadItem(job.song)
       if (job.status === 'done') {
         item.setDownloaded()
+        item.completedAt = 0 // finished in an earlier session
         if (job.filename) {
           item.setWebURL(API.downloadFileURL(job.filename))
           item.setFilename(job.filename)
@@ -193,14 +243,30 @@ async function _hydrateFromServer() {
   }
 }
 
+function _applyJob(item, job) {
+  if (job.status === 'done') {
+    item.progress = 100
+    if (job.filename) {
+      item.setWebURL(API.downloadFileURL(job.filename))
+      item.setFilename(job.filename)
+    }
+    if (!item.isDownloaded()) item.setDownloaded()
+  } else if (job.status === 'error') {
+    item.message = job.message || ''
+    item.setError()
+  } else if (job.status === 'downloading') {
+    item.progress = job.progress || 0
+    item.message = job.message || ''
+    if (!item.isDownloading()) item.setDownloading()
+  }
+}
+
 _hydrateFromServer()
 
 export function useDownloadManager() {
   const loading = ref(false)
-  const settingsManager = useSettingsManager()
   function fromURL(url) {
     const isPlaylistURL = (url || '').includes('://open.spotify.com/playlist/')
-    const generateM3u = settingsManager.settings.value.generate_m3u !== false
     loading.value = true
     return API.open(url)
       .then((res) => {
@@ -219,7 +285,6 @@ export function useDownloadManager() {
           return API.downloadBatch({
             songs,
             playlist_url: isPlaylistURL ? url : '',
-            generate_m3u: generateM3u,
           }).catch((err) => {
             console.log('Batch submit failed:', err.message)
             markFailed(songs)
@@ -253,7 +318,6 @@ export function useDownloadManager() {
   // Download an explicit list of songs (e.g. a user-picked subset of a
   // playlist/album from a collection page).
   function downloadSongs(songs, playlistUrl = '') {
-    const generateM3u = settingsManager.settings.value.generate_m3u !== false
     const list = Array.isArray(songs) ? songs : [songs]
     if (list.length === 0) return Promise.resolve()
     for (const song of list) {
@@ -267,7 +331,6 @@ export function useDownloadManager() {
     return API.downloadBatch({
       songs: list,
       playlist_url: isPlaylistURL ? playlistUrl : '',
-      generate_m3u: generateM3u,
     }).catch((err) => {
       console.log('Batch submit failed:', err.message)
       markFailed(list)
@@ -351,6 +414,8 @@ export function useDownloadManager() {
   async function clearAll() {
     try {
       await API.clearQueue()
+      const now = Date.now()
+      for (const item of downloadQueue.value) removedIds.set(item.song.song_id, now)
       downloadQueue.value = []
       return true
     } catch {

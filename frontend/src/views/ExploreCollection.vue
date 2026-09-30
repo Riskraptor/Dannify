@@ -120,6 +120,7 @@ import {
   addToQueue,
   isRowCurrent,
   isRowDownloaded,
+  isRowDownloading,
 } from '/src/model/tracks'
 import { openContextMenu } from '/src/model/contextMenu'
 import { copyText } from '/src/model/clipboard'
@@ -183,9 +184,12 @@ const rows = computed(() => {
   })
 })
 
+// Songs neither saved nor already on their way. Counting the ones on their
+// way kept "Download all" up during the batch, and pressing it again sent
+// every one of them a second time.
 const pendingCount = computed(() => {
   void libIndex.byVideoId.value
-  return rows.value.filter((r) => !isRowDownloaded(r)).length
+  return rows.value.filter((r) => !isRowDownloaded(r) && !isRowDownloading(r)).length
 })
 
 const totalDuration = computed(() => {

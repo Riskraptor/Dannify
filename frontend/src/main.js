@@ -10,6 +10,7 @@ import router from './router/index'
 import './model/theme'
 import { installShortcuts } from './desktop/shortcuts'
 import { installDesktopIntegration } from './desktop/integration'
+import { startArtAccent } from './model/artAccent'
 
 import './index.css'
 
@@ -21,3 +22,4 @@ app.use(router)
 installShortcuts()
 installDesktopIntegration()
 app.mount('#app')
+startArtAccent()

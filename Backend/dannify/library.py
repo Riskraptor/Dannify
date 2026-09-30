@@ -8,6 +8,7 @@ mtime), so newly downloaded tracks show up without a restart.
 
 from __future__ import annotations
 
+import stat as _stat
 import threading
 from pathlib import Path
 from typing import Any, Optional
@@ -20,21 +21,38 @@ from mutagen import File as MutagenFile
 _AUDIO_EXTS = {'.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac', '.opus', '.dnf'}
 
 _lock = threading.Lock()
+# One scan at a time. The window asks for the songs and the artists together,
+# and both used to read every tag in the folder side by side, each doing the
+# whole job; on a big library that doubled the wait for both.
+_build_lock = threading.Lock()
 _cache: dict[str, Any] = {}
-_cache_signature: Optional[tuple[int, float]] = None
+_cache_signature: Optional[tuple] = None
 
 
-def _signature(base: Path) -> tuple[int, float]:
+def _signature(base: Path) -> tuple[int, float, int]:
+    """File count, newest change, and a digest of every name, size and time.
+
+    Count and newest time alone missed a rename in Explorer: same number of
+    files, nothing newer. The list went on offering the old name, and playing
+    it said the file had been moved or deleted.
+    """
+
     count = 0
     latest = 0.0
+    digest = 0
     for p in base.rglob('*'):
-        if p.is_file() and p.suffix.lower() in _AUDIO_EXTS:
-            count += 1
-            try:
-                latest = max(latest, p.stat().st_mtime)
-            except OSError:
-                pass
-    return count, latest
+        if p.suffix.lower() not in _AUDIO_EXTS:
+            continue
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if not _stat.S_ISREG(st.st_mode):
+            continue
+        count += 1
+        latest = max(latest, st.st_mtime)
+        digest ^= hash((str(p), st.st_size, st.st_mtime_ns))
+    return count, latest, digest
 
 
 def _first(tag: Any) -> str:
@@ -242,9 +260,7 @@ def _read_video_id_tag(path: Path) -> str:
 
 
 def _norm_name(name: str) -> str:
-    import re as _re
-
-    return _re.sub(r'[^a-z0-9 ]+', '', name.casefold()).strip()
+    return fold(name)
 
 
 def _similar_token(a: str, b: str) -> bool:
@@ -289,6 +305,12 @@ def _same_artist(a: str, b: str) -> bool:
     if not ta or not tb:
         return False
     short, long = (ta, tb) if len(ta) <= len(tb) else (tb, ta)
+    # A one-word name is not a shortened form of a longer one. Treating it as
+    # one filed Drake Bell under Drake, Future Islands under Future and Travis
+    # Scott under Travis. A longer prefix still is ("Stephen Kasolo" and
+    # "Stephen Kasolo Kitole"), and a one-letter slip in one word still is.
+    if len(short) == 1 and len(long) > 1:
+        return False
     # Every token of the shorter name must match the aligned token of the
     # longer one (allowing a one-char typo on the last compared token).
     for i, tok in enumerate(short):
@@ -322,6 +344,52 @@ def _canonicalize_artists(names: list[str]) -> dict[str, str]:
     return canon
 
 
+def _pick_cover(holder: dict[str, Any], tr: dict[str, Any]) -> None:
+    # The picture of an artist or an album comes from one of its tracks.
+    # It used to be the first one found, broken or not, so an artist whose
+    # first song would not play showed a grey square however many good
+    # ones they had. A track that plays wins; 'cover_v' changes whenever
+    # that file does, so a repaired song's picture is fetched afresh
+    # instead of the failure being remembered.
+    if holder.get('_cover_ok') or ('cover' in holder and tr.get('problem')):
+        return
+    holder['cover'] = tr['file']
+    holder['cover_v'] = int(tr.get('added') or 0)
+    holder['_cover_ok'] = not tr.get('problem')
+
+
+def _artist_entry(name: str, members: list[dict[str, Any]]) -> dict[str, Any]:
+    """One artist's page: their tracks in albums, and a picture."""
+
+    entry: dict[str, Any] = {'name': name, 'count': 0, 'albums': {}}
+    for tr in members:
+        _pick_cover(entry, tr)
+        entry['count'] += 1
+        album_name = tr['album'] or ''
+        # A "single" often tags album == title; bucket those together so the
+        # artist view isn't a wall of one-track albums.
+        if not album_name or album_name.strip().lower() == tr['title'].strip().lower():
+            album_name = 'Singles'
+        album = entry['albums'].setdefault(album_name, {'name': album_name, 'tracks': []})
+        _pick_cover(album, tr)
+        album['tracks'].append(tr)
+
+    albums = []
+    for _, album in sorted(entry['albums'].items(), key=lambda kv: kv[0].lower()):
+        album['tracks'].sort(
+            key=lambda t: (t['track_number'] or 999, t['title'].lower())
+        )
+        album.pop('_cover_ok', None)
+        albums.append(album)
+    return {
+        'name': name,
+        'count': entry['count'],
+        'cover': entry.get('cover', ''),
+        'cover_v': entry.get('cover_v', 0),
+        'albums': albums,
+    }
+
+
 def _build(base: Path) -> dict[str, Any]:
     tracks: list[dict[str, Any]] = []
     if base.exists():
@@ -342,53 +410,21 @@ def _build(base: Path) -> dict[str, Any]:
         [tr['artist'] or 'Unknown Artist' for tr in tracks]
     )
 
-    def pick_cover(holder: dict[str, Any], tr: dict[str, Any]) -> None:
-        # The picture of an artist or an album comes from one of its tracks.
-        # It used to be the first one found, broken or not, so an artist whose
-        # first song would not play showed a grey square however many good
-        # ones they had. A track that plays wins; 'cover_v' changes whenever
-        # that file does, so a repaired song's picture is fetched afresh
-        # instead of the failure being remembered.
-        if holder.get('_cover_ok') or ('cover' in holder and tr.get('problem')):
-            return
-        holder['cover'] = tr['file']
-        holder['cover_v'] = int(tr.get('added') or 0)
-        holder['_cover_ok'] = not tr.get('problem')
-
-    artists: dict[str, dict[str, Any]] = {}
+    groups: dict[str, list[dict[str, Any]]] = {}
     for tr in tracks:
         raw = tr['artist'] or 'Unknown Artist'
         name = canon.get(raw, raw)
-        entry = artists.setdefault(name, {'name': name, 'count': 0, 'albums': {}})
-        pick_cover(entry, tr)
-        entry['count'] += 1
-        album_name = tr['album'] or ''
-        # A "single" often tags album == title; bucket those together so the
-        # artist view isn't a wall of one-track albums.
-        if not album_name or album_name.strip().lower() == tr['title'].strip().lower():
-            album_name = 'Singles'
-        album = entry['albums'].setdefault(album_name, {'name': album_name, 'tracks': []})
-        pick_cover(album, tr)
-        album['tracks'].append(tr)
+        # Which artist page the track is on. The window needs it: playing an
+        # artist from their card used to pick tracks by the exact tag, so a
+        # song tagged "BENSOUL" sat on Bensoul's page and was left out when
+        # Bensoul was played.
+        tr['group'] = name
+        groups.setdefault(name, []).append(tr)
 
-    artist_list = []
-    for name, entry in sorted(artists.items(), key=lambda kv: kv[0].lower()):
-        albums = []
-        for aname, album in sorted(
-            entry['albums'].items(), key=lambda kv: kv[0].lower()
-        ):
-            album['tracks'].sort(
-                key=lambda t: (t['track_number'] or 999, t['title'].lower())
-            )
-            album.pop('_cover_ok', None)
-            albums.append(album)
-        artist_list.append({
-            'name': name,
-            'count': entry['count'],
-            'cover': entry['cover'],
-            'cover_v': entry['cover_v'],
-            'albums': albums,
-        })
+    artist_list = [
+        _artist_entry(name, members)
+        for name, members in sorted(groups.items(), key=lambda kv: kv[0].lower())
+    ]
 
     # A track that will not play is not a downloaded copy of anything. Left
     # in these, every play of that song from search or home was sent to the
@@ -413,13 +449,27 @@ def _build(base: Path) -> dict[str, Any]:
     }
 
 
-_LOCATE_KEY_RE = __import__('re').compile(r'[^a-z0-9]+')
+_FOLD_RE = __import__('re').compile(r'[\W_]+')
+
+
+def fold(text: str) -> str:
+    """Lower case, accents off, anything but a letter or digit a space.
+
+    Letters in any script. This used to keep a to z and 0 to 9 only, which
+    turned every Japanese, Korean, Cyrillic or Arabic title into nothing at
+    all: two such songs had the same empty key, so asking for one could play
+    the other, and every one of them showed as already downloaded.
+    """
+
+    import unicodedata
+
+    decomposed = unicodedata.normalize('NFKD', (text or '').casefold())
+    bare = ''.join(c for c in decomposed if not unicodedata.combining(c))
+    return _FOLD_RE.sub(' ', bare).strip()
 
 
 def _locate_key(artist: str, title: str) -> str:
-    a = _LOCATE_KEY_RE.sub(' ', (artist or '').casefold()).strip()
-    t = _LOCATE_KEY_RE.sub(' ', (title or '').casefold()).strip()
-    return f'{a}|{t}'
+    return f'{fold(artist)}|{fold(title)}'
 
 
 def locate(
@@ -444,6 +494,8 @@ def locate(
             return _track_for_file(data, f)
     if artist or title:
         k = _locate_key(artist, title)
+        if not k.split('|', 1)[1]:
+            return None  # no title to go on: anything would match
         f = data['by_key'].get(k)
         if f:
             return _track_for_file(data, f)
@@ -474,18 +526,36 @@ def _track_for_file(
 
 def _get(base: Path) -> dict[str, Any]:
     global _cache, _cache_signature
-    sig = _signature(base)
+    # The folder is part of the key: two empty folders look identical.
+    sig = (str(base), _signature(base))
     with _lock:
         if _cache_signature == sig and _cache:
             return _cache
-    built = _build(base)
-    with _lock:
-        _cache = built
-        _cache_signature = sig
+    with _build_lock:
+        # Whoever held the lock may have just built exactly this.
+        with _lock:
+            if _cache_signature == sig and _cache:
+                return _cache
+        # Keyed by what the folder looked like BEFORE the scan. A file that
+        # changes during it moves the fingerprint, so the next call scans
+        # again instead of keeping a half-finished picture.
+        built = _build(base)
+        with _lock:
+            _cache = built
+            _cache_signature = sig
     return built
 
 
-def signature(base: Path) -> tuple[int, float]:
+def served_signature(base: Path) -> Optional[tuple]:
+    """The fingerprint of the folder as it was last read for the window."""
+
+    with _lock:
+        if _cache_signature and _cache and _cache_signature[0] == str(base):
+            return _cache_signature[1]
+    return None
+
+
+def signature(base: Path) -> tuple[int, float, int]:
     """Public view of the folder fingerprint, for the disk watcher."""
 
     return _signature(base)
@@ -522,6 +592,27 @@ def artist_detail(base: Path, name: str) -> Optional[dict[str, Any]]:
     for a in data['artists']:
         if a['name'].casefold() == target:
             return a
+    # Every artist name on a song is a link, not only the ones with a page of
+    # their own, and the others used to say "Artist not found": a spelling
+    # the list folded into another name ("Stephen Kasolo Kitole" is on
+    # Stephen Kasolo's page), or somebody who is only ever featured.
+    folded = fold(name)
+    if not folded:
+        return None
+    for tr in data['tracks']:
+        if fold(tr.get('artist') or '') == folded and tr.get('group'):
+            for a in data['artists']:
+                if a['name'] == tr['group']:
+                    return a
+    credited = [
+        tr for tr in data['tracks']
+        if any(fold(x) == folded for x in (tr.get('artists') or []))
+    ]
+    if credited:
+        shown = next(
+            (x for tr in credited for x in tr['artists'] if fold(x) == folded), name,
+        )
+        return _artist_entry(shown, credited)
     return None
 
 

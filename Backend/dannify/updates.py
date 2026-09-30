@@ -131,6 +131,39 @@ def _fetch_latest() -> dict[str, Any]:
     return _get(f'{base}/latest')
 
 
+# Where a release's files may come from: GitHub's own download hosts, over
+# TLS, or the stand-in release server a test runs on this machine. The
+# interface used to be able to hand the updater any address at all, and the
+# file it fetched was then offered to run as the installer.
+_ASSET_HOSTS = (
+    'github.com',
+    'objects.githubusercontent.com',
+    'release-assets.githubusercontent.com',
+)
+
+
+def trusted_asset(url: str) -> bool:
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(str(url or ''))
+    except ValueError:
+        return False
+    if chr(92) in (parts.path or ''):  # a backslash: a second path, on Windows
+        return False
+    host = (parts.hostname or '').lower()
+    if parts.scheme == 'https' and host in _ASSET_HOSTS:
+        return True
+    base = _api_base()
+    return base.startswith('http://') and str(url).startswith(base + '/')
+
+
+def _check_asset(url: str) -> str:
+    if not trusted_asset(url):
+        raise RuntimeError(f'refusing to fetch an update from {url!r}')
+    return url
+
+
 def _asset(assets: list, prefix: str, suffix: str) -> str:
     """Find a release asset by name shape."""
 
@@ -257,9 +290,17 @@ def download(
 ) -> Path:
     """Download the installer (for a copy that cannot update in place)."""
 
+    _check_asset(url)
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    name = url.rsplit('/', 1)[-1] or 'Dannify-Setup.exe'
+    # The name comes from the address, so it is cut down to something that
+    # can only ever be a file in this folder: no separators, no "..".
+    from urllib.parse import unquote, urlsplit
+
+    raw = unquote(urlsplit(url).path.rsplit('/', 1)[-1])
+    name = re.sub(r'[^A-Za-z0-9._-]', '', raw).lstrip('.')
+    if not name.lower().endswith('.exe'):
+        name = 'Dannify-Setup.exe'
     target = dest_dir / name
     partial = target.with_suffix(target.suffix + '.part')
     bar = Progress(progress_cb)
@@ -328,6 +369,8 @@ def stage(info: dict[str, Any], progress: Optional[Callable[..., None]] = None) 
     zip_url = str(info.get('package_url') or '')
     if not manifest_url or not zip_url:
         raise RuntimeError('the release has no package')
+    _check_asset(manifest_url)
+    _check_asset(zip_url)
 
     with _stage_lock:
         bar = Progress(progress)

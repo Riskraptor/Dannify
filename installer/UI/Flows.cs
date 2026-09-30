@@ -223,6 +223,7 @@ namespace Dannify.Setup.UI
             _launch = _args.Launch ?? true;
 
             _w = new SetupWindow();
+            _w.Title = S.WindowSetup;
             _w.Footer.Text = S.Version(_payload.Version);
             _w.CloseRequested = OnClose;
             _w.Closed += (s, e) => Ui.WindowClosed();
@@ -441,7 +442,11 @@ namespace Dannify.Setup.UI
         private async void AskToStop()
         {
             if (!_busy || _committed) return;
-            bool stop = await _w.Ask(S.StopTitle, S.StopText, S.Stop, S.KeepGoing);
+            // An update being stopped leaves the version that is there; saying
+            // "stop installing" over it read as if nothing would be left.
+            bool stop = IsUpdate
+                ? await _w.Ask(S.StopUpdateTitle, S.StopUpdateText, S.Stop, S.KeepGoing)
+                : await _w.Ask(S.StopTitle, S.StopText, S.Stop, S.KeepGoing);
             if (stop && !_committed)
             {
                 _w.ProgressCancel.IsEnabled = false;
@@ -592,6 +597,7 @@ namespace Dannify.Setup.UI
             var existing = Existing.Find(_env, _args.Root);
             bool installed = existing.IsInstalled && existing.Kind != InstallKind.LegacyMachine;
             _s = new SplashWindow();
+            _s.Title = installed ? S.WindowUpdating : S.WindowSetup;
             _s.SetHeading(installed ? S.Updating : S.Installing);
             _s.SetProgress(0, S.StepPreparing);
             _s.Closed += (o, e) => Ui.WindowClosed();
@@ -705,6 +711,7 @@ namespace Dannify.Setup.UI
         {
             bool pending = Launcher.HasPending(_env);
             _s = new SplashWindow();
+            _s.Title = pending ? S.WindowUpdating : "Dannify";
             _s.SetHeading(pending ? S.Updating : S.Restarting);
             _s.SetWaiting(S.JustAMoment);
             IntPtr old = Launcher.WindowOf(_args.AfterPid, 300);
@@ -765,6 +772,7 @@ namespace Dannify.Setup.UI
         {
             _music = Ui.MusicFolder(_env);
             _w = new SetupWindow();
+            _w.Title = S.WindowRemove;
             string version = Existing.FileVersion(_env.AppExe) ?? Registration.ReadCurrent(_env).version;
             _w.Footer.Text = version == null ? "" : S.Version(version);
             _w.Closed += (s, e) => Ui.WindowClosed();
@@ -775,6 +783,7 @@ namespace Dannify.Setup.UI
             _w.RemoveTitle.Text = S.RemoveTitle;
             _w.RemoveText.Text = _music != null ? S.MusicStays(Visuals.MiddleTrim(_music, 56)) : S.MusicStaysGeneric;
             _w.RemoveSettings.Content = S.AlsoSettings;
+            _w.RemoveSettings.ToolTip = S.SignInGoes;
             _w.RemoveSettings.IsChecked = false;
             _w.RemovePrimary.Content = S.Remove;
             _w.RemovePrimary.Click += (s, e) => Begin();

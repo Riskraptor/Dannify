@@ -333,10 +333,8 @@ async def check_playlist(
         last_track_count=len(tracks),
     )
 
-    if downloaded > 0 and (
-        settings is None or settings.get('generate_m3u', True)
-    ):
-        await asyncio.to_thread(_regenerate_m3u, playlist, tracks, downloader)
+    # No playlist files any more: saved songs play only in Dannify, and an
+    # .m3u for other players listed files none of them can open.
     return downloaded
 
 

@@ -50,17 +50,18 @@
           :title="rail ? a.name : ''"
           @contextmenu="onArtistMenu($event, a)"
         >
-          <span class="sb-avatar">
-            <img
-              v-if="a.cover && !failed[a.name]"
-              :src="API.coverFileURL(a.cover, a.cover_v)"
-              alt=""
-              loading="lazy"
-              class="drag-none"
-              @error="failed[a.name] = true"
-            />
-            <Icon v-else icon="ph:user" class="h-4 w-4 text-fg/40" />
-          </span>
+          <!-- CoverImage, not a bare <img>: a picture that failed is tried
+               again when its file changes or the library is read again. The
+               bare one remembered the failure by artist name for as long as
+               the app ran, so an artist first seen mid-download kept a grey
+               circle until a restart. -->
+          <CoverImage
+            class="sb-avatar"
+            :src="artistLinks.artistPhoto(a.name, 96)"
+            :fallback="a.cover ? API.coverFileURL(a.cover, a.cover_v) : ''"
+            kind="artist"
+            round
+          />
           <span v-if="!rail" class="min-w-0 flex-1">
             <span class="block truncate text-[13px] font-medium">{{ a.name }}</span>
             <span class="block truncate text-[11px] text-fg/50">
@@ -93,7 +94,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, h } from 'vue'
+import { computed, h } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
@@ -102,8 +103,10 @@ import { useLibrary } from '/src/model/library'
 import { useAccount } from '/src/model/account'
 import { useDownloadStats } from '/src/model/downloadStats'
 import { openContextMenu } from '/src/model/contextMenu'
-import { playRows, shuffleRows, localRow } from '/src/model/tracks'
+import { playRows, shuffleRows, localRow, onArtistPage } from '/src/model/tracks'
 import { useI18n } from '/src/i18n'
+import CoverImage from '/src/components/ui/CoverImage.vue'
+import { useArtistLinks } from '/src/model/artistLinks'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -113,9 +116,10 @@ const lib = useLibrary()
 const account = useAccount()
 const dlStats = useDownloadStats()
 const dl = computed(() => dlStats.value)
-const failed = reactive({})
 
 lib.ensureLoaded()
+// The artists' own pictures, once found (album covers until then).
+const artistLinks = useArtistLinks()
 
 const rail = computed(() => ui.sidebarCollapsed.value && !ui.isCompact.value)
 
@@ -128,7 +132,7 @@ const topArtists = computed(() =>
 
 function artistRows(name) {
   return lib.tracks.value
-    .filter((tr) => tr.artist === name || (tr.artists || []).includes(name))
+    .filter((tr) => onArtistPage(tr, name))
     .map(localRow)
 }
 
@@ -322,11 +326,6 @@ const SideLink = {
   overflow: hidden;
   border-radius: 999px;
   background: rgb(var(--c-tint) / 0.08);
-}
-.sb-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 .sb-empty {
   margin: 12px 4px;

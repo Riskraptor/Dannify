@@ -81,8 +81,21 @@ if (stored) {
   fetchedAt = 0
 }
 
+let again = null
 async function load(force = false) {
-  if (inflight) return inflight
+  if (inflight) {
+    // Asked for afresh while a read is out: signing in or out mid-load. That
+    // read is for the old account state, and used to be the one kept (and
+    // written back to storage after it had just been cleared).
+    if (!force) return inflight
+    if (!again) {
+      again = inflight.then(() => {
+        again = null
+        return load(true)
+      })
+    }
+    return again
+  }
   if (loaded.value && !force) {
     if (Date.now() - fetchedAt > SOFT_AGE_MS) load(true) // revalidate
     return Promise.resolve(sections.value)

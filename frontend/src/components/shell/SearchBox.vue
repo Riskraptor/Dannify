@@ -134,6 +134,10 @@ function onFocus() {
 }
 function onBlur() {
   focused.value = false
+  // A search still waiting to go out is dropped with the focus. Left to run,
+  // typing and then clicking Library straight away was followed, half a
+  // second later, by being taken back to Search.
+  clearTimeout(liveTimer)
 }
 
 function onKey(e) {

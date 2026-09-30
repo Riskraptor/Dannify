@@ -2,7 +2,7 @@ import API from '/src/model/api'
 import router from '/src/router'
 import { usePlayer, songToTrack } from '/src/model/player'
 import { useAccount } from '/src/model/account'
-import { useDownloadManager } from '/src/model/download'
+import { useDownloadManager, useProgressTracker } from '/src/model/download'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 import { toast } from '/src/model/toast'
 import { confirmDialog } from '/src/model/dialog'
@@ -46,6 +46,17 @@ export function localRow(tr) {
     problem: tr.problem || '',
     raw: tr,
   }
+}
+
+/**
+ * Whether a saved track is on `name`'s artist page. The server says which page
+ * each track is on (spellings folded together: "BENSOUL" is on Bensoul's), so
+ * playing an artist plays exactly what their page lists.
+ */
+export function onArtistPage(tr, name) {
+  if (!tr) return false
+  if (tr.group) return tr.group === name
+  return tr.artist === name || (tr.artists || []).includes(name)
 }
 
 /** A YouTube-Music / Spotify song dict (search, explorer, preview). */
@@ -173,12 +184,17 @@ function playable(rows) {
   return rows.filter((r) => !needsRepair(r))
 }
 
-/** Replace the queue with `rows` and start at `index`. */
-export function playRows(rows, index = 0) {
+/**
+ * Replace the queue with `rows` and start at `index`. Pressing play on the
+ * song that is already playing pauses it, unless `toggle` is off: "Play 5
+ * tracks" on a selection that happens to start with the current song used to
+ * just pause it.
+ */
+export function playRows(rows, index = 0, { toggle = true } = {}) {
   if (!rows || !rows.length) return
   const player = usePlayer()
   const target = rows[index]
-  if (target && isRowCurrent(target)) {
+  if (toggle && target && isRowCurrent(target)) {
     player.toggle()
     return
   }
@@ -222,6 +238,18 @@ export function playNext(rows) {
   )
 }
 
+/** Move a queued song to play straight after the current one. */
+function moveUpNext(index) {
+  const player = usePlayer()
+  const track = player.playlist.value[index]
+  if (!track || index === player.currentIndex.value) return
+  // Taken out and put back as next, the player's own way, so it is next in
+  // shuffle order as well as in the list.
+  player.removeFromQueue(index)
+  player.enqueue([track], { next: true })
+  toast(t('actions.willPlayNext', { title: track.title || '' }), { icon: 'ph:queue' })
+}
+
 export function addToQueue(rows) {
   const list = playable(rows)
   if (!list.length) {
@@ -247,12 +275,20 @@ export function isRowDownloaded(row) {
   return useLibraryIndex().isDownloaded(row.raw)
 }
 
+/** Whether a song row is already queued or downloading. */
+export function isRowDownloading(row) {
+  if (!row || row.kind !== 'song' || !row.raw) return false
+  const item = useProgressTracker().getBySong(row.raw)
+  return !!item && item.isPending()
+}
+
 export function downloadRows(rows) {
-  const songs = rows
-    .filter((r) => r.kind === 'song' && !isRowDownloaded(r))
-    .map((r) => r.raw)
+  const wanted = rows.filter((r) => r.kind === 'song' && !isRowDownloaded(r))
+  // Songs already on their way are not asked for again. "Download all"
+  // pressed twice used to send every one of them a second time.
+  const songs = wanted.filter((r) => !isRowDownloading(r)).map((r) => r.raw)
   if (!songs.length) {
-    toast(t('actions.alreadyInLibrary'), { icon: 'ph:check-circle' })
+    if (!wanted.length) toast(t('actions.alreadyInLibrary'), { icon: 'ph:check-circle' })
     return
   }
   // No optimistic "in library" marking: rows show progress from the
@@ -282,22 +318,35 @@ export async function deleteRows(rows) {
   })
   if (!ok) return false
   const removed = []
+  const gone = []
+  const failed = []
   for (const r of files) {
     try {
-      await API.deleteDownload(r.file)
+      const res = await API.deleteDownload(r.file)
+      // The server answers 200 with {deleted: false} when it could not.
+      if (res && res.data && res.data.deleted === false) throw new Error(res.data.error || '')
       removed.push(r.file)
+      gone.push(r)
     } catch {
-      toast(t('library.failedDelete', { file: r.title }), { tone: 'error' })
+      failed.push(r)
     }
+  }
+  // One message for everything that could not go, not one per file.
+  if (failed.length === 1) {
+    toast(t('library.failedDelete', { file: failed[0].title }), { tone: 'error' })
+  } else if (failed.length > 1) {
+    toast(t('library.failedDeleteMany', { count: failed.length }), { tone: 'error' })
   }
   if (removed.length) {
     useLibraryIndex().invalidate()
     window.dispatchEvent(
       new CustomEvent('dannify:library-changed', { detail: { removed } })
     )
+    // Named after what was actually deleted: it used to name the first of
+    // the selection, which could be the one that failed.
     toast(
       removed.length === 1
-        ? t('actions.deleted', { title: files[0].title })
+        ? t('actions.deleted', { title: gone[0].title })
         : t('actions.deletedMany', { count: removed.length }),
       { icon: 'ph:trash' }
     )
@@ -404,14 +453,19 @@ export function trackMenu(rows, ctx = {}) {
         ? t('actions.play')
         : t('actions.playSelection', { count: rows.length }),
       icon: 'ph:play',
-      action: () => playRows(rows, 0),
+      action: () => playRows(rows, 0, { toggle: !!single }),
     })
   }
+  const queued = ctx.queue && single
+  const isCurrentInQueue = queued && single.queueIndex === player.currentIndex.value
   items.push(
-    {
+    // In the queue, "Play next" moves the song up; it used to add a second
+    // copy, so the song played twice (and the one playing, right after
+    // itself). The song that is playing has nothing to move to.
+    !isCurrentInQueue && {
       label: t('actions.playNext'),
       icon: 'ph:queue',
-      action: () => playNext(rows),
+      action: () => (queued ? moveUpNext(single.queueIndex) : playNext(rows)),
     },
     !ctx.queue && {
       label: t('actions.addToQueue'),

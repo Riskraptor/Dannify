@@ -146,6 +146,9 @@ function onMore(e) {
   filter: blur(90px) saturate(1.5);
   opacity: 0.55;
   transform: scale(1.1);
+  /* A layer of its own: blurred once and then moved, instead of blurred
+     again on every repaint while the page scrolls. */
+  will-change: transform;
 }
 .np-shade {
   position: absolute;

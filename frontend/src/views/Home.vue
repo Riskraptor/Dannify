@@ -191,7 +191,7 @@ import { useLibrary } from '/src/model/library'
 import { useRecent, trackKey } from '/src/model/recent'
 import { useHomeFeed } from '/src/model/home'
 import { useAccount } from '/src/model/account'
-import { localRow, songRow, queueRow, playRows, trackMenu } from '/src/model/tracks'
+import { localRow, songRow, queueRow, playRows, trackMenu, onArtistPage } from '/src/model/tracks'
 import { useExplore } from '/src/model/explore'
 import { warmAll } from '/src/model/prefetch'
 import { onRefresh } from '/src/model/useRefresh'
@@ -345,7 +345,7 @@ function openCard(item) {
 
 function playArtist(name) {
   const rows = lib.tracks.value
-    .filter((tr) => tr.artist === name || (tr.artists || []).includes(name))
+    .filter((tr) => onArtistPage(tr, name))
     .map(localRow)
   playRows(rows, 0)
 }
@@ -382,6 +382,9 @@ function submitWelcome() {
   border-radius: 999px;
   background: rgb(var(--c-accent) / 0.22);
   filter: blur(80px);
+  /* A layer of its own: blurred once and then moved, instead of blurred
+     again on every repaint while the page scrolls. */
+  will-change: transform;
 }
 .welcome-search {
   width: min(520px, 100%);

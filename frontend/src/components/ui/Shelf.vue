@@ -21,7 +21,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, nextTick } from 'vue'
+import { onBeforeUnmount, onMounted, onUpdated, ref, nextTick } from 'vue'
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -39,6 +39,7 @@ defineEmits(['more'])
 // the first row as inert so it leaves the tab order and the screen reader.
 const row = ref(null)
 let observer = null
+let mutations = null
 
 function hideOverflow() {
   const el = row.value
@@ -59,8 +60,20 @@ onMounted(() => {
     observer = new ResizeObserver(() => hideOverflow())
     if (row.value) observer.observe(row.value)
   }
+  // And whenever the cards themselves change. The row keeps its size when a
+  // live search reorders them, so only a resize used to re-check, and a card
+  // that moved up from a clipped place kept its inert mark: there on screen,
+  // and impossible to click.
+  if (typeof MutationObserver === 'function' && row.value) {
+    mutations = new MutationObserver(() => hideOverflow())
+    mutations.observe(row.value, { childList: true })
+  }
 })
-onBeforeUnmount(() => observer && observer.disconnect())
+onUpdated(() => nextTick(hideOverflow))
+onBeforeUnmount(() => {
+  if (observer) observer.disconnect()
+  if (mutations) mutations.disconnect()
+})
 </script>
 
 <style scoped>

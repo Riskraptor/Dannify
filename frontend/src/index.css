@@ -152,6 +152,84 @@
   --scroll-thumb-hover: rgb(0 0 0 / 0.36);
 }
 
+/* Four more, measured the same way (text 12:1 or better on every surface,
+   accent 5:1 or better, text on the accent 5.4:1 or better). */
+[data-theme='dannify-aurora'] {
+  color-scheme: dark;
+  --c-app: 9 10 20;
+  --c-panel: 17 19 36;
+  --c-raised: 26 29 52;
+  --c-elev: 36 40 68;
+  --c-fg: 236 238 250;
+  --c-tint: 236 240 255;
+  --c-accent: 129 140 248;
+  --c-accent-hover: 160 168 251;
+  --c-accent-fg: 8 10 36;
+  --c-danger: 242 109 109;
+  --c-warn: 245 184 61;
+  --shadow-pop: 0 14px 44px rgb(0 0 0 / 0.55), 0 2px 10px rgb(0 0 0 / 0.35);
+  --shadow-card: 0 8px 26px rgb(0 0 0 / 0.4);
+  --scroll-thumb: rgb(255 255 255 / 0.17);
+  --scroll-thumb-hover: rgb(255 255 255 / 0.32);
+}
+
+[data-theme='dannify-rose'] {
+  color-scheme: dark;
+  --c-app: 16 10 13;
+  --c-panel: 27 18 22;
+  --c-raised: 39 27 32;
+  --c-elev: 52 37 43;
+  --c-fg: 246 236 240;
+  --c-tint: 255 240 246;
+  --c-accent: 251 113 150;
+  --c-accent-hover: 252 145 173;
+  --c-accent-fg: 40 6 16;
+  --c-danger: 242 109 109;
+  --c-warn: 245 184 61;
+  --shadow-pop: 0 14px 44px rgb(0 0 0 / 0.55), 0 2px 10px rgb(0 0 0 / 0.35);
+  --shadow-card: 0 8px 26px rgb(0 0 0 / 0.4);
+  --scroll-thumb: rgb(255 255 255 / 0.17);
+  --scroll-thumb-hover: rgb(255 255 255 / 0.32);
+}
+
+[data-theme='dannify-forest'] {
+  color-scheme: dark;
+  --c-app: 8 14 11;
+  --c-panel: 15 24 19;
+  --c-raised: 23 35 28;
+  --c-elev: 32 47 38;
+  --c-fg: 232 243 236;
+  --c-tint: 236 255 244;
+  --c-accent: 132 204 22;
+  --c-accent-hover: 163 224 70;
+  --c-accent-fg: 14 26 2;
+  --c-danger: 242 109 109;
+  --c-warn: 245 184 61;
+  --shadow-pop: 0 14px 44px rgb(0 0 0 / 0.55), 0 2px 10px rgb(0 0 0 / 0.35);
+  --shadow-card: 0 8px 26px rgb(0 0 0 / 0.4);
+  --scroll-thumb: rgb(255 255 255 / 0.17);
+  --scroll-thumb-hover: rgb(255 255 255 / 0.32);
+}
+
+[data-theme='dannify-sky'] {
+  color-scheme: light;
+  --c-app: 226 233 242;
+  --c-panel: 250 252 255;
+  --c-raised: 238 243 250;
+  --c-elev: 255 255 255;
+  --c-fg: 16 24 40;
+  --c-tint: 10 30 60;
+  --c-accent: 29 100 214;
+  --c-accent-hover: 22 84 184;
+  --c-accent-fg: 255 255 255;
+  --c-danger: 220 76 76;
+  --c-warn: 200 138 18;
+  --shadow-pop: 0 14px 44px rgb(15 20 30 / 0.16), 0 2px 8px rgb(15 20 30 / 0.08);
+  --shadow-card: 0 8px 26px rgb(15 20 30 / 0.12);
+  --scroll-thumb: rgb(0 0 0 / 0.2);
+  --scroll-thumb-hover: rgb(0 0 0 / 0.36);
+}
+
 :root {
   --titlebar-h: 44px;
   --player-h: 84px;
@@ -446,11 +524,29 @@
 
   /* Fades up rather than slamming in at full strength, so the swap to real
      content reads as a dissolve instead of a flicker. */
+  /* A light that sweeps across, rather than the whole block blinking. Drawn
+     by moving a layer (transform), so a page of placeholders costs the GPU a
+     slide, not a repaint of every one of them sixty times a second. */
   .skeleton {
     @apply block rounded-md bg-tint/[0.07];
-    animation:
-      skeleton-in 0.22s var(--ease-out) both,
-      pulse 2s cubic-bezier(0.4, 0, 0.6, 1) 0.22s infinite;
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    animation: skeleton-in 0.22s var(--ease-out) both;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      rgb(var(--c-tint) / 0.075) 50%,
+      transparent 80%
+    );
+    transform: translateX(-100%);
+    animation: skeleton-sweep 1.6s cubic-bezier(0.45, 0, 0.55, 1) 0.3s infinite;
+    will-change: transform;
   }
 
   .spinner {
@@ -568,6 +664,19 @@
 .row-ghost:nth-child(4) { animation-delay: 0.15s; }
 .row-ghost:nth-child(5) { animation-delay: 0.2s; }
 .row-ghost:nth-child(n + 6) { animation-delay: 0.25s; }
+
+@keyframes skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+    opacity: 0;
+  }
+}
 
 @keyframes skeleton-in {
   from {

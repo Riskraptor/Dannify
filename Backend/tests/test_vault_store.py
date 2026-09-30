@@ -335,3 +335,42 @@ def test_signing_out_leaves_no_copy_of_the_session(tmp_path, signed_out):
     account.sign_out()
     assert not (tmp_path / 'account.dat').exists()
     assert not (tmp_path / 'account.json').exists()
+
+
+def test_migrate_only_seals_what_this_app_downloaded(tmp_path):
+    """Pointing the app at an existing Music folder must not seal (and delete)
+    somebody's own collection. Only files carrying the app's download tag are
+    converted."""
+
+    from mutagen.id3 import ID3, TIT2
+
+    from dannify import downloader
+
+    data, music = tmp_path / 'data', tmp_path / 'Music'
+    start(data, music)
+
+    # A file from some other program, with ordinary tags and no video id.
+    theirs = music / 'iTunes' / 'Adele' / '01 Rolling in the Deep.mp3'
+    theirs.parent.mkdir(parents=True)
+    theirs.write_bytes(MP3)
+    tags = ID3()
+    tags.add(TIT2(encoding=3, text='Rolling in the Deep'))
+    tags.save(theirs)
+    playlist = music / 'mine.m3u'
+    playlist.write_text('iTunes/Adele/01 Rolling in the Deep.mp3\n', encoding='utf-8')
+
+    # One of ours, from before containers existed.
+    ours = music / 'Sauti Sol' / 'Sauti Sol - Suzanna.mp3'
+    ours.parent.mkdir(parents=True)
+    # Real MPEG frames (MPEG-1 layer III, 128 kbps, 44.1 kHz: 417 bytes each),
+    # so the tag writer accepts it as an MP3.
+    ours.write_bytes((bytes.fromhex('fffb9064') + bytes(413)) * 20)
+    downloader.embed_video_id(ours, 'KNEd-OkExKY')
+    assert library._read_video_id_tag(ours) == 'KNEd-OkExKY'
+
+    done = vault.migrate(music)
+
+    assert done['sealed'] == 1
+    assert theirs.is_file() and not theirs.with_suffix('.dnf').exists()
+    assert not ours.exists() and ours.with_suffix('.dnf').is_file()
+    assert playlist.read_text(encoding='utf-8') == 'iTunes/Adele/01 Rolling in the Deep.mp3\n'

@@ -96,6 +96,7 @@ import { Icon } from '@iconify/vue'
 import { desktop, bindWindowDrag } from '/src/desktop/bridge'
 import { useUi } from '/src/model/ui'
 import { useAccount } from '/src/model/account'
+import { useHomeFeed } from '/src/model/home'
 import { useOnboarding } from '/src/model/onboarding'
 import { openContextMenu } from '/src/model/contextMenu'
 import { useI18n } from '/src/i18n'
@@ -144,7 +145,12 @@ function openAccountMenu(e) {
       {
         label: t('account.refreshFeed'),
         icon: 'ph:arrows-clockwise',
-        action: () => account.refresh(),
+        // The recommendations are the home feed. This used to refresh the
+        // account alone, and nothing on screen changed.
+        action: () => {
+          account.refresh()
+          useHomeFeed().load(true)
+        },
       },
       { divider: true },
       { label: t('account.signOut'), icon: 'ph:sign-out', action: () => account.signOut() },

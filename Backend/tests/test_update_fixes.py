@@ -196,3 +196,69 @@ def test_the_taskbar_guid_parses_the_taskbar_interface():
     iid = ns['_GUID'].parse('{EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF}')  # ITaskbarList3
     assert (iid.Data1, iid.Data2, iid.Data3) == (0xEA1AFB91, 0x9E28, 0x4B86)
     assert bytes(iid.Data4) == bytes.fromhex('90E99E9F8A5EEFAF')
+
+
+# ---------------------------------------------------------------------------
+# Where an update may come from
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize('url, ok', [
+    ('https://github.com/o/r/releases/download/v1/Dannify-Setup-1.exe', True),
+    ('https://objects.githubusercontent.com/github-production-release-asset/x', True),
+    ('https://release-assets.githubusercontent.com/github-production-release-asset/x', True),
+    ('http://github.com/o/r/releases/download/v1/Dannify-Setup-1.exe', False),
+    ('https://evil.example/Dannify-Setup.exe', False),
+    ('https://github.com.evil.example/x.exe', False),
+    ('file:///C:/Windows/System32/calc.exe', False),
+    ('https://github.com/o/r/releases/download/v1/..' + chr(92) + 'x.exe', False),
+    ('', False),
+])
+def test_only_release_hosts_are_trusted(url, ok, monkeypatch):
+    monkeypatch.delenv('DANNIFY_UPDATE_API', raising=False)
+    assert updates.trusted_asset(url) is ok
+
+
+def test_the_loopback_test_server_is_trusted_only_when_set(monkeypatch):
+    monkeypatch.setenv('DANNIFY_UPDATE_API', 'http://127.0.0.1:5123')
+    assert updates.trusted_asset('http://127.0.0.1:5123/dl/package-9.json')
+    assert not updates.trusted_asset('http://127.0.0.1:9999/dl/package-9.json')
+    monkeypatch.delenv('DANNIFY_UPDATE_API')
+    assert not updates.trusted_asset('http://127.0.0.1:5123/dl/package-9.json')
+
+
+def test_an_untrusted_installer_is_never_fetched(tmp_path, monkeypatch):
+    monkeypatch.delenv('DANNIFY_UPDATE_API', raising=False)
+    fetched = []
+    monkeypatch.setattr(updates.urllib.request, 'urlopen', lambda *a, **k: fetched.append(a))
+    with pytest.raises(RuntimeError):
+        updates.download('https://evil.example/Dannify-Setup.exe', tmp_path)
+    assert fetched == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_the_installer_name_cannot_leave_its_folder(tmp_path, monkeypatch):
+    class Reply:
+        headers = {'Content-Length': '3'}
+
+        def __init__(self):
+            self.left = [b'MZ!']
+
+        def read(self, n):
+            return self.left.pop() if self.left else b''
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(updates.urllib.request, 'urlopen', lambda *a, **k: Reply())
+    dest = tmp_path / 'updates'
+    got = updates.download(
+        'https://github.com/o/r/releases/download/v1/%2E%2E%5C%2E%2E%5Cevil.exe', dest,
+    )
+    assert got.parent == dest
+    assert got.name == 'evil.exe'
+    got = updates.download('https://github.com/o/r/releases/download/v1/notes.txt', dest)
+    assert got.parent == dest and got.name == 'Dannify-Setup.exe'

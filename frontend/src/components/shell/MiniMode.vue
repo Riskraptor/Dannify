@@ -197,6 +197,9 @@ onBeforeUnmount(() => unbind())
   background-position: center;
   filter: blur(40px) saturate(1.4);
   opacity: 0.55;
+  /* A layer of its own: blurred once and then moved, instead of blurred
+     again on every repaint while the page scrolls. */
+  will-change: transform;
 }
 .mini-shade {
   position: absolute;

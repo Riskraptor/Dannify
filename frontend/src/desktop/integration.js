@@ -3,6 +3,7 @@ import router from '/src/router'
 import { desktop } from '/src/desktop/bridge'
 import { usePlayer } from '/src/model/player'
 import { useDownloadStats } from '/src/model/downloadStats'
+import { useProgressTracker } from '/src/model/download'
 import { toast } from '/src/model/toast'
 import { t, currentLocale } from '/src/i18n'
 
@@ -23,19 +24,48 @@ export function installDesktopIntegration() {
 
   // Downloads finishing cleanly is the expected outcome and the indicator
   // already shows it, so only a failure is worth interrupting for: that is
-  // something the user has to decide about.
+  // something the user has to decide about. One summary per batch, when the
+  // last of it is done.
+  //
+  // It used to count every failed row in the list. Failed rows stay there
+  // until someone clears or retries them (they even come back after a
+  // restart), so once one download had failed, every later batch that
+  // went perfectly still ended with "Downloads finished. 1 failed" about
+  // the same old song, again and again. Now only a song this session saw
+  // queued or downloading and then fail is counted, and counted once.
+  const { downloadQueue } = useProgressTracker()
+  const inFlight = new Set()
+  let failedThisBatch = 0
   watch(
-    () => stats.value.active,
-    (active, prev) => {
-      if (prev > 0 && active === 0 && stats.value.failed > 0) {
-        toast(t('downloads.finishedWithErrors', { failed: stats.value.failed }), {
-          tone: 'error',
-          action: {
-            label: t('actions.view'),
-            run: () => router.push({ name: 'Downloads' }),
-          },
-        })
+    // Status changes only: progress ticks do not need to wake this up.
+    () => downloadQueue.value.map((item) => `${item.song.song_id}:${item.web_status}`).join('|'),
+    () => {
+      const present = new Set()
+      let active = 0
+      for (const item of downloadQueue.value) {
+        const id = item.song.song_id
+        present.add(id)
+        if (item.isPending()) {
+          active += 1
+          inFlight.add(id)
+        } else if (inFlight.delete(id) && item.isErrored()) {
+          failedThisBatch += 1
+        }
       }
+      // Rows removed from the list are not coming back to finish.
+      for (const id of inFlight) if (!present.has(id)) inFlight.delete(id)
+      if (active > 0 || failedThisBatch === 0) return
+      const failed = failedThisBatch
+      failedThisBatch = 0
+      // Already looking at them, retry buttons and all.
+      if (router.currentRoute.value.name === 'Downloads') return
+      toast(t('downloads.finishedWithErrors', { failed }), {
+        tone: 'error',
+        action: {
+          label: t('actions.view'),
+          run: () => router.push({ name: 'Downloads' }),
+        },
+      })
     }
   )
 

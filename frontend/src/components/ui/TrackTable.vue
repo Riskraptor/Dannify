@@ -6,7 +6,7 @@
     :style="{ '--tt-cols': gridCols, '--tt-sticky': `${stickyOffset}px` }"
     tabindex="0"
     role="grid"
-    :aria-rowcount="rows.length"
+    :aria-rowcount="shown.length"
     :aria-multiselectable="true"
     @keydown="onKey"
     @focusin="focused = true"
@@ -65,7 +65,7 @@
 
     <VirtualList
       ref="list"
-      :items="rows"
+      :items="shown"
       :item-height="rowHeight"
       :scroller="scroller"
       :item-key="(r) => r.key"
@@ -308,6 +308,18 @@ const root = ref(null)
 const list = ref(null)
 const focused = ref(false)
 const width = ref(1000)
+// Keys unique within this list. A YouTube playlist can hold the same video
+// twice, and two rows sharing a key were selected, highlighted and redrawn as
+// one: clicking either lit both, and "Select all" could never be undone.
+const shown = computed(() => {
+  const seen = new Map()
+  return props.rows.map((r) => {
+    const n = seen.get(r.key) || 0
+    seen.set(r.key, n + 1)
+    return n ? { ...r, key: `${r.key}#${n}` } : r
+  })
+})
+
 const selected = ref(new Set())
 const cursor = ref(-1)
 let anchor = -1
@@ -331,9 +343,9 @@ const gridCols = computed(() => {
 })
 
 // ----- selection ------------------------------------------------------------
-const selectedRows = computed(() => props.rows.filter((r) => selected.value.has(r.key)))
+const selectedRows = computed(() => shown.value.filter((r) => selected.value.has(r.key)))
 const allSelected = computed(
-  () => props.rows.length > 0 && selected.value.size === props.rows.length
+  () => shown.value.length > 0 && selected.value.size === shown.value.length
 )
 const someSelected = computed(() => selected.value.size > 0 && !allSelected.value)
 
@@ -344,10 +356,10 @@ function setSelection(keys) {
 function selectOnly(i) {
   anchor = i
   cursor.value = i
-  setSelection([props.rows[i].key])
+  setSelection([shown.value[i].key])
 }
 function toggleOne(i) {
-  const key = props.rows[i].key
+  const key = shown.value[i].key
   const next = new Set(selected.value)
   if (next.has(key)) next.delete(key)
   else next.add(key)
@@ -359,10 +371,10 @@ function selectRange(i) {
   const from = anchor < 0 ? i : anchor
   const [a, b] = from < i ? [from, i] : [i, from]
   cursor.value = i
-  setSelection(props.rows.slice(a, b + 1).map((r) => r.key))
+  setSelection(shown.value.slice(a, b + 1).map((r) => r.key))
 }
 function toggleAll() {
-  setSelection(allSelected.value ? [] : props.rows.map((r) => r.key))
+  setSelection(allSelected.value ? [] : shown.value.map((r) => r.key))
 }
 function clearSelection() {
   setSelection([])
@@ -370,7 +382,7 @@ function clearSelection() {
 
 // Keep the selection sane when the list changes (filtering, sorting…).
 watch(
-  () => props.rows,
+  () => shown.value,
   (rows) => {
     if (!selected.value.size) return
     const keys = new Set(rows.map((r) => r.key))
@@ -389,7 +401,7 @@ function onRowDown(e, i) {
   if (isInteractive(e.target)) return
   if (e.button === 2) {
     // Right-click keeps an existing multi-selection that includes the row.
-    if (!selected.value.has(props.rows[i].key)) selectOnly(i)
+    if (!selected.value.has(shown.value[i].key)) selectOnly(i)
     return
   }
   if (e.button !== 0) return
@@ -398,7 +410,7 @@ function onRowDown(e, i) {
     selectRange(i)
   } else if (e.ctrlKey || e.metaKey) {
     toggleOne(i)
-  } else if (!selected.value.has(props.rows[i].key) || selected.value.size > 1) {
+  } else if (!selected.value.has(shown.value[i].key) || selected.value.size > 1) {
     selectOnly(i)
   } else {
     cursor.value = i
@@ -418,33 +430,33 @@ function onRowDblClick(e, i) {
 
 function menuItems() {
   const rows = selectedRows.value
-  return trackMenu(rows, { ...props.menuContext, source: props.rows })
+  return trackMenu(rows, { ...props.menuContext, source: shown.value })
 }
 
 function onRowMenu(e, i) {
-  if (!selected.value.has(props.rows[i].key)) selectOnly(i)
+  if (!selected.value.has(shown.value[i].key)) selectOnly(i)
   openContextMenu(e, menuItems())
 }
 
 function onMore(e, i) {
-  if (!selected.value.has(props.rows[i].key)) selectOnly(i)
+  if (!selected.value.has(shown.value[i].key)) selectOnly(i)
   openContextMenu(e, menuItems(), { anchor: true })
 }
 
 function play(i) {
   // Playing a track that cannot play would start it, fail, and skip to the
   // next one: say why and offer the fix instead, and leave the queue alone.
-  if (needsRepair(props.rows[i])) {
-    offerRepair(props.rows[i])
+  if (needsRepair(shown.value[i])) {
+    offerRepair(shown.value[i])
     return
   }
   if (props.onPlay) props.onPlay(i)
-  else playRows(props.rows, i)
+  else playRows(shown.value, i)
 }
 
 // ----- keyboard ---------------------------------------------------------------
 function moveCursor(to, extend) {
-  const n = props.rows.length
+  const n = shown.value.length
   if (!n) return
   const i = Math.max(0, Math.min(n - 1, to))
   if (extend) selectRange(i)
@@ -453,7 +465,7 @@ function moveCursor(to, extend) {
 }
 
 function onKey(e) {
-  const n = props.rows.length
+  const n = shown.value.length
   if (!n || e.target !== root.value) return
   const pageRows = Math.max(1, Math.floor(((scroller.value && scroller.value.clientHeight) || 600) / rowHeight.value) - 2)
   switch (e.key) {
@@ -503,7 +515,7 @@ function onKey(e) {
     case 'A':
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
-        setSelection(props.rows.map((r) => r.key))
+        setSelection(shown.value.map((r) => r.key))
       }
       break
     case 'ContextMenu':
@@ -535,7 +547,12 @@ function dlState(row) {
   const item = tracker.getBySong(row.raw)
   if (!item) return 'none'
   if (item.isErrored()) return 'error'
-  if (item.isDownloaded()) return 'done'
+  // Finished, and the library has been read since without it: the song was
+  // deleted, here or in Explorer. It used to keep its check mark regardless,
+  // with no Download button, as if it were still saved.
+  if (item.isDownloaded()) {
+    return libIndex.loadedAt.value > (item.completedAt || 0) ? 'none' : 'done'
+  }
   return 'active'
 }
 
