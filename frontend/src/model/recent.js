@@ -27,11 +27,18 @@ function rebuilt(entry) {
   }
 }
 
+// A file opened from Explorer plays through a one-off address that dies with
+// the run it was made in. Kept here, it came back after a restart as a tile
+// with no picture that could only fail when pressed.
+function oneOff(entry) {
+  return !!entry && typeof entry === 'object' && String(entry.url || '').startsWith('/opened/')
+}
+
 function load(key) {
   try {
     const v = JSON.parse(localStorage.getItem(key) || '[]')
     if (!Array.isArray(v)) return []
-    return v.map(rebuilt)
+    return v.filter((e) => !oneOff(e)).map(rebuilt)
   } catch {
     return []
   }
@@ -102,7 +109,7 @@ function slim(track) {
 }
 
 export function rememberPlayed(track) {
-  if (!track || !track.url) return
+  if (!track || !track.url || oneOff(track)) return
   const key = trackKey(track)
   const next = [
     rebuilt(slim(track)),

@@ -77,6 +77,7 @@ def forget_artist(browse_id: str) -> None:
 
     with _lock:
         _cache.pop(f'artist::{browse_id}', None)
+        _cache.pop(f'brief::{browse_id}', None)
 
 
 def _cache_put(key: str, value: Any) -> None:
@@ -191,6 +192,10 @@ def _playlist_card(r: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 
 
+class SearchUnavailable(ConnectionError):
+    """No part of a search could reach YouTube Music."""
+
+
 def search(query: str, limit: int = 20) -> dict[str, Any]:
     """Return ``{songs, artists, albums, playlists}`` for *query*."""
 
@@ -230,13 +235,13 @@ def _search_uncached(
     if cache_key is None:
         cache_key = f'search::{q.lower()}::{limit}'
 
-    def _run(filt: str, fn) -> list[dict[str, Any]]:
+    def _run(filt: str, fn) -> Optional[list[dict[str, Any]]]:
         try:
             # One client per worker thread (ytmusicapi is not thread-safe).
             rows = _ytm().search(q, filter=filt, limit=limit)
         except Exception:
             logger.opt(exception=True).debug('explore search %s failed', filt)
-            return []  # one failing facet must not fail the whole search
+            return None  # one failing facet must not fail the whole search
         out = []
         for r in rows:
             if not isinstance(r, dict):
@@ -261,16 +266,115 @@ def _search_uncached(
     result: dict[str, Any] = {}
     futures = {key: _POOL.submit(_run, filt, fn) for key, filt, fn in facets}
     deadline = time.monotonic() + _FACET_TIMEOUT
+    failed = 0
     for key, future in futures.items():
         try:
-            result[key] = future.result(timeout=max(0.1, deadline - time.monotonic()))
+            rows = future.result(timeout=max(0.1, deadline - time.monotonic()))
         except Exception:
             logger.opt(exception=True).debug('explore search {} gave up', key)
-            result[key] = []
+            rows = None
+        failed += rows is None
+        result[key] = rows or []
+    if failed == len(facets):
+        # Not one part of the search got an answer: that is no connection,
+        # not "no results". Said as nothing found, the window told someone
+        # offline that the artist they were looking for did not exist.
+        raise SearchUnavailable('YouTube Music could not be reached')
+    _label_namesakes(result.get('artists') or [])
     # Don't cache a half-empty answer: the next search should try again.
     if any(result.values()):
         _cache_put(cache_key, result)
     return result
+
+
+def _label_namesakes(cards: list[dict[str, Any]]) -> None:
+    """Tell apart artists who share a name.
+
+    A search for "Mavokali" brings back two cards, same name, two channels:
+    one has the songs, the other is a channel of videos. Shown as they came,
+    they looked like the same artist twice. Each gets what tells them apart
+    (their followers, and whether they have songs at all), and one with songs
+    goes before one with none.
+    """
+
+    from .library import fold  # noqa: PLC0415
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for card in cards:
+        groups.setdefault(fold(card.get('name') or ''), []).append(card)
+    twins = [c for group in groups.values() if len(group) > 1 for c in group][:6]
+    if not twins:
+        return
+    jobs = {c['browse_id']: _POOL.submit(artist_brief, c['browse_id']) for c in twins}
+    deadline = time.monotonic() + 5
+    for card in twins:
+        try:
+            brief = jobs[card['browse_id']].result(timeout=max(0.1, deadline - time.monotonic()))
+        except Exception:
+            continue
+        if brief.get('subscribers') and not card.get('subscribers'):
+            card['subscribers'] = brief['subscribers']
+        card['has_songs'] = bool(brief.get('has_songs'))
+        card['namesake'] = True
+    # Within each name, one with songs before one without; everyone else
+    # stays where YouTube put them.
+    ordered: list[dict[str, Any]] = []
+    for card in cards:
+        group = groups[fold(card.get('name') or '')]
+        if len(group) == 1:
+            ordered.append(card)
+        elif card is group[0]:
+            ordered.extend(sorted(group, key=lambda c: c.get('has_songs') is False))
+    cards[:] = ordered
+
+
+def artist_brief(browse_id: str) -> dict[str, Any]:
+    """An artist's name, picture and followers: one request, remembered."""
+
+    full = _cache_get(f'artist::{browse_id}')
+    if full is not None:
+        return {
+            'name': full.get('name', ''),
+            'cover_url': full.get('cover_url', ''),
+            'subscribers': full.get('subscribers', ''),
+            'has_songs': bool(full.get('has_songs', full.get('songs'))),
+        }
+    key = f'brief::{browse_id}'
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    data = _ytm().get_artist(browse_id)
+    songs = data.get('songs') if isinstance(data.get('songs'), dict) else {}
+    out = {
+        'name': data.get('name', ''),
+        'cover_url': _thumb(data),
+        'subscribers': data.get('subscribers') or '',
+        'has_songs': bool(songs.get('results') or songs.get('browseId')),
+    }
+    _cache_put(key, out)
+    return out
+
+
+def artists_of_video(video_id: str) -> list[dict[str, str]]:
+    """Who YouTube Music credits on a recording, with their ids.
+
+    A failure to reach YouTube is raised, as search_artists does. A page this
+    cannot read (some music videos come back in a shape the library does not
+    know) is an empty answer: the next song of the artist may do better.
+    """
+
+    from .providers import watch_track  # noqa: PLC0415
+
+    key = f'credits::{video_id}'
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    track = watch_track(video_id)
+    if track is None:
+        return []
+    out = _artists_list(track)
+    _cache_put(key, out)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -396,11 +500,23 @@ def artist(browse_id: str) -> dict[str, Any]:
         songs_section.get('browseId') if isinstance(songs_section, dict) else None
     )
 
+    videos_section = data.get('videos') or {}
+    videos_bid = (
+        videos_section.get('browseId') if isinstance(videos_section, dict) else None
+    )
+
     def _songs() -> list[dict[str, Any]]:
         # Prefer the artist's songs *playlist* (every track) over the
         # five-track inline preview.
         rows = _playlist_songs(songs_bid) if songs_bid else []
-        return rows or _section_songs(songs_section)
+        rows = rows or _section_songs(songs_section)
+        if rows:
+            return rows
+        # Some artists YouTube Music lists have videos and no songs at all
+        # (a channel of music videos). Their page used to come up with
+        # nothing to play; the videos are what they have.
+        rows = _playlist_songs(videos_bid, 100) if videos_bid else []
+        return rows or _section_songs(videos_section)
 
     jobs = {
         'songs': _POOL.submit(_songs),
@@ -432,6 +548,11 @@ def artist(browse_id: str) -> dict[str, Any]:
         'songs': _done('songs', []),
         'albums': _done('albums', []),
         'singles': _done('singles', []),
+        # Songs of their own, as against the videos standing in for them
+        # (see _songs): what tells two artists of one name apart in search.
+        'has_songs': bool(
+            songs_bid or (isinstance(songs_section, dict) and songs_section.get('results'))
+        ),
     }
     _cache_put(cache_key, out)
     return out

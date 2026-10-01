@@ -81,7 +81,7 @@ def _split_artists(value: str) -> list[str]:
     # last, inside what the other separators left, so the X that ends
     # "Lil Nas X ft. Billy Ray Cyrus" stays with its name.
     parts = _re.split(
-        r'\s*(?:/|;|,|&)\s*|\s+(?:feat\.?|ft\.?)\s+', value, flags=_re.IGNORECASE
+        r'\s*(?:/|;|,|&)\s*|\s+(?:feat\.?|ft\.?|featuring)\s+', value, flags=_re.IGNORECASE
     )
     seen: list[str] = []
     for part in parts:
@@ -92,6 +92,37 @@ def _split_artists(value: str) -> list[str]:
             if p and p not in seen:
                 seen.append(p)
     return seen
+
+
+_FEAT_RE = __import__('re').compile(r'(?i)\s+(?:feat\.?|ft\.?|featuring)\s+')
+
+
+def _split_feat(names: list[str]) -> list[str]:
+    """Each name, with a guest credited inside it ("A Ft B") made its own.
+
+    Only the words that always mean a guest: "&" and "," are left alone here,
+    because a list YouTube Music gave already has them right ("Bob Marley &
+    The Wailers" is one act). A song whose credit came as "Mbosso Ft Diamond
+    Platnumz" put an artist of that name in the sidebar beside Mbosso.
+    """
+
+    out: list[str] = []
+    for name in names:
+        for piece in _FEAT_RE.split(name):
+            piece = piece.strip()
+            if piece and piece not in out:
+                out.append(piece)
+    return out
+
+
+def _clean_ids(raw: Any) -> list[dict[str, str]]:
+    """The artists a song credits, with their YouTube Music ids."""
+
+    out: list[dict[str, str]] = []
+    for item in raw if isinstance(raw, list) else []:
+        if isinstance(item, dict) and item.get('id') and item.get('name'):
+            out.append({'name': str(item['name']), 'id': str(item['id'])})
+    return out
 
 
 def _read_tags(path: Path) -> dict[str, Any]:
@@ -126,8 +157,8 @@ def _read_tags(path: Path) -> dict[str, Any]:
             # Sealed by a version that recorded both, so 'artist' here is
             # already the primary the plain reader worked out, album artist
             # and all: "Bob Marley & The Wailers" rather than its first name.
-            artists = [str(a) for a in stored if a]
-            primary = raw or artists[0]
+            artists = _split_feat([str(a) for a in stored if a])
+            primary = _split_feat([raw])[0] if raw.strip() else artists[0]
         else:
             # Older container: all there is to go on is one string, which is
             # what the filename gave. Split it the way a plain file is split.
@@ -144,6 +175,9 @@ def _read_tags(path: Path) -> dict[str, Any]:
             'duration': int(head.get('duration') or 0),
             'track_number': int(head.get('track_number') or 0),
             'video_id': str(head.get('video_id') or ''),
+            # Who the song credits, by their YouTube Music id: what tells two
+            # artists with one name apart, and finds the right one online.
+            'artist_ids': _clean_ids(head.get('artist_ids')),
             'problem': problem,
         }
 
@@ -183,6 +217,8 @@ def _read_tags(path: Path) -> dict[str, Any]:
     # Primary artist for grouping: prefer the clean album-artist, else the
     # first split artist, else the filename's "Artist - Title" prefix.
     primary = album_artist or (all_artists[0] if all_artists else '')
+    if primary:
+        primary = _split_feat([primary])[0]
 
     if not title or not primary:
         stem = path.stem
@@ -208,6 +244,7 @@ def _read_tags(path: Path) -> dict[str, Any]:
         'duration': duration,
         'track_number': track_number,
         'video_id': video_id,
+        'artist_ids': [],
         'problem': '',
     }
 
@@ -327,7 +364,14 @@ def _canonicalize_artists(names: list[str]) -> dict[str, str]:
     """Map each raw artist name to a canonical (shortest-variant) name."""
 
     # Sort by length so shorter "base" names are chosen as canonical anchors.
-    ordered = sorted(set(names), key=lambda n: (len(n), n.lower()))
+    # Between spellings of one length, one not in capitals, then the one most
+    # songs use, then a fixed order. It was whichever a set happened to give
+    # first, so an artist was "Alex Kasau Katombi" on one start and
+    # "ALEX KASAU KATOMBI" on the next.
+    from collections import Counter
+
+    used = Counter(names)
+    ordered = sorted(used, key=lambda n: (len(n), n.isupper(), -used[n], n.lower(), n))
     canon: dict[str, str] = {}
     anchors: list[str] = []
     for name in ordered:
@@ -358,6 +402,36 @@ def _pick_cover(holder: dict[str, Any], tr: dict[str, Any]) -> None:
     holder['_cover_ok'] = not tr.get('problem')
 
 
+def _identity(name: str, members: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
+    """Who this artist is online, as far as their songs say.
+
+    The ids the songs credit under this name, the most credited first, and a
+    few of the songs' video ids for when none of them recorded an id (saved by
+    an earlier version): YouTube says who is on a recording. A name alone is
+    not enough: two "Mavokali" channels came back from a search, and the first
+    was a video channel with no songs, not the one that released them.
+    """
+
+    from collections import Counter
+
+    want = fold(name)
+    ids: Counter = Counter()
+    videos: list[str] = []
+    for tr in members:
+        for a in tr.get('artist_ids') or []:
+            if fold(a['name']) == want or _same_artist(a['name'], name):
+                ids[a['id']] += 1
+        lead = (tr.get('artists') or [tr.get('artist') or ''])[0]
+        if (
+            tr.get('video_id')
+            and not tr.get('problem')
+            and len(videos) < 4
+            and (fold(lead) == want or _same_artist(lead, name))
+        ):
+            videos.append(tr['video_id'])
+    return [i for i, _ in ids.most_common()], videos
+
+
 def _artist_entry(name: str, members: list[dict[str, Any]]) -> dict[str, Any]:
     """One artist's page: their tracks in albums, and a picture."""
 
@@ -381,12 +455,15 @@ def _artist_entry(name: str, members: list[dict[str, Any]]) -> dict[str, Any]:
         )
         album.pop('_cover_ok', None)
         albums.append(album)
+    ids, videos = _identity(name, members)
     return {
         'name': name,
         'count': entry['count'],
         'cover': entry.get('cover', ''),
         'cover_v': entry.get('cover_v', 0),
         'albums': albums,
+        'ids': ids,
+        'videos': videos,
     }
 
 
@@ -584,6 +661,21 @@ def artists(base: Path) -> list[dict[str, Any]]:
         {'name': a['name'], 'count': a['count'], 'cover': a['cover'], 'cover_v': a.get('cover_v', 0)}
         for a in data['artists']
     ]
+
+
+def artist_hints(base: Path, names: list[str]) -> dict[str, dict[str, list[str]]]:
+    """For each artist, what their songs say about who they are online."""
+
+    data = _get(base)
+    by_name = {a['name']: a for a in data['artists']}
+    out: dict[str, dict[str, list[str]]] = {}
+    for name in names:
+        a = by_name.get(name)
+        if a is None:
+            a = artist_detail(base, name)
+        if a and (a.get('ids') or a.get('videos')):
+            out[name] = {'ids': list(a.get('ids') or []), 'videos': list(a.get('videos') or [])}
+    return out
 
 
 def artist_detail(base: Path, name: str) -> Optional[dict[str, Any]]:

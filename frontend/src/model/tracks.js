@@ -283,7 +283,11 @@ export function isRowDownloading(row) {
   return !!item && item.isPending()
 }
 
-export function downloadRows(rows) {
+// From this many songs at once, saving is asked about first: one stray click
+// on "Save all 101" used to start a hundred downloads.
+const ASK_FROM = 30
+
+export async function downloadRows(rows) {
   const wanted = rows.filter((r) => r.kind === 'song' && !isRowDownloaded(r))
   // Songs already on their way are not asked for again. "Download all"
   // pressed twice used to send every one of them a second time.
@@ -291,6 +295,15 @@ export function downloadRows(rows) {
   if (!songs.length) {
     if (!wanted.length) toast(t('actions.alreadyInLibrary'), { icon: 'ph:check-circle' })
     return
+  }
+  if (songs.length >= ASK_FROM) {
+    const ok = await confirmDialog({
+      title: t('actions.saveManyTitle', { count: songs.length }),
+      message: t('actions.saveManyMessage'),
+      confirmText: t('actions.saveManyConfirm', { count: songs.length }),
+      icon: 'ph:download-simple',
+    })
+    if (!ok) return
   }
   // No optimistic "in library" marking: rows show progress from the
   // download queue and turn green only once the file really exists.

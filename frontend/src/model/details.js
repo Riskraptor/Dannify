@@ -11,10 +11,6 @@ export const detailsRunning = ref(false)
 export const detailsDone = ref(0)
 export const detailsTotal = ref(0)
 
-function say(key, params, opts) {
-  toast(t(key, params), { icon: 'ph:arrows-clockwise', ...opts })
-}
-
 /** Refresh the details of these saved files. Returns how many were sent. */
 export async function refreshDetailsFor(files) {
   const list = [...new Set((files || []).filter(Boolean))]
@@ -22,9 +18,11 @@ export async function refreshDetailsFor(files) {
   try {
     const res = await API.refreshDetails(list)
     const queued = (res.data && res.data.queued) || list.length
+    // No message to say it has started: the button that started it shows
+    // how far it has got. A note on top of the list said the same thing
+    // again, and covered the very songs being refreshed.
     detailsRunning.value = true
     detailsTotal.value += queued
-    say('details.started', { count: queued }, { timeout: 4000 })
     return queued
   } catch (e) {
     toast(t(e && e.response && e.response.status === 409 ? 'details.noStorage' : 'details.failed'), {
@@ -43,8 +41,8 @@ export async function refreshArtists(names, files = []) {
     toast(t('details.failed'), { tone: 'error' })
     return
   }
+  // The pictures update in place; nothing to say about it.
   if (files.length) await refreshDetailsFor(files)
-  else toast(t('details.artistsRefreshed'), { icon: 'ph:user-circle', tone: 'success' })
 }
 
 if (typeof window !== 'undefined') {
@@ -65,9 +63,13 @@ if (typeof window !== 'undefined') {
         tone: 'error',
       })
     } else if (failed) {
-      toast(t('details.someUpdated', { count: updated, failed }), { tone: 'success' })
+      toast(t('details.someUpdated', { count: updated, failed }), { tone: 'success', timeout: 3000 })
     } else {
-      toast(t('details.updated', { count: updated }), { tone: 'success', icon: 'ph:check-circle' })
+      toast(t('details.updated', { count: updated }), {
+        tone: 'success',
+        icon: 'ph:check-circle',
+        timeout: 2500,
+      })
     }
   })
 }

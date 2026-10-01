@@ -38,6 +38,13 @@
             <span>{{ online.subscribers }} {{ t('explore.subscribers') }}</span>
           </template>
         </template>
+        <template v-if="online && online.description" #sub>
+          <p class="selectable bio" :class="{ 'is-open': bioOpen }">{{ online.description }}</p>
+          <button v-if="online.description.length > 180" class="bio-more" @click="bioOpen = !bioOpen">
+            {{ bioOpen ? t('explore.showLess') : t('explore.readMore') }}
+            <Icon :icon="bioOpen ? 'ph:caret-up-bold' : 'ph:caret-down-bold'" class="h-3 w-3" />
+          </button>
+        </template>
         <template #actions>
           <button class="play-fab" :title="t('artists.playAll')" @click="playAll">
             <Icon :icon="playingHere ? 'ph:pause-fill' : 'ph:play-fill'" class="h-5 w-5" />
@@ -52,7 +59,20 @@
             @click="refreshThisArtist"
           >
             <Icon icon="ph:arrows-clockwise" class="h-4 w-4" :class="{ 'animate-spin': detailsRunning }" />
-            {{ t('details.refresh') }}
+            {{
+              detailsRunning
+                ? t('details.progress', { done: detailsDone, total: detailsTotal })
+                : t('details.refresh')
+            }}
+          </button>
+          <button
+            v-if="online && online.browse_id"
+            class="btn btn-pill"
+            :title="t('artist.fullPageHint')"
+            @click="openFullPage"
+          >
+            <Icon icon="ph:arrow-square-out" class="h-4 w-4" />
+            {{ t('artist.fullPage') }}
           </button>
         </template>
       </CollectionHero>
@@ -80,11 +100,7 @@
       <section class="more" aria-live="polite">
         <div class="view-pad more-head">
           <h2 class="section-title">{{ t('artist.moreFrom', { name: artist.name }) }}</h2>
-          <button
-            v-if="online && online.browse_id"
-            class="more-link"
-            @click="router.push({ name: 'ExploreArtist', params: { id: online.browse_id } })"
-          >
+          <button v-if="online && online.browse_id" class="more-link" @click="openFullPage">
             {{ t('artist.fullPage') }}
             <Icon icon="ph:arrow-right" class="h-3.5 w-3.5" />
           </button>
@@ -103,9 +119,9 @@
           </div>
         </div>
 
-        <div v-else-if="onlineState === 'failed'" class="view-pad more-note">
-          <Icon icon="ph:cloud-slash" class="h-4 w-4" />
-          <span>{{ t('artist.moreUnavailable') }}</span>
+        <div v-else-if="onlineState === 'failed' || onlineState === 'offline'" class="view-pad more-note">
+          <Icon :icon="onlineState === 'offline' ? 'ph:wifi-slash' : 'ph:cloud-slash'" class="h-4 w-4" />
+          <span>{{ onlineState === 'offline' ? t('artist.moreOffline') : t('artist.moreUnavailable') }}</span>
           <button class="btn btn-pill h-7 text-xs" @click="loadOnline(true)">{{ t('common.retry') }}</button>
         </div>
 
@@ -154,6 +170,7 @@
                 :key="al.browse_id"
                 :item="al"
                 kind="album"
+                :subtitle-text="albumNote(al)"
                 @open="router.push({ name: 'ExploreAlbum', params: { id: al.browse_id } })"
               />
             </Shelf>
@@ -163,6 +180,7 @@
                 :key="al.browse_id"
                 :item="al"
                 kind="album"
+                :subtitle-text="albumNote(al)"
                 @open="router.push({ name: 'ExploreAlbum', params: { id: al.browse_id } })"
               />
             </Shelf>
@@ -189,9 +207,11 @@ import {
 } from '/src/model/tracks'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 import { useArtistLinks } from '/src/model/artistLinks'
-import { refreshArtists, detailsRunning } from '/src/model/details'
+import { refreshArtists, detailsRunning, detailsDone, detailsTotal } from '/src/model/details'
 import { onRefresh, onLibraryChanged } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
+import { songKey } from '/src/model/songKey'
+import { failedForNetwork, whenOnline } from '/src/model/connectivity'
 import CollectionHero from '/src/components/ui/CollectionHero.vue'
 import TrackTable from '/src/components/ui/TrackTable.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
@@ -285,13 +305,23 @@ async function loadOnline(force = false) {
     online.value = res.data && typeof res.data === 'object' ? res.data : null
     onlineState.value = online.value ? 'ready' : 'missing'
   } catch (err) {
-    onlineState.value = err && err.response && err.response.status === 404 ? 'missing' : 'failed'
+    if (err && err.response && err.response.status === 404) onlineState.value = 'missing'
+    else if (await failedForNetwork(err)) {
+      onlineState.value = 'offline'
+      whenOnline(() => {
+        if (onlineState.value === 'offline') loadOnline(true)
+      })
+    } else onlineState.value = 'failed'
   }
 }
 
 // Their songs that are not saved yet, each once. Anything already in the
 // library is on the list above and is left out here; so is a song YouTube
-// lists twice.
+// lists twice. "Twice" means the same song, not only the same video: the
+// album track and its music video ("Commando" and "Commando (Official Video)")
+// are one song, and one of them saved is that song saved. A remix, a live or
+// an acoustic version is a song of its own and stays.
+const savedSongKeys = computed(() => new Set(allRows.value.map((r) => songKey(r.title))))
 const unsavedRows = computed(() => {
   void libIndex.byVideoId.value
   if (!online.value || !Array.isArray(online.value.songs)) return []
@@ -300,12 +330,42 @@ const unsavedRows = computed(() => {
   for (const song of online.value.songs) {
     const row = songRow(song)
     const id = song.video_id || song.song_id || row.key
-    if (seen.has(id)) continue
+    const key = songKey(row.title)
+    if (seen.has(id) || (key && seen.has(key))) continue
     seen.add(id)
-    if (!isRowDownloaded(row)) out.push(row)
+    if (key) seen.add(key)
+    if (isRowDownloaded(row) || (key && savedSongKeys.value.has(key))) continue
+    out.push(row)
   }
   return out
 })
+
+// Of an album of theirs online, how many songs are saved, by the album's name.
+const savedPerAlbum = computed(() => {
+  // By each song's own album: the list above files a single under "Singles".
+  const counts = new Map()
+  for (const row of allRows.value) {
+    const key = songKey(row.album || '')
+    if (key) counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  return counts
+})
+function albumNote(al) {
+  const saved = savedPerAlbum.value.get(songKey(al.name)) || 0
+  const parts = []
+  if (al.year) parts.push(al.year)
+  if (saved) parts.push(t('artist.savedCount', { count: saved }))
+  else parts.push(al.album_type || t('explore.album'))
+  return parts.join(' · ')
+}
+
+const bioOpen = ref(false)
+
+function openFullPage() {
+  if (online.value && online.value.browse_id) {
+    router.push({ name: 'ExploreArtist', params: { id: online.value.browse_id } })
+  }
+}
 const shownUnsaved = computed(() => unsavedRows.value.slice(0, moreLimit.value))
 
 const GHOST_WIDTHS = ['72%', '54%', '83%', '61%', '77%', '48%']
@@ -346,6 +406,31 @@ onBeforeUnmount(() => clearTimeout(reloadTimer))
   font-size: 21px;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+.bio {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-line;
+}
+.bio.is-open {
+  display: block;
+  max-height: 40vh;
+  overflow-y: auto;
+  -webkit-line-clamp: unset;
+}
+.bio-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgb(var(--c-fg) / 0.7);
+}
+.bio-more:hover {
+  color: rgb(var(--c-fg));
 }
 .more {
   padding-top: 6px;

@@ -460,8 +460,10 @@
   }
 
   /* Segmented control: <div class="seg"><button class="seg-item is-active"> */
+  /* Never wider than where it is: with the side panel open, four choices
+     ran past the edge of their card. They go onto a second line instead. */
   .seg {
-    @apply inline-flex items-center gap-0.5 rounded-lg bg-tint/[0.06] p-0.5;
+    @apply inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-tint/[0.06] p-0.5;
   }
   .seg-item {
     @apply inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[13px] font-medium text-fg/65 transition-colors hover:text-fg;

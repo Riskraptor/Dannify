@@ -22,10 +22,22 @@
 
     <EmptyState
       v-else-if="!album && !loading"
-      :icon="isPlaylist ? 'ph:playlist' : 'ph:vinyl-record'"
-      :title="t('explore.notFound')"
+      :icon="
+        failure === 'offline'
+          ? 'ph:wifi-slash'
+          : failure === 'error'
+            ? 'ph:warning-circle'
+            : isPlaylist
+              ? 'ph:playlist'
+              : 'ph:vinyl-record'
+      "
+      :title="failure === 'offline' ? t('net.offlineTitle') : failure === 'error' ? t('net.loadFailed') : t('explore.notFound')"
+      :text="failure === 'offline' ? t('net.offlinePage') : ''"
     >
-      <button class="btn btn-pill" @click="router.back()">{{ t('explore.back') }}</button>
+      <div class="flex gap-2">
+        <button v-if="failure" class="btn btn-pill" @click="load">{{ t('common.retry') }}</button>
+        <button class="btn btn-pill" @click="router.back()">{{ t('explore.back') }}</button>
+      </div>
     </EmptyState>
 
     <!-- Loading, but not for long enough to have earned a skeleton yet.
@@ -131,6 +143,7 @@ import CollectionHero from '/src/components/ui/CollectionHero.vue'
 import TrackTable from '/src/components/ui/TrackTable.vue'
 import ArtistLinks from '/src/components/ui/ArtistLinks.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
+import { failedForNetwork, whenOnline } from '/src/model/connectivity'
 
 const props = defineProps({ mode: { type: String, default: 'album' } })
 
@@ -236,6 +249,9 @@ function openMore(e) {
   )
 }
 
+// '' (none), 'missing', 'offline' or 'error' (see ExploreArtist).
+const failure = ref('')
+
 async function load() {
   const id = route.params.id
   if (!id) return
@@ -243,8 +259,17 @@ async function load() {
   try {
     const res = isPlaylist.value ? await API.explorePlaylist(id) : await API.exploreAlbum(id)
     album.value = res.data
-  } catch {
+    failure.value = ''
+  } catch (e) {
     album.value = null
+    const status = e && e.response && e.response.status
+    if (status === 404) failure.value = 'missing'
+    else if (await failedForNetwork(e)) {
+      failure.value = 'offline'
+      whenOnline(() => {
+        if (!album.value) load()
+      })
+    } else failure.value = 'error'
   } finally {
     loading.value = false
   }

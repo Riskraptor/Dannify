@@ -1717,6 +1717,11 @@ def _repair_pass(root, stale, bench, done, on_progress, on_change) -> None:
                     meta[field] = head[field]
             if head.get('video_id') and not meta.get('video_id'):
                 meta['video_id'] = head['video_id']
+            # The credits the song was saved with are better than a split of
+            # its tags, and the artists' ids are not in the tags at all.
+            for field in ('artists', 'artist_ids'):
+                if isinstance(head.get(field), list) and head[field]:
+                    meta[field] = head[field]
 
             fresh = path.with_suffix(path.suffix + '.rebuilt')
             seal(scratch, fresh, meta)  # seal() removes the scratch file

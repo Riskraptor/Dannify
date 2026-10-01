@@ -317,7 +317,12 @@ class Downloader:
 
     @staticmethod
     def _artist_subdir(song: dict[str, Any]) -> str:
-        artists = song.get('artists') or []
+        # The first artist, a guest credited inside the name taken off: a
+        # song credited as "Mbosso Ft Diamond Platnumz" made a folder of that
+        # name beside Mbosso's own.
+        from .library import _split_feat  # noqa: PLC0415
+
+        artists = _split_feat([str(a) for a in song.get('artists') or [] if a])
         return _sanitize(artists[0] if artists else 'unknown', _FOLDER_LIMIT)
 
     def _target(self, song: dict[str, Any], subdir: Optional[str]) -> tuple[Path, str]:
@@ -770,7 +775,18 @@ class Downloader:
             # that can cut a name in two ("X Ambassadors"), so it only fills
             # in when the song had none.
             if artists:
-                meta['artists'] = list(artists)
+                from .library import _split_feat  # noqa: PLC0415
+
+                meta['artists'] = _split_feat([str(a) for a in artists if a])
+            # Which artists these are, by their YouTube Music ids: two with
+            # one name are told apart by it, and the right one found online.
+            ids = [
+                {'name': str(a['name']), 'id': str(a['id'])}
+                for a in (song.get('artist_ids') or [])
+                if isinstance(a, dict) and a.get('name') and a.get('id')
+            ]
+            if ids:
+                meta['artist_ids'] = ids
             target = target_dir / f'{basename}{vault.SUFFIX}'
             sealed = vault.seal(final_path, target, meta)
         except Exception as exc:

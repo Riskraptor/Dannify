@@ -137,13 +137,19 @@ watch(() => route.fullPath, close)
 function onBlur() {
   close()
 }
+// Escape closes it even when the focus went somewhere else first.
+function onWindowKey(e) {
+  if (menu.value && e.key === 'Escape') close()
+}
 onMounted(() => {
   window.addEventListener('blur', onBlur)
   window.addEventListener('resize', onBlur)
+  window.addEventListener('keydown', onWindowKey)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('blur', onBlur)
   window.removeEventListener('resize', onBlur)
+  window.removeEventListener('keydown', onWindowKey)
 })
 </script>
 
