@@ -49,3 +49,25 @@ def test_a_dead_socket_found_by_a_broadcast_is_dropped():
         return manager.connected
 
     assert asyncio.run(run()) is False
+
+
+def test_a_window_that_has_only_just_connected_is_not_settled(monkeypatch):
+    import asyncio
+
+    from dannify import api
+
+    clock = [100.0]
+    monkeypatch.setattr(api.time, 'monotonic', lambda: clock[0])
+
+    class WS:
+        async def accept(self):
+            pass
+
+    cm = api.ConnectionManager()
+    assert not cm.settled()  # nobody listening
+    asyncio.run(cm.connect('a', WS()))
+    assert cm.connected and not cm.settled()  # the page is still coming up
+    clock[0] += 2
+    assert cm.settled()
+    asyncio.run(cm.connect('b', WS()))
+    assert cm.settled()  # a second window does not restart the wait

@@ -19,6 +19,7 @@ working without changes:
 from __future__ import annotations
 
 import asyncio
+import time
 import contextlib
 import json
 import re
@@ -102,9 +103,13 @@ class ConnectionManager:
 
     def __init__(self) -> None:
         self._clients: dict[str, WebSocket] = {}
+        # When a window started listening, after none was (monotonic).
+        self._since = 0.0
 
     async def connect(self, client_id: str, ws: WebSocket) -> None:
         await ws.accept()
+        if not self._clients:
+            self._since = time.monotonic()
         self._clients[client_id] = ws
 
     def disconnect(self, client_id: str, ws: Optional[WebSocket] = None) -> None:
@@ -123,6 +128,17 @@ class ConnectionManager:
         a file the shell asked us to open arrives before the page does."""
 
         return bool(self._clients)
+
+    def settled(self, grace: float = 1.5) -> bool:
+        """A window is listening, and has been for a moment.
+
+        Its socket opens while the page is still putting itself together, and
+        a message that arrives in that moment can find nothing yet to act on
+        it: a song double-clicked in Explorer just as Dannify started was
+        announced, and never played.
+        """
+
+        return bool(self._clients) and time.monotonic() - self._since >= grace
 
     async def send(self, client_id: str, message: dict[str, Any]) -> None:
         ws = self._clients.get(client_id)
@@ -242,6 +258,35 @@ def _coerce_download_dir(value: Any) -> Optional[Path]:
 @router.get('/api/version')
 def get_version() -> str:
     return state.version
+
+
+def _reachable() -> bool:
+    """Whether YouTube Music answers from here, right now.
+
+    Through the same proxies as everything else the app fetches. Any answer
+    at all counts: what is being asked is whether there is a way out.
+    """
+
+    import requests  # noqa: PLC0415
+
+    try:
+        requests.head('https://music.youtube.com/', timeout=4, allow_redirects=False)
+        return True
+    except requests.RequestException:
+        return False
+
+
+@router.get('/api/net')
+async def net_endpoint() -> dict[str, Any]:
+    """Is the connection there? Asked fresh every time.
+
+    The window used to ask the update check, which remembers a good answer
+    for six hours: online in the morning, offline by noon, and the app went
+    on believing it was online, saying "something went wrong" instead of
+    "you're offline", and never retrying when the connection came back.
+    """
+
+    return {'online': await asyncio.to_thread(_reachable)}
 
 
 @router.get('/api/health')
@@ -1102,6 +1147,9 @@ async def explore_search_endpoint(
         return {'songs': [], 'artists': [], 'albums': [], 'playlists': []}
     try:
         return await asyncio.to_thread(explorer.search, q, limit)
+    except explorer.SearchUnavailable as exc:
+        # The window tells "no connection" from "nothing found" by this.
+        raise HTTPException(status_code=503, detail='unreachable') from exc
     except Exception as exc:
         logger.exception('explore search failed for {}', q)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -2004,9 +2052,23 @@ async def refresh_artists_endpoint(
         known = artist_links._links.get(library_mod.fold(name)) or {}
         if known.get('id'):
             explorer.forget_artist(known['id'])
-    await asyncio.to_thread(artist_links.forget, names)
-    links, pending = await asyncio.to_thread(artist_links.known, names)
+    hints = await _artist_hints(names)
+    await asyncio.to_thread(artist_links.relook, names, hints)
+    links, pending = await asyncio.to_thread(artist_links.known, names, hints)
     return {'links': links, 'pending': pending}
+
+
+async def _artist_hints(names: list[str]) -> dict[str, dict[str, list[str]]]:
+    """What the songs in the library say about who each artist is."""
+
+    base = state.download_dir
+    if base is None:
+        return {}
+    try:
+        return await asyncio.to_thread(library_mod.artist_hints, Path(base), names)
+    except Exception:
+        logger.opt(exception=True).debug('artist hints unavailable')
+        return {}
 
 
 @router.get('/api/artists-online/links')
@@ -2019,7 +2081,8 @@ async def artist_links_endpoint() -> dict[str, Any]:
 
     base = _require_download_dir()
     names = [a['name'] for a in await asyncio.to_thread(library_mod.artists, base)]
-    links, pending = await asyncio.to_thread(artist_links.known, names)
+    hints = await _artist_hints(names)
+    links, pending = await asyncio.to_thread(artist_links.known, names, hints)
     return {'links': links, 'pending': pending}
 
 
@@ -2027,7 +2090,8 @@ async def artist_links_endpoint() -> dict[str, Any]:
 async def artist_online_page_endpoint(name: str = Query(...)) -> dict[str, Any]:
     """Everything a saved artist has released, for the rest of their page."""
 
-    found = await asyncio.to_thread(artist_links.link, name)
+    hint = (await _artist_hints([name])).get(name)
+    found = await asyncio.to_thread(artist_links.link, name, hint)
     if not found:
         raise HTTPException(status_code=404, detail='Artist not found online')
     try:

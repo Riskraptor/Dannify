@@ -129,6 +129,13 @@ def _result_to_song(result: dict[str, Any]) -> Optional[dict[str, Any]]:
         'year': year_str,
         'release_date': release_date,
         'source': 'youtube',
+        # Who it credits, by id: kept with the song when it is saved, so the
+        # library knows which of two artists with one name it is by.
+        'artist_ids': [
+            {'name': a['name'], 'id': a['id']}
+            for a in (result.get('artists') or [])
+            if isinstance(a, dict) and a.get('name') and a.get('id')
+        ],
     }
 
 
@@ -702,6 +709,60 @@ def _pick_best(
             best_score = score
             best = result
     return best
+
+
+_NOT_READABLE = (KeyError, IndexError, TypeError, ValueError, AttributeError)
+
+
+def watch_track(video_id: str) -> Optional[dict[str, Any]]:
+    """What YouTube Music says one recording is: title, artists with their
+    ids, album, year, length and pictures. Shaped like a search result.
+
+    ytmusicapi's get_watch_playlist reads the whole watch page and gives up
+    on a music video (a tab it expects is not there), though the one part
+    needed here, the queue, is fine; that part is read directly. A failure to
+    reach YouTube is raised; a page that cannot be read is None.
+    """
+
+    from ytmusicapi.navigation import nav  # noqa: PLC0415
+    from ytmusicapi.parsers.watch import parse_watch_playlist  # noqa: PLC0415
+
+    client = _ytm()
+    tracks: list[dict[str, Any]] = []
+    try:
+        body = {
+            'enablePersistentPlaylistPanel': True,
+            'isAudioOnly': True,
+            'tunerSettingValue': 'AUTOMIX_SETTING_NORMAL',
+            'videoId': video_id,
+            'playlistId': 'RDAMVM' + video_id,
+        }
+        response = client._send_request('next', body)
+        panel = nav(response, [
+            'contents', 'singleColumnMusicWatchNextResultsRenderer', 'tabbedRenderer',
+            'watchNextTabbedResultsRenderer', 'tabs', 0, 'tabRenderer', 'content',
+            'musicQueueRenderer', 'content', 'playlistPanelRenderer', 'contents',
+        ])
+        tracks = parse_watch_playlist(panel[:3])
+    except _NOT_READABLE:
+        try:
+            tracks = (client.get_watch_playlist(video_id, limit=1) or {}).get('tracks') or []
+        except _NOT_READABLE:
+            logger.debug('watch page of {} could not be read', video_id)
+            return None
+    track = next((t for t in tracks if isinstance(t, dict) and t.get('videoId') == video_id), None)
+    if track is None:
+        return None
+    return {
+        'videoId': video_id,
+        'title': track.get('title') or '',
+        'artists': [a for a in track.get('artists') or [] if isinstance(a, dict)],
+        'album': track.get('album') if isinstance(track.get('album'), dict) else None,
+        'year': track.get('year') or '',
+        'duration': track.get('length') or '',
+        'thumbnails': track.get('thumbnail') or [],
+        'videoType': track.get('videoType') or '',
+    }
 
 
 def song_from_video_id(video_id: str) -> dict[str, Any]:

@@ -684,8 +684,23 @@ const updateHint = computed(() => {
   if (updates.lastError.value) {
     return connectivity.online.value ? t('update.checkFailedLater') : t('update.offline')
   }
+  if (updates.checking.value) return t('update.checking')
+  if (!updates.checkedOk.value) {
+    return connectivity.online.value ? t('update.notChecked') : t('update.offline')
+  }
   return t('update.upToDate', { version: version.value })
 })
+
+// Opening About answers the question it shows, if nothing has yet.
+watch(
+  () => pane.value,
+  (id) => {
+    if (id === 'about' && !updates.checkedOk.value && !updates.checking.value) {
+      updates.check(false)
+    }
+  },
+  { immediate: true }
+)
 
 // --- Support the app (one link, see support.py)
 const support = reactive({ configured: false, link: '', message: '' })
@@ -748,7 +763,7 @@ async function clearCaches() {
   clearing.value = true
   try {
     await API.clearCaches()
-    toast(t('settings.cachesCleared'), { tone: 'success', icon: 'ph:broom' })
+    // The size beside the button drops to nothing: that is the answer.
     loadStorage()
   } catch {
     toast(t('settings.clearFailed'), { tone: 'error' })
@@ -770,7 +785,7 @@ watch(
 async function changeFolder() {
   const path = await sm.pickDownloadFolder()
   if (path) {
-    toast(t('settings.folderChanged'), { tone: 'success' })
+    // The new folder is written right there in the row.
     storage.value = null
     loadStorage()
   }

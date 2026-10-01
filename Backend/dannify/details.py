@@ -45,9 +45,15 @@ def _fresh_details(song: dict[str, Any], video_id: str) -> tuple[Optional[dict[s
 
     from . import providers  # noqa: PLC0415  (imports ytmusicapi)
 
+    exact = bool(video_id)
     try:
         if video_id:
             match = providers.find_match_for_video(song, video_id)
+            # A song saved from a music video is not among the song results
+            # that search looks through, and its refresh always came back
+            # "no details found". The recording itself says what it is.
+            if match is None:
+                match = providers.watch_track(video_id)
         else:
             video_id, match = providers.find_match(song)
     except Exception:
@@ -56,6 +62,20 @@ def _fresh_details(song: dict[str, Any], video_id: str) -> tuple[Optional[dict[s
     if not match or not video_id:
         return None, video_id or ''
     fresh = providers.enrich_from_match({**song, 'youtube_id': video_id}, match)
+    credits = [
+        a for a in (match.get('artists') or [])
+        if isinstance(a, dict) and a.get('name')
+    ]
+    # Only for the very recording the song was saved from: a match found by
+    # searching may be somebody else's version.
+    if credits and exact and match.get('videoId') in (None, video_id):
+        # The recording's own credits, and who each artist is by id. A song
+        # saved with "Mbosso Ft Diamond Platnumz" as one name comes out of a
+        # refresh with two artists, each the right one online.
+        fresh['artists'] = [str(a['name']) for a in credits]
+        fresh['artist_ids'] = [
+            {'name': str(a['name']), 'id': str(a['id'])} for a in credits if a.get('id')
+        ]
     return fresh, video_id
 
 
@@ -120,6 +140,9 @@ def refresh(root: Path, path: Path, lyrics_providers: Optional[list[str]] = None
                 meta[field] = value
         if artists:
             meta['artists'] = list(artists)
+        ids = fresh.get('artist_ids') or head.get('artist_ids')
+        if ids:
+            meta['artist_ids'] = ids
 
         rebuilt = path.with_suffix(path.suffix + '.rebuilt')
         vault.seal(plain, rebuilt, meta)  # seal() removes the plain copy

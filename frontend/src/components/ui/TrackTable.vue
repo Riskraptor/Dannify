@@ -2,7 +2,7 @@
   <div
     ref="root"
     class="tt"
-    :class="{ 'is-dense': !showCover }"
+    :class="{ 'is-dense': !showCover, 'has-bar': barShown }"
     :style="{ '--tt-cols': gridCols, '--tt-sticky': `${stickyOffset}px` }"
     tabindex="0"
     role="grid"
@@ -18,10 +18,10 @@
           type="checkbox"
           class="check"
           tabindex="-1"
-          :checked="allSelected"
-          :indeterminate.prop="someSelected"
+          :checked="picking && allSelected"
+          :indeterminate.prop="picking && someSelected"
           :aria-label="t('table.selectAll')"
-          @change="toggleAll"
+          @change="tickAll"
         />
       </div>
       <div v-if="showIndex" class="tt-cell tt-c-index">#</div>
@@ -93,9 +93,9 @@
               type="checkbox"
               class="check"
               tabindex="-1"
-              :checked="selected.has(row.key)"
+              :checked="picking && selected.has(row.key)"
               @mousedown.stop
-              @click.stop="toggleOne(index)"
+              @click.stop="tick(index)"
             />
           </div>
           <div v-if="showIndex" class="tt-cell tt-c-index">
@@ -252,7 +252,7 @@
          on a selection nobody could see how to make; now ticking a box brings
          this up, and it stays in view while the list scrolls. -->
     <transition name="selbar">
-      <div v-if="selectionBar && selectedRows.length" class="selbar" role="toolbar" @mousedown.stop>
+      <div v-if="barShown" class="selbar" role="toolbar" @mousedown.stop>
         <span class="selbar-count">{{ t('selection.count', { count: selectedRows.length }) }}</span>
         <button class="selbar-btn" @click="playRows(selectedRows, 0, { toggle: false })">
           <Icon icon="ph:play-fill" class="h-4 w-4" />
@@ -262,9 +262,18 @@
           <Icon icon="ph:list-plus" class="h-4 w-4" />
           <span>{{ t('actions.addToQueue') }}</span>
         </button>
-        <button v-if="selectedLocals.length" class="selbar-btn" @click="refreshRowDetails(selectedLocals)">
-          <Icon icon="ph:arrows-clockwise" class="h-4 w-4" />
-          <span>{{ t('details.refresh') }}</span>
+        <button
+          v-if="selectedLocals.length"
+          class="selbar-btn"
+          :disabled="detailsRunning"
+          @click="refreshRowDetails(selectedLocals)"
+        >
+          <Icon icon="ph:arrows-clockwise" class="h-4 w-4" :class="{ 'animate-spin': detailsRunning }" />
+          <span>{{
+            detailsRunning
+              ? t('details.progress', { done: detailsDone, total: detailsTotal })
+              : t('details.refresh')
+          }}</span>
         </button>
         <button
           v-if="deletable && selectedLocals.length"
@@ -283,7 +292,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, inject, onMounted, onBeforeUnmount, h } from 'vue'
+import { ref, computed, watch, inject, onMounted, onBeforeUnmount, onActivated, onDeactivated, h } from 'vue'
 import { Icon } from '@iconify/vue'
 import VirtualList from './VirtualList.vue'
 import CoverImage from './CoverImage.vue'
@@ -291,7 +300,7 @@ import ArtistLinks from './ArtistLinks.vue'
 import { usePlayer, formatTime } from '/src/model/player'
 import { useAccount } from '/src/model/account'
 import { useLibraryIndex } from '/src/model/libraryIndex'
-import { useProgressTracker } from '/src/model/download'
+import { useProgressTracker, useDownloadManager } from '/src/model/download'
 import { openContextMenu } from '/src/model/contextMenu'
 import { cancelHoverWarm, warmOnHover } from '/src/model/prefetch'
 import {
@@ -309,6 +318,7 @@ import {
   refreshRowDetails,
 } from '/src/model/tracks'
 import { repairItemOf, reasonText } from '/src/model/repair'
+import { detailsRunning, detailsDone, detailsTotal } from '/src/model/details'
 import { useI18n, currentLocale } from '/src/i18n'
 
 const props = defineProps({
@@ -392,14 +402,15 @@ const someSelected = computed(() => selected.value.size > 0 && !allSelected.valu
 
 function setSelection(keys) {
   selected.value = new Set(keys)
-  emit('selection-change', selectedRows.value)
 }
 function selectOnly(i) {
+  ticked.value = false
   anchor = i
   cursor.value = i
   setSelection([shown.value[i].key])
 }
 function toggleOne(i) {
+  ticked.value = true
   const key = shown.value[i].key
   const next = new Set(selected.value)
   if (next.has(key)) next.delete(key)
@@ -409,11 +420,53 @@ function toggleOne(i) {
   setSelection(next)
 }
 function selectRange(i) {
+  ticked.value = true
   const from = anchor < 0 ? i : anchor
   const [a, b] = from < i ? [from, i] : [i, from]
   cursor.value = i
   setSelection(shown.value.slice(a, b + 1).map((r) => r.key))
 }
+// Songs picked on purpose: a box ticked, or chosen with Ctrl or Shift.
+// Clicking a song selects it too, and that used to count: the bar came up on
+// every single click anywhere in a list, for one song that already has its
+// own menu, and an online artist's page offered to download "1 chosen".
+// The boxes show only what was picked that way: the song a click highlighted
+// is not ticked, and ticking a box starts the picking from that box alone.
+const ticked = ref(false)
+const picking = computed(() => selectedRows.value.length > 0 && (ticked.value || selectedRows.value.length > 1))
+const pickedRows = computed(() => (picking.value ? selectedRows.value : []))
+watch(pickedRows, (rows, before) => {
+  if (rows.length || (before && before.length)) emit('selection-change', rows)
+})
+function tick(i) {
+  if (picking.value) return toggleOne(i)
+  ticked.value = true
+  anchor = i
+  cursor.value = i
+  setSelection([shown.value[i].key])
+}
+function tickAll() {
+  const fresh = !picking.value
+  ticked.value = true
+  if (fresh) setSelection(shown.value.map((r) => r.key))
+  else toggleAll()
+}
+const barShown = computed(() => props.selectionBar && picking.value)
+watch(
+  () => selected.value.size,
+  (n) => {
+    if (!n) ticked.value = false
+  }
+)
+// Notifications sit above the bar rather than on top of it.
+function markBar(on) {
+  document.documentElement.classList.toggle('has-selbar', !!on)
+}
+watch(barShown, markBar)
+onActivated(() => markBar(barShown.value))
+onDeactivated(() => markBar(false))
+onBeforeUnmount(() => markBar(false))
+
 function toggleAll() {
   setSelection(allSelected.value ? [] : shown.value.map((r) => r.key))
 }
@@ -441,8 +494,9 @@ function isInteractive(target) {
 function onRowDown(e, i) {
   if (isInteractive(e.target)) return
   if (e.button === 2) {
-    // Right-click keeps an existing multi-selection that includes the row.
-    if (!selected.value.has(shown.value[i].key)) selectOnly(i)
+    // Right-click keeps an existing multi-selection that includes the row,
+    // and songs ticked on purpose stay ticked whatever row it is on.
+    if (!selected.value.has(shown.value[i].key) && !picking.value) selectOnly(i)
     return
   }
   if (e.button !== 0) return
@@ -469,19 +523,26 @@ function onRowDblClick(e, i) {
   play(i)
 }
 
-function menuItems() {
-  const rows = selectedRows.value
+function menuItems(rows = selectedRows.value) {
   return trackMenu(rows, { ...props.menuContext, source: shown.value })
 }
 
+// The menu of the row it was opened on. A row outside the songs ticked on
+// purpose gets a menu of its own, and the ticks are not thrown away for it.
+function menuFor(i) {
+  if (!selected.value.has(shown.value[i].key)) {
+    if (picking.value) return menuItems([shown.value[i]])
+    selectOnly(i)
+  }
+  return menuItems()
+}
+
 function onRowMenu(e, i) {
-  if (!selected.value.has(shown.value[i].key)) selectOnly(i)
-  openContextMenu(e, menuItems())
+  openContextMenu(e, menuFor(i))
 }
 
 function onMore(e, i) {
-  if (!selected.value.has(shown.value[i].key)) selectOnly(i)
-  openContextMenu(e, menuItems(), { anchor: true })
+  openContextMenu(e, menuFor(i), { anchor: true })
 }
 
 function play(i) {
@@ -556,6 +617,7 @@ function onKey(e) {
     case 'A':
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
+        ticked.value = true
         setSelection(shown.value.map((r) => r.key))
       }
       break
@@ -616,6 +678,10 @@ function fixTitle(row) {
   return t('repair.needs')
 }
 
+// Straight to the download manager, as the Downloads page does. Through
+// downloadRows it went nowhere: the row had just been marked as on its way,
+// and songs already on their way are not sent again, so the retry was
+// dropped and the row spun with nothing behind it.
 function retryDownload(row) {
   const item = tracker.getBySong(row.raw)
   if (item) {
@@ -623,7 +689,7 @@ function retryDownload(row) {
     item.progress = 0
     item.message = ''
   }
-  downloadRows([row])
+  useDownloadManager().downloadSongs([row.raw])
 }
 
 const rtf = computed(() => new Intl.RelativeTimeFormat(currentLocale.value, { numeric: 'auto' }))
@@ -672,16 +738,20 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
   position: relative;
   outline: none;
 }
+/* Always in the same place, just above the player, so notifications can stack
+   clear of it (see ToastHost). It used to sit at the end of a short list, in
+   the middle of the screen, right where they appear. */
 .selbar {
-  position: sticky;
-  bottom: 14px;
-  z-index: 6;
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--player-h) + 16px);
+  z-index: 1040;
   display: flex;
   align-items: center;
   gap: 4px;
   width: max-content;
-  max-width: 100%;
-  margin: 10px auto 0;
+  max-width: calc(100vw - 32px);
+  transform: translateX(-50%);
   padding: 6px 6px 6px 16px;
   border-radius: 999px;
   background: rgb(var(--c-elev));
@@ -741,7 +811,11 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
 .selbar-enter-from,
 .selbar-leave-to {
   opacity: 0;
-  transform: translateY(10px);
+  transform: translate(-50%, 10px);
+}
+/* Room under the last song, so the bar never hides it. */
+.tt.has-bar {
+  padding-bottom: 72px;
 }
 .tt-head,
 .tt-row {

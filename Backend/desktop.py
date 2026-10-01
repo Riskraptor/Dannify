@@ -2540,6 +2540,33 @@ def _watch_for_quit_request(on_quit) -> None:
     threading.Thread(target=run, name='dannify-quit-watch', daemon=True).start()
 
 
+def _quit_until_gone(api) -> None:  # noqa: ANN001
+    """Close for good, however early the request came.
+
+    A request that arrived in the first moments of a start was lost: there was
+    no window yet to send the close to, so nothing happened. The app said it
+    was closing and went on running, and whatever had asked (the installer,
+    an update) sat waiting for a process that was never going to leave. So it
+    is asked again until the window is really going, and if it still has not
+    gone after a while, the window is closed directly.
+    """
+
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        api._quit()
+        settle = time.monotonic() + 1.0
+        while time.monotonic() < settle:
+            if api._closing:
+                return
+            time.sleep(0.05)
+    logger.warning('The window did not close when asked to; closing it directly')
+    try:
+        if api._window is not None:
+            api._window.destroy()
+    except Exception:
+        logger.opt(exception=True).debug('could not close the window')
+
+
 def _signal_quit_request() -> bool:
     """Ask a running copy to exit. True if one was there to ask."""
 
@@ -3528,7 +3555,7 @@ def main() -> None:
 
     # Let the installer (or anything else) ask us to close properly rather
     # than hide into the tray.
-    _watch_for_quit_request(api._quit)
+    _watch_for_quit_request(lambda: _quit_until_gone(api))
 
     # gui='edgechromium' = Edge WebView2 (ships with Windows 10/11).
     webview.start(

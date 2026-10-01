@@ -44,6 +44,7 @@ import CoverImage from './ui/CoverImage.vue'
 import { openContextMenu } from '/src/model/contextMenu'
 import { warmPageOnHover, cancelPageWarm } from '/src/model/prefetch'
 import { useI18n } from '/src/i18n'
+import { useArtistLinks } from '/src/model/artistLinks'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -56,12 +57,21 @@ const emit = defineEmits(['open', 'play'])
 
 const { t } = useI18n()
 const round = computed(() => props.kind === 'artist')
+const { links } = useArtistLinks()
+const libraryArtistIds = computed(() => new Set(Object.values(links.value).map((l) => l && l.id).filter(Boolean)))
 
 const subtitle = computed(() => {
   if (props.subtitleText) return props.subtitleText
   const it = props.item
   if (props.kind === 'artist') {
-    return it.subscribers ? `${it.subscribers} ${t('explore.subscribers')}` : t('explore.artist')
+    // Two artists can share a name (two "Mavokali" in a search): which one
+    // the library's songs are by, their followers, and whether they have any
+    // songs at all are what tell them apart.
+    const parts = []
+    if (it.browse_id && libraryArtistIds.value.has(it.browse_id)) parts.push(t('explore.yourArtist'))
+    if (it.subscribers) parts.push(`${it.subscribers} ${t('explore.subscribers')}`)
+    if (it.namesake && it.has_songs === false) parts.push(t('explore.videosOnly'))
+    return parts.join(' · ') || t('explore.artist')
   }
   if (props.kind === 'playlist') {
     return it.item_count

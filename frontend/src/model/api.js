@@ -275,6 +275,10 @@ function getRadio(videoId, limit = 30) {
 function getSupportConfig() {
   return API.get('/api/support')
 }
+// Whether YouTube Music can be reached, asked fresh (never cached).
+function netCheck() {
+  return API.get('/api/net', { timeout: 8000 })
+}
 function checkForUpdate(force = false) {
   return API.get('/api/update/check', { params: { force: force ? 1 : 0 } })
 }
@@ -445,6 +449,7 @@ export default {
   // support + updates
   getSupportConfig,
   checkForUpdate,
+  netCheck,
   downloadUpdate,
   updateStatus,
   acknowledgeUpdate,

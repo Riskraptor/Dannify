@@ -53,6 +53,9 @@ const stageBytes = ref({ done: 0, total: 0 })
 const installerPath = ref('')
 const updateKind = ref('installer')
 const lastError = ref('')
+// Whether a check has actually come back this session. Until one has, "up to
+// date" is not something anybody knows: it was shown all the same, offline.
+const checkedOk = ref(false)
 const skipped = ref(read(SKIP_KEY, ''))
 
 // Automatic downloading can be turned off for anyone who would rather decide
@@ -109,6 +112,7 @@ async function check(force = false, { quiet = true } = {}) {
     // same version must not hide the "restart to update" button.
     info.value = { ...fresh, available: !!fresh.available || (ready.value && fresh.version === info.value.version) }
     lastError.value = fresh.error || ''
+    if (!fresh.error) checkedOk.value = true
     if (!quiet && !info.value.available) {
       toast(t('update.upToDate', { version: fresh.current || '' }), {
         icon: 'ph:check-circle',
@@ -314,6 +318,7 @@ export function useUpdates() {
     available,
     ready,
     checking,
+    checkedOk,
     downloading,
     progress,
     stage,

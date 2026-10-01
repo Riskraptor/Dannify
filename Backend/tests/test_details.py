@@ -79,10 +79,29 @@ def test_a_song_it_cannot_find_is_left_alone(sealed_song, monkeypatch):
     from dannify import providers
 
     monkeypatch.setattr(providers, 'find_match_for_video', lambda song, vid: None)
+    monkeypatch.setattr(providers, 'watch_track', lambda vid: None)
     monkeypatch.setattr(details, '_online', lambda: True)
     raw = sealed.read_bytes()
     assert details.refresh(root, sealed, []) == (details.FAILED, details.NOT_FOUND)
     assert sealed.read_bytes() == raw
+
+
+def test_a_song_saved_from_a_music_video_is_found_by_its_recording(sealed_song, monkeypatch):
+    # Not among the song results a search looks through: it used to be
+    # "no details found" every time. Its credits come back as two artists,
+    # each with their id.
+    root, sealed, _ = sealed_song
+    from dannify import providers
+
+    monkeypatch.setattr(providers, 'find_match_for_video', lambda song, vid: None)
+    monkeypatch.setattr(providers, 'watch_track', lambda vid: {
+        'videoId': vid, 'title': 'Baikoko', 'thumbnails': [],
+        'artists': [{'name': 'Mbosso', 'id': 'UCm'}, {'name': 'Diamond Platnumz', 'id': 'UCd'}],
+    })
+    assert details.refresh(root, sealed, []) == (details.UPDATED, '')
+    head, _ = vault.inspect(sealed)
+    assert head['artists'] == ['Mbosso', 'Diamond Platnumz']
+    assert head['artist_ids'] == [{'name': 'Mbosso', 'id': 'UCm'}, {'name': 'Diamond Platnumz', 'id': 'UCd'}]
 
 
 def test_a_song_replaced_while_it_streams_stops_cleanly(sealed_song):

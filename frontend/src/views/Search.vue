@@ -105,7 +105,12 @@
     </div>
 
     <!-- Error -->
-    <EmptyState v-else-if="failed" icon="ph:warning-circle" :title="t('search.error')" :text="detail">
+    <EmptyState
+      v-else-if="failed"
+      :icon="offline ? 'ph:wifi-slash' : 'ph:warning-circle'"
+      :title="offline ? t('net.offlineTitle') : t('search.error')"
+      :text="offline ? t('net.offlineSearch') : detail"
+    >
       <button class="btn btn-pill" @click="load(state.query, true)">{{ t('common.retry') }}</button>
     </EmptyState>
 
@@ -243,7 +248,7 @@ import { useExplore, useSearchState } from '/src/model/explore'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 import { useSearchManager } from '/src/model/search'
 import { useRecent } from '/src/model/recent'
-import { reportNetworkFailure } from '/src/model/connectivity'
+import { failedForNetwork, whenOnline } from '/src/model/connectivity'
 import { useUi } from '/src/model/ui'
 import { songRow, localRow, playRows, trackMenu } from '/src/model/tracks'
 import { useArtistLinks } from '/src/model/artistLinks'
@@ -284,6 +289,8 @@ const showSearching = useDeferred(searching, { showAfter: 260, keepFor: 260 })
 // as the title and as the body.
 const failed = ref(false)
 const detail = ref('')
+// The failure was the connection, not the search.
+const offline = ref(false)
 
 const tabs = [
   { id: 'all', label: 'explore.all' },
@@ -456,9 +463,19 @@ async function load(q, force = false) {
     prefetchTopResult(res.data?.songs || [])
   } catch (e) {
     if (token !== loadToken) return
-    if (!e.response) reportNetworkFailure() // no reply at all: the network
+    // "No connection" is said as that, not as "something went wrong", and the
+    // search runs again by itself once the connection is back. Found out
+    // before anything is shown, so the wrong one does not flash up first.
+    const off = await failedForNetwork(e)
+    if (token !== loadToken) return
+    offline.value = off
     failed.value = true
     detail.value = (e.response && e.response.data && e.response.data.detail) || ''
+    if (offline.value) {
+      whenOnline(() => {
+        if (token === loadToken && failed.value) load(query, true)
+      })
+    }
   } finally {
     if (token === loadToken) {
       loading.value = false

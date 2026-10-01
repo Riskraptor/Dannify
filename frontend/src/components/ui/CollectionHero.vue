@@ -183,6 +183,10 @@ onBeforeUnmount(disconnect)
   border-radius: 6px;
   box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
 }
+/* An artist's round photo: the shadow is round too, not a square behind it. */
+.hero.is-round .hero-cover {
+  border-radius: 50%;
+}
 .hero-label {
   margin-bottom: 6px;
   font-size: 12px;

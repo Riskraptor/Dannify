@@ -27,12 +27,12 @@ function probe() {
   checking.value = true
   inflight = (async () => {
     try {
-      // Our own backend proxies the reachability question: it is the thing
-      // that actually needs the network, and it never caches this route.
-      const res = await API.checkForUpdate(false)
-      // A reachable GitHub means a reachable internet. `error` set means the
-      // request completed but could not get out.
-      setOnline(!(res.data && res.data.error))
+      // Our own backend asks: it is the thing that actually needs the
+      // network. Its own route for this, never cached. It used to be the
+      // update check, which keeps a good answer for hours, so a connection
+      // lost after a morning check went on looking fine.
+      const res = await API.netCheck()
+      setOnline(!!(res.data && res.data.online))
     } catch {
       setOnline(false)
     } finally {
@@ -69,12 +69,15 @@ function setOnline(value) {
 
 function startProbing() {
   if (probeTimer) return
-  // Back off gently: a laptop that is asleep should not be hammered.
+  // Back off gently: a laptop that is asleep should not be hammered. Not too
+  // far, though: at half a minute between checks, a connection that came
+  // back took most of a minute to be noticed. One small request every 15 s
+  // is nothing.
   let delay = 4000
   const tick = async () => {
     probeTimer = null
     if (await probe()) return
-    delay = Math.min(delay * 1.6, 30000)
+    delay = Math.min(delay * 1.6, 15000)
     probeTimer = setTimeout(tick, delay)
   }
   probeTimer = setTimeout(tick, delay)
@@ -102,6 +105,17 @@ export async function reportNetworkFailure() {
   return online.value
 }
 
+/**
+ * A request failed: was it the connection? A server that answered with a
+ * "not found" or "not allowed" is not the network. Anything else is checked
+ * (and said, once). Resolves to true when the machine is offline.
+ */
+export async function failedForNetwork(err) {
+  const status = err && err.response && err.response.status
+  if (status && status < 500) return false
+  return !(await reportNetworkFailure())
+}
+
 /** Run `fn` as soon as the network is back (or now, if it already is). */
 export function whenOnline(fn) {
   if (online.value) {
@@ -115,6 +129,11 @@ export function whenOnline(fn) {
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => probe())
   window.addEventListener('offline', () => setOnline(false))
+  // Coming back to the window is a good moment to look again: the Wi-Fi was
+  // often fixed somewhere else in the meantime.
+  window.addEventListener('focus', () => {
+    if (!online.value) probe()
+  })
 }
 
 export function useConnectivity() {

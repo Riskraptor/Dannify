@@ -73,6 +73,7 @@ function runAction(item) {
   left: 50%;
   bottom: calc(var(--player-h) + 12px);
   z-index: 1050;
+  transition: bottom 0.18s var(--ease-out);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -175,5 +176,9 @@ function runAction(item) {
 }
 .toast-leave-active {
   position: absolute;
+}
+/* A selection bar is up at the bottom of the list: stay clear of it. */
+:global(html.has-selbar .toast-stack) {
+  bottom: calc(var(--player-h) + 76px);
 }
 </style>

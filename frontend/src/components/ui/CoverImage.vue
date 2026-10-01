@@ -56,15 +56,23 @@ const retry = ref(0)
 const usingFallback = ref(false)
 // What is drawn: the picture asked for, or the fallback once that failed.
 const shown = computed(() => (usingFallback.value ? props.fallback : props.src || props.fallback))
+// A new picture asked for: start again from it, not from the fallback.
 watch(
   () => [props.src, props.fallback],
   () => {
-    failed.value = false
-    loaded.value = false
-    retry.value = 0
     usingFallback.value = false
   }
 )
+// Start over only when what is drawn actually changes. This used to reset on
+// any change at all: an artist's photo stayed the same while the album cover
+// behind it moved (its song had just had its details refreshed), the photo
+// was marked as not loaded, and since the browser had nothing new to load it
+// never said otherwise. The picture sat hidden behind the placeholder icon.
+watch(shown, () => {
+  failed.value = false
+  loaded.value = false
+  retry.value = 0
+})
 
 function onError() {
   if (!usingFallback.value && props.fallback && props.src && props.fallback !== props.src) {

@@ -45,15 +45,26 @@
 
           <!-- ─── Phase 1: paste / detect ─── -->
           <section v-if="phase === 0" class="ls-body">
-            <p class="ls-intro">
-              <Icon icon="ph:sparkle-fill" class="h-4 w-4 shrink-0 text-accent" />
-              <span>{{ t('publish.intro') }}</span>
-            </p>
-            <p class="ls-help">
-              {{ t('publish.pasteHelp') }}
-            </p>
+            <!-- The song in one line. Its details are opened only to correct
+                 them; four boxes of what is already right (and a duration
+                 nobody can change) were the first thing a newcomer read. -->
+            <div class="ls-songline">
+              <span class="ls-songline-text">
+                <b>{{ form.track || '—' }}</b>
+                <span class="opacity-50">·</span>
+                {{ form.artist || '—' }}
+                <template v-if="form.album">
+                  <span class="opacity-50">·</span>
+                  {{ form.album }}
+                </template>
+              </span>
+              <button class="ls-link" @click="detailsOpen = !detailsOpen">
+                <Icon :icon="showDetails ? 'ph:caret-up-bold' : 'ph:pencil-simple-bold'" class="h-3.5 w-3.5" />
+                {{ showDetails ? t('publish.detailsDone') : t('publish.editDetails') }}
+              </button>
+            </div>
 
-            <div class="ls-meta">
+            <div v-if="showDetails" class="ls-meta">
               <label class="ls-field">
                 <span>{{ t('publish.title') }}</span>
                 <input v-model="form.track" type="text" />
@@ -70,18 +81,12 @@
                   :placeholder="t('publish.albumOptional')"
                 />
               </label>
-              <label class="ls-field">
-                <span>{{ t('publish.duration') }}</span>
-                <div class="ls-dur">
-                  <input
-                    :value="formatTime(form.duration)"
-                    type="text"
-                    readonly
-                  />
-                  <span class="ls-dur-hint">{{ form.duration.toFixed(1) }}s</span>
-                </div>
-              </label>
             </div>
+
+            <p v-if="seedTimes.length && !detectedSynced" class="ls-keep">
+              <Icon icon="ph:clock-clockwise-bold" class="h-4 w-4 shrink-0" />
+              <span>{{ t('publish.keepsTiming') }}</span>
+            </p>
 
             <textarea
               v-model="form.raw"
@@ -95,7 +100,7 @@
                 <Icon icon="ph:check-circle-fill" class="h-4 w-4" />
                 {{ t('publish.detectedSynced', { count: detectedSyncedCount }) }}
               </p>
-              <p v-else-if="detectedPlain" class="ls-detected">
+              <p v-else-if="detectedPlain && !seedTimes.length" class="ls-detected">
                 <Icon icon="ph:info-fill" class="h-4 w-4" />
                 {{ t('publish.detectedPlain', { count: detectedPlainCount }) }}
               </p>
@@ -105,18 +110,27 @@
               <button class="ls-btn ghost" @click="confirmClose">
                 {{ t('common.cancel') }}
               </button>
-              <button
-                class="ls-btn primary"
-                @click="goPhase(detectedSynced ? 2 : 1)"
-                :disabled="!canLeavePhase0"
-              >
-                {{
-                  detectedSynced
-                    ? t('publish.next.review')
-                    : t('publish.next.sync')
-                }}
-                <Icon icon="ph:arrow-right-bold" class="h-4 w-4" />
-              </button>
+              <div class="ls-actions-end">
+                <!-- Words already in time: their timing can be fixed on its
+                     own, or left as it is. -->
+                <button
+                  v-if="seedTimes.length && !detectedSynced"
+                  class="ls-btn ghost"
+                  :disabled="!canLeavePhase0"
+                  @click="goPhase(1)"
+                >
+                  <Icon icon="ph:clock-clockwise-bold" class="h-4 w-4" />
+                  {{ t('publish.fixTiming') }}
+                </button>
+                <button
+                  class="ls-btn primary"
+                  @click="nextFromWords"
+                  :disabled="!canLeavePhase0"
+                >
+                  {{ nextFromWordsLabel }}
+                  <Icon icon="ph:arrow-right-bold" class="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </section>
 
@@ -226,6 +240,13 @@
               </button>
             </div>
 
+            <!-- How it is done, until the first line is timed. -->
+            <ol v-if="!stampedCount" class="ls-howto">
+              <li><b>1</b>{{ t('publish.howto1') }}</li>
+              <li><b>2</b>{{ t('publish.howto2') }}</li>
+              <li><b>3</b>{{ t('publish.howto3') }}</li>
+            </ol>
+
             <!-- Sticky "now syncing" hero card -->
             <div class="ls-hero">
               <div class="ls-hero-meta">
@@ -236,14 +257,31 @@
                 </span>
               </div>
               <p class="ls-hero-text">{{ activeLineText || t('publish.emptyLine') }}</p>
+              <!-- The one thing this step is about, as a button anyone can
+                   find. It used to be the Space bar, said in small print.
+                   It never takes the focus: Space on a focused button would
+                   time the line twice. -->
+              <div class="ls-hero-acts">
+                <button class="ls-tap" tabindex="-1" @pointerdown.prevent @click="stampLine(activeLine)">
+                  <Icon icon="ph:hand-tap-bold" class="h-5 w-5" />
+                  <span>{{ t('publish.tapNow') }}</span>
+                  <kbd>Space</kbd>
+                </button>
+                <button
+                  v-if="!stampedCount"
+                  class="ls-btn ghost"
+                  tabindex="-1"
+                  @pointerdown.prevent
+                  @click="playFromStart"
+                >
+                  <Icon icon="ph:skip-back-fill" class="h-4 w-4" />
+                  {{ t('publish.fromStart') }}
+                </button>
+              </div>
               <p class="ls-hero-hint">
-                <kbd>Space</kbd> {{ t('publish.stampNow') }} ·
+                <kbd>←</kbd><kbd>→</kbd> {{ t('publish.nudge') }} ·
                 <kbd>L</kbd> {{ t('publish.loopLine') }} ·
                 <kbd>Enter</kbd> {{ t('publish.insertBelow') }}
-              </p>
-              <p class="ls-hero-tip">
-                <Icon icon="ph:plus-circle-bold" class="h-3.5 w-3.5" />
-                {{ t('publish.addLineTip') }}
               </p>
             </div>
 
@@ -345,7 +383,9 @@
                 <span class="ls-progress-count">
                   {{ t('publish.timedOf', { done: stampedCount, total: lines.length }) }}
                 </span>
-                <span class="ls-progress-state" :class="qualityClass">{{ qualityText }}</span>
+                <!-- The count is on the left; this side only says what is
+                     worth adding to it (an issue, or done). -->
+                <span v-if="qualityClass !== 'partial'" class="ls-progress-state" :class="qualityClass">{{ qualityText }}</span>
               </div>
               <div class="ls-progress-track">
                 <div
@@ -396,13 +436,26 @@
                 <span class="ls-stat-label">{{ t('publish.linesTotal') }}</span>
               </div>
               <div class="ls-stat">
-                <span class="ls-stat-num">{{ form.duration.toFixed(0) }}s</span>
-                <span class="ls-stat-label">{{ t('publish.duration') }}</span>
+                <span class="ls-stat-num ls-stat-word">{{ syncedOutput ? t('publish.inTime') : t('publish.wordsOnly') }}</span>
+                <span class="ls-stat-label">{{ t('publish.timing') }}</span>
               </div>
             </div>
 
-            <div class="ls-preview">
-              <pre>{{ syncedOutput || plainOutput }}</pre>
+            <!-- What people will see, as they will see it: not the file
+                 format with its [00:10.53] on every line. -->
+            <ol class="ls-preview">
+              <li v-for="(ln, i) in previewLines" :key="i" :class="{ brk: !ln.text }">
+                <span v-if="ln.time != null" class="ls-pv-time">{{ formatShort(ln.time) }}</span>
+                <span class="ls-pv-text">{{ ln.text || '♪' }}</span>
+              </li>
+            </ol>
+
+            <!-- Lines out of order would be published in the wrong order:
+                 they are put right first. -->
+            <div v-if="qualityErrors.length && syncedOutput" class="ls-msg error ls-order">
+              <Icon icon="ph:warning-fill" class="h-4 w-4 shrink-0" />
+              <span>{{ t('publish.outOfOrder', { count: qualityErrors.length }) }}</span>
+              <button class="ls-btn ghost" @click="fixOrder">{{ t('publish.fixTiming') }}</button>
             </div>
 
             <transition name="ls-fade">
@@ -446,7 +499,7 @@
                 v-else
                 class="ls-btn primary"
                 @click="doSubmit"
-                :disabled="submitting"
+                :disabled="submitting || (qualityErrors.length > 0 && !!syncedOutput)"
               >
                 <Icon icon="ph:paper-plane-tilt-fill" class="h-4 w-4" />
                 {{ t('publish.submit') }}
@@ -462,12 +515,13 @@
 <script setup>
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { usePlayer, formatTime } from '/src/model/player'
+import { usePlayer } from '/src/model/player'
 import API from '/src/model/api'
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import { useI18n } from '/src/i18n'
 import { useDialogs } from '/src/model/dialog'
 import { rememberFocus, trapTab } from '/src/model/focusTrap'
+import { mergeTimes, wordsOf, outText, BREAK } from '/src/model/lyricsMerge'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -490,6 +544,18 @@ const cover = computed(() => player.currentTrack.value?.cover || '')
 
 const phase = ref(0)
 const shellEl = ref(null)
+// The song's details, opened only to correct them.
+const detailsOpen = ref(false)
+const showDetails = computed(
+  () => detailsOpen.value || !form.value.track.trim() || !form.value.artist.trim()
+)
+// The timing the lyrics had when the editor opened, when they had any: the
+// words are edited as words, and keep it (see lyricsMerge.js).
+const seedTimes = ref([])
+// What the line list was last built from, so words changed on the first step
+// reach the timing step. They used to be read once: a typo fixed after going
+// back was silently left out of what was published.
+let linesFrom = null
 const { queue: dialogQueue } = useDialogs()
 let giveBack = null
 const form = ref({
@@ -571,7 +637,7 @@ const stepLabels = computed(() => [
 const stepWhy = computed(
   () =>
     [
-      t('publish.stepWhy.paste'),
+      seedTimes.value.length ? t('publish.stepWhy.fix') : t('publish.stepWhy.paste'),
       t('publish.stepWhy.sync'),
       t('publish.stepWhy.review'),
     ][phase.value] || ''
@@ -830,6 +896,9 @@ function onKey(e) {
   if (e.altKey) return
   if (e.code === 'Space') {
     e.preventDefault()
+    // A button that has the focus (one just clicked) would take the Space
+    // too, on its way up, and time a second line.
+    if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur()
     stampLine(activeLine.value, { advance: !e.shiftKey })
   } else if (e.code === 'Enter') {
     e.preventDefault()
@@ -1036,40 +1105,109 @@ const syncedOutput = computed(() => {
     .filter((l) => l.time != null)
     .slice()
     .sort((a, b) => a.time - b.time)
-  return sorted.map((l) => `[${formatLrcTime(l.time)}]${l.text}`).join('\n')
+  return sorted.map((l) => `[${formatLrcTime(l.time)}]${outText(l.text)}`).join('\n')
 })
 
 const plainOutput = computed(() =>
   lines.value
-    .map((l) => l.text)
+    .map((l) => outText(l.text))
     .filter((t, i, arr) => t || arr[i - 1])
     .join('\n')
     .trim()
 )
 
+const previewLines = computed(() => {
+  if (syncedOutput.value) {
+    return lines.value
+      .filter((l) => l.time != null)
+      .slice()
+      .sort((a, b) => a.time - b.time)
+      .map((l) => ({ time: l.time, text: outText(l.text) }))
+  }
+  return lines.value.map((l) => ({ time: null, text: outText(l.text) }))
+})
+
+// The lines the first step's words make, each with the time it already had.
+function linesFromWords() {
+  if (detectedSynced.value) {
+    return parseLrc(form.value.raw).map((p) => makeLine(p.text, p.time))
+  }
+  const texts = form.value.raw
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+  return mergeTimes(texts, timingSoFar()).map((l) => makeLine(l.text, l.time))
+}
+
+// The timing as it stands: the lines' own once there are lines (it may have
+// been worked on since), what the lyrics came with before that.
+function timingSoFar() {
+  return lines.value.length
+    ? lines.value.map((l) => ({ text: l.text, time: l.time }))
+    : seedTimes.value
+}
+
+function buildLines() {
+  if (lines.value.length && linesFrom === form.value.raw) return
+  lines.value = linesFromWords()
+  linesFrom = form.value.raw
+  activeLine.value = Math.max(0, lines.value.findIndex((l) => l.time == null))
+  undoStack.value = []
+  redoStack.value = []
+}
+
+// How many lines the words would leave untimed, for the button's label.
+const untimedAfterWords = computed(() => {
+  const timed = timingSoFar()
+  if (detectedSynced.value || !timed.some((l) => l.time != null)) return -1
+  const texts = form.value.raw.split('\n').map((s) => s.trim()).filter(Boolean)
+  return mergeTimes(texts, timed).filter((l) => l.time == null).length
+})
+const nextFromWordsLabel = computed(() => {
+  if (detectedSynced.value || untimedAfterWords.value === 0) return t('publish.next.review')
+  if (untimedAfterWords.value > 0) return t('publish.next.timeNew', { count: untimedAfterWords.value })
+  return t('publish.next.sync')
+})
+function nextFromWords() {
+  if (detectedSynced.value) return goPhase(2)
+  buildLines()
+  goPhase(lines.value.every((l) => l.time != null) && lines.value.length ? 2 : 1)
+}
+
+function fixOrder() {
+  goPhase(1)
+  nextTick(jumpToNextError)
+}
+
+// 1:05, as a lyrics view shows a time.
+function formatShort(sec) {
+  const s = Math.max(0, Math.floor(sec))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+function playFromStart() {
+  markManual()
+  player.clipUnloop()
+  loopLineIdx.value = -1
+  player.seek(0)
+  activeLine.value = 0
+  scrollActiveIntoView()
+  if (!player.isPlaying.value) player.play()
+}
+
 // ─── Phase transitions ───
 function goPhase(p) {
   if (p === 1) {
-    // entering sync editor: initialise lines from the pasted text
-    if (lines.value.length === 0) {
-      const parsed = parseLrc(form.value.raw)
-      if (detectedSynced.value) {
-        lines.value = parsed.map((p) => makeLine(p.text, p.time))
-      } else {
-        lines.value = form.value.raw
-          .split('\n')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0)
-          .map((s) => makeLine(s, null))
-      }
-      activeLine.value = 0
-    }
-    nextTick(() => syncRoot.value && syncRoot.value.focus())
+    // Entering the sync editor: the lines are the words as they are now.
+    buildLines()
+    nextTick(() => {
+      if (syncRoot.value) syncRoot.value.focus({ preventScroll: true })
+      // The line to time next, in view: a new line in the middle of timed
+      // ones was below the fold with nothing saying where it was.
+      scrollActiveIntoView()
+    })
   } else if (p === 2) {
-    if (lines.value.length === 0 && detectedSynced.value) {
-      const parsed = parseLrc(form.value.raw)
-      lines.value = parsed.map((p) => makeLine(p.text, p.time))
-    }
+    if (phase.value === 0) buildLines()
     // Stop any loop when leaving the editor.
     player.clipUnloop()
     loopLineIdx.value = -1
@@ -1160,6 +1298,8 @@ watch(
           // Strip the _id (Vue-only) field: and don't persist undo/redo.
           lines: lines.value.map((l) => ({ text: l.text, time: l.time })),
           phase: phase.value,
+          seed: seedTimes.value,
+          from: linesFrom,
         }
         localStorage.setItem(DRAFT_KEY.value, JSON.stringify(snapshot))
       } catch {}
@@ -1195,12 +1335,17 @@ watch(
     bindWindowKeys()
     const cur = player.currentTrack.value
     if (!cur) return
-    // Seed the textarea with whatever the player has now.
+    // Seed the textarea with whatever the player has now: the words, as
+    // words. Lyrics already in time used to arrive as the file format, a
+    // [00:10.53] in front of every line, to be edited around; the timing is
+    // kept aside instead and goes back on every line left as it was.
     let seeded = ''
+    let seed = []
     if (player.lyricsLines.value?.length) {
-      seeded = player.lyricsLines.value
-        .map((l) => `[${formatLrcTime(l.time)}]${l.text || ''}`)
-        .join('\n')
+      seeded = wordsOf(player.lyricsLines.value)
+      seed = player.lyricsLines.value
+        .filter((l) => l.time != null)
+        .map((l) => ({ text: String(l.text || '').trim() ? l.text : BREAK, time: l.time }))
     } else if (player.lyricsPlain.value) {
       seeded = player.lyricsPlain.value
     }
@@ -1218,6 +1363,9 @@ watch(
         const data = JSON.parse(saved)
         if (data?.form?.track === initial.track) {
           form.value = data.form
+          seedTimes.value = Array.isArray(data.seed) ? data.seed : []
+          linesFrom = typeof data.from === 'string' ? data.from : data.form.raw
+          detailsOpen.value = false
           // Re-hydrate _id on each line for stable v-for keys.
           lines.value = (data.lines || []).map((l) => makeLine(l.text, l.time))
           phase.value = Math.min(data.phase ?? 0, 2)
@@ -1230,6 +1378,9 @@ watch(
       }
     } catch {}
     form.value = initial
+    seedTimes.value = seed
+    linesFrom = null
+    detailsOpen.value = false
     lines.value = []
     phase.value = 0
     activeLine.value = 0
@@ -1265,6 +1416,167 @@ function unbindWindowKeys() {
 </script>
 
 <style scoped>
+/* --- the song in one line ------------------------------------------- */
+.ls-songline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgb(var(--c-tint) / 0.05);
+  font-size: 13px;
+  color: rgb(var(--c-fg) / 0.75);
+}
+.ls-songline-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.ls-songline-text b {
+  color: rgb(var(--c-fg));
+  font-weight: 700;
+}
+.ls-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgb(var(--c-fg) / 0.7);
+}
+.ls-link:hover {
+  color: rgb(var(--c-fg));
+}
+.ls-keep {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgb(var(--c-accent));
+}
+.ls-actions-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --- timing: how it is done, and the button that does it ------------- */
+.ls-howto {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ls-howto li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgb(var(--c-tint) / 0.05);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgb(var(--c-fg) / 0.8);
+}
+.ls-howto b {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgb(var(--c-accent) / 0.18);
+  color: rgb(var(--c-accent));
+  font-size: 11px;
+}
+.ls-hero-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.ls-tap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 18px 0 16px;
+  border-radius: 999px;
+  background: rgb(var(--c-accent));
+  color: rgb(var(--c-on-accent, 0 0 0));
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgb(var(--c-accent) / 0.3);
+  transition: transform 0.08s ease, filter 0.12s ease;
+}
+.ls-tap:hover {
+  filter: brightness(1.06);
+}
+.ls-tap:active {
+  transform: scale(0.97);
+}
+.ls-tap kbd {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 0.18);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* --- review: what people will see ------------------------------------- */
+.ls-stat-word {
+  font-size: 22px !important;
+}
+.ls-preview {
+  margin: 0;
+  padding: 12px 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  list-style: none;
+  border-radius: 12px;
+  background: rgb(var(--c-tint) / 0.04);
+}
+.ls-preview li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 4px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgb(var(--c-fg) / 0.9);
+}
+.ls-preview li.brk {
+  color: rgb(var(--c-fg) / 0.4);
+}
+.ls-order {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ls-order span {
+  flex: 1;
+}
+.ls-pv-time {
+  flex-shrink: 0;
+  min-width: 36px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--c-accent));
+}
+@media (max-width: 760px) {
+  .ls-howto {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* The editor borrows the app's own tokens so it reads as part of Dannify
    rather than a web form that happens to be on top of it. */
 .ls-backdrop {
@@ -1371,22 +1683,6 @@ function unbindWindowKeys() {
   margin-top: 1px;
   color: rgb(var(--c-fg) / 0.4);
 }
-.ls-intro {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  margin-bottom: 14px;
-  padding: 11px 13px;
-  border-radius: 10px;
-  border: 1px solid rgb(var(--c-accent) / 0.2);
-  background: rgb(var(--c-accent) / 0.06);
-  font-size: 13px;
-  line-height: 1.5;
-  color: rgb(var(--c-fg) / 0.82);
-}
-.ls-intro svg {
-  margin-top: 1px;
-}
 .ls-step {
   position: relative;
   display: flex;
@@ -1461,12 +1757,6 @@ function unbindWindowKeys() {
   outline: none;
 }
 .ls-body.sync { gap: 0.6rem; }
-.ls-help {
-  font-size: 0.85rem;
-  color: rgba(230, 231, 235, 0.65);
-  line-height: 1.5;
-}
-[data-mode='light'] .ls-help { color: rgba(22, 24, 28, 0.65); }
 
 .ls-meta {
   display: grid;
@@ -1506,13 +1796,6 @@ function unbindWindowKeys() {
   color: #16181c;
 }
 .ls-field input:focus { border-color: rgba(26, 208, 92, 0.6); }
-.ls-dur { display: flex; align-items: center; gap: 0.5rem; }
-.ls-dur input { flex: 1; }
-.ls-dur-hint {
-  font-size: 0.7rem;
-  font-variant-numeric: tabular-nums;
-  color: rgba(230, 231, 235, 0.45);
-}
 .ls-paste {
   min-height: 11rem;
   background: rgba(255, 255, 255, 0.04);
@@ -1520,9 +1803,11 @@ function unbindWindowKeys() {
   border-radius: 0.7rem;
   padding: 0.85rem 1rem;
   color: #e6e7eb;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.9rem;
-  line-height: 1.45;
+  /* Words, read as words: the code font was for the [00:10.53] that are no
+     longer shown here. */
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.7;
   resize: vertical;
   outline: none;
 }
@@ -1859,6 +2144,9 @@ function unbindWindowKeys() {
 }
 .ls-row-stamp.warn { background: rgba(255, 200, 60, 0.18); color: #ffd57a; }
 .ls-row-stamp.error { background: rgba(255, 90, 90, 0.18); color: #ff8b8b; }
+/* On a light page the same pale yellow and pink could hardly be read. */
+[data-mode='light'] .ls-row-stamp.warn { background: rgba(214, 150, 0, 0.16); color: #8a5a00; }
+[data-mode='light'] .ls-row-stamp.error { background: rgba(220, 50, 50, 0.12); color: #b42318; }
 .ls-row-text {
   font-size: 0.95rem;
   color: rgba(230, 231, 235, 0.92);
@@ -1955,14 +2243,6 @@ function unbindWindowKeys() {
 }
 .ls-insert:hover svg {
   opacity: 1;
-}
-.ls-hero-tip {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.4rem;
-  font-size: 0.72rem;
-  color: rgba(230, 231, 235, 0.5);
 }
 .ls-insert.top {
   height: 26px;

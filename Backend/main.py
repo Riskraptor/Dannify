@@ -560,7 +560,7 @@ def build_app() -> FastAPI:
     # what was behind it. The shell sends the key like any other caller.
     _OPEN_PATHS: set[str] = set()
     _QUIET_PREFIXES = ('/assets/', '/cover', '/favicon', '/downloads/')
-    _QUIET_EXACT = {'/list', '/api/queue', '/api/version', '/api/settings'}
+    _QUIET_EXACT = {'/list', '/api/queue', '/api/version', '/api/settings', '/api/net'}
 
     class _Gateway:
         def __init__(self, inner):
@@ -1295,13 +1295,34 @@ def open_external(path: str | Path) -> dict[str, Any] | None:
     def tell(track: dict[str, Any]) -> None:
         if api.state.loop is None:
             return
-        try:
-            asyncio.run_coroutine_threadsafe(
-                api.state.connections.broadcast({'type': 'play_file', 'track': track}),
-                api.state.loop,
-            )
-        except Exception:
-            logger.opt(exception=True).debug('could not hand the file to the window')
+
+        def send() -> None:
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    api.state.connections.broadcast({'type': 'play_file', 'track': track}),
+                    api.state.loop,
+                )
+            except Exception:
+                logger.opt(exception=True).debug('could not hand the file to the window')
+
+        if api.state.connections.settled():
+            send()
+            return
+
+        # A window still coming up (or not there yet) would not hear it: wait
+        # for one that is listening, then say it. A double-click in Explorer
+        # while Dannify was starting used to be told to nobody.
+        def later() -> None:
+            import time as _time
+
+            deadline = _time.monotonic() + 45
+            while _time.monotonic() < deadline and not api.state.connections.settled():
+                _time.sleep(0.2)
+            send()
+
+        import threading as _threading
+
+        _threading.Thread(target=later, name='dannify-open-later', daemon=True).start()
 
     url = None
     rel = None

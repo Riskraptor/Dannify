@@ -88,6 +88,12 @@
         </Shelf>
       </template>
 
+      <!-- No feed and no connection: said, rather than an empty page. -->
+      <p v-if="feedOffline" class="feed-note">
+        <Icon icon="ph:wifi-slash" class="h-4 w-4 shrink-0" />
+        {{ t('net.offlineHome') }}
+      </p>
+
       <!-- Loading. Shaped like the shelves it stands in for: bare grey slabs
            read as a broken page, not a loading one. -->
       <div v-if="showFeedSkeleton && !feedSections.length" class="feed-skeleton">
@@ -180,7 +186,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onActivated } from 'vue'
+import { ref, computed, watch, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
@@ -190,6 +196,7 @@ import { usePlayer } from '/src/model/player'
 import { useLibrary } from '/src/model/library'
 import { useRecent, trackKey } from '/src/model/recent'
 import { useHomeFeed } from '/src/model/home'
+import { useConnectivity, whenOnline } from '/src/model/connectivity'
 import { useAccount } from '/src/model/account'
 import { localRow, songRow, queueRow, playRows, trackMenu, onArtistPage } from '/src/model/tracks'
 import { useExplore } from '/src/model/explore'
@@ -228,6 +235,26 @@ const feedLoading = feed.loading
 // The feed is usually already warm, so a skeleton would flash. Only show
 // one for a load slow enough that the user would otherwise see nothing.
 const showFeedSkeleton = useDeferred(feedLoading)
+
+// No feed because there is no connection: said on the page, and the feed
+// fetched again by itself when the connection is back. Asked quietly (a
+// probe, not the "no internet" notice): the page already says it.
+const connectivity = useConnectivity()
+const feedOffline = computed(
+  () =>
+    feed.loaded.value &&
+    !feed.loading.value &&
+    !!feed.error.value &&
+    !feed.sections.value.length &&
+    connectivity.isOffline.value
+)
+watch(
+  () => feed.error.value,
+  async (err) => {
+    if (!err || feed.sections.value.length) return
+    if (!(await connectivity.probe())) whenOnline(() => feed.load(true))
+  }
+)
 
 const greeting = computed(() => {
   const h = new Date().getHours()
@@ -447,6 +474,17 @@ function submitWelcome() {
 .shelf-more:hover {
   color: rgb(var(--c-fg));
   text-decoration: underline;
+}
+.feed-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 28px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgb(var(--c-tint) / 0.05);
+  font-size: 13px;
+  color: rgb(var(--c-fg) / 0.7);
 }
 .feed-skeleton {
   padding-bottom: 28px;

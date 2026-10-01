@@ -163,6 +163,17 @@ watch(
   () => ui.searchFocusTick.value,
   () => input.value?.focus()
 )
+
+// Off the search page the box is empty again. The words of the last search
+// stayed in it over an artist's page or the library, as if that were what
+// they had found. Going back to the results puts them back (the Search page
+// reads them from its address).
+watch(
+  () => route.name,
+  (to, from) => {
+    if (from === 'Search' && to !== 'Search' && !focused.value) query.value = ''
+  }
+)
 </script>
 
 <style scoped>

@@ -20,8 +20,16 @@
       </div>
     </div>
 
-    <EmptyState v-else-if="!artist && !loading" icon="ph:user" :title="t('explore.notFound')">
-      <button class="btn btn-pill" @click="router.back()">{{ t('explore.back') }}</button>
+    <EmptyState
+      v-else-if="!artist && !loading"
+      :icon="failure === 'offline' ? 'ph:wifi-slash' : failure === 'error' ? 'ph:warning-circle' : 'ph:user'"
+      :title="failure === 'offline' ? t('net.offlineTitle') : failure === 'error' ? t('net.loadFailed') : t('explore.notFound')"
+      :text="failure === 'offline' ? t('net.offlinePage') : ''"
+    >
+      <div class="flex gap-2">
+        <button v-if="failure" class="btn btn-pill" @click="load">{{ t('common.retry') }}</button>
+        <button class="btn btn-pill" @click="router.back()">{{ t('explore.back') }}</button>
+      </div>
     </EmptyState>
 
     <!-- Loading, but not for long enough to have earned a skeleton yet.
@@ -137,6 +145,7 @@ import TrackTable from '/src/components/ui/TrackTable.vue'
 import Shelf from '/src/components/ui/Shelf.vue'
 import MediaCard from '/src/components/MediaCard.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
+import { failedForNetwork, whenOnline } from '/src/model/connectivity'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -180,6 +189,10 @@ function playTop() {
   playRows(songRows.value, 0)
 }
 
+// '' (none), 'missing', 'offline' or 'error': "Nothing found" was said for
+// all of them, offline included.
+const failure = ref('')
+
 async function load() {
   const id = route.params.id
   if (!id) return
@@ -187,8 +200,17 @@ async function load() {
   try {
     const res = await API.exploreArtist(id)
     artist.value = res.data
-  } catch {
+    failure.value = ''
+  } catch (e) {
     artist.value = null
+    const status = e && e.response && e.response.status
+    if (status === 404) failure.value = 'missing'
+    else if (await failedForNetwork(e)) {
+      failure.value = 'offline'
+      whenOnline(() => {
+        if (!artist.value) load()
+      })
+    } else failure.value = 'error'
   } finally {
     loading.value = false
   }
