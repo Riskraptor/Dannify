@@ -163,6 +163,9 @@ onBeforeUnmount(() => {
   position: fixed;
   min-width: 220px;
   max-width: 320px;
+  max-height: min(72vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 4px;
   outline: none;
   animation: cm-in 0.12s var(--ease-out);

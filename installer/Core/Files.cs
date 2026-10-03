@@ -43,6 +43,20 @@ namespace Dannify.Setup.Core
             }
         }
 
+        /// <summary>
+        /// A file opened the same patient way. Unpacking writes a couple of
+        /// hundred new programs and libraries, and the virus scanner looks
+        /// over each one as it is closed: one still being looked at when it
+        /// was opened again could fail the whole install a few seconds in.
+        /// </summary>
+        public static FileStream Open(string path, FileMode mode, FileAccess access, FileShare share,
+            int bufferSize = 4096, int patienceMs = 8000)
+        {
+            FileStream fs = null;
+            Patient(() => fs = new FileStream(path, mode, access, share, bufferSize), patienceMs);
+            return fs;
+        }
+
         public static void MoveDir(string src, string dst, int patienceMs = 10000) =>
             Patient(() => Directory.Move(src, dst), patienceMs);
 

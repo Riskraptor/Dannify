@@ -81,6 +81,15 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
   }
   const volume = ctx.createGain()
   const limiter = ctx.createDynamicsCompressor()
+  // What is coming out, for the mixer's picture of it. Read only while the
+  // mixer is open; it costs next to nothing otherwise.
+  const analyser = typeof ctx.createAnalyser === 'function' ? ctx.createAnalyser() : null
+  if (analyser) {
+    analyser.fftSize = 4096
+    analyser.smoothingTimeConstant = 0.82
+    analyser.minDecibels = -100
+    analyser.maxDecibels = -20
+  }
   limiter.threshold.value = -1
   limiter.knee.value = 0
   limiter.ratio.value = 20
@@ -101,6 +110,7 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
   mono.connect(volume)
   volume.connect(limiter)
   limiter.connect(ctx.destination)
+  if (analyser) limiter.connect(analyser)
   let throughEq = false
   let unroute = null
 
@@ -187,8 +197,9 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
         volume.gain.value = v
       }
     },
-    /** Band gains in dB; *on* false is flat. A preamp makes room for boosts. */
-    setEq(on, gains) {
+    /** Band gains in dB; *on* false is flat. A preamp makes room for boosts:
+     *  half the biggest boost by default, or `preampDb` when given. */
+    setEq(on, gains, preampDb = null) {
       const g = on ? gains : EQ_PRESETS.flat
       // Into the path first and then off flat, so the sound glides from one
       // to the other; out of it only once it has glided back to flat.
@@ -196,8 +207,23 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
       bands.forEach((f, i) => setParam(f.gain, Math.max(EQ_MIN, Math.min(EQ_MAX, Number(g[i]) || 0)), 0.03))
       const top = Math.max(0, ...g.map((x) => Number(x) || 0))
       // Half the biggest boost taken back up front; the limiter catches the rest.
-      setParam(preamp.gain, on ? dbToGain(-top / 2) : 1, 0.03)
+      const pre = typeof preampDb === 'number' && Number.isFinite(preampDb)
+        ? Math.max(-12, Math.min(12, preampDb))
+        : -top / 2
+      setParam(preamp.gain, on ? dbToGain(pre) : 1, 0.03)
       if (!on && throughEq && !unroute) unroute = setTimeout(() => route(false), 250)
+    },
+    /** The sound's spectrum now, in dB per bin, into `out`; false without one. */
+    spectrum(out) {
+      if (!analyser || !out) return false
+      analyser.getFloatFrequencyData(out)
+      return true
+    },
+    get bins() {
+      return analyser ? analyser.frequencyBinCount : 0
+    },
+    get sampleRate() {
+      return ctx.sampleRate || 48000
     },
     /** -1 (left only) to 1 (right only); 0 is the middle. */
     setBalance(v) {
@@ -213,10 +239,11 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
       }
     },
     /**
-     * The equalizer's effect at each of `freqs` (Hz), in dB: the bands and
-     * the preamp together, as the filters themselves compute it.
+     * The equalizer's effect at each of `freqs` (Hz), in dB, as the filters
+     * themselves compute it: the bands' shape, and with `withPreamp` the
+     * pre-amp's level on top (what is actually heard).
      */
-    eqResponse(freqs) {
+    eqResponse(freqs, withPreamp = false) {
       const out = new Float32Array(freqs.length)
       if (!throughEq) return out
       const f = Float32Array.from(freqs)
@@ -227,8 +254,10 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
         band.getFrequencyResponse(f, mag, phase)
         for (let i = 0; i < out.length; i++) out[i] += 20 * Math.log10(Math.max(1e-6, mag[i]))
       }
-      const pre = 20 * Math.log10(Math.max(1e-6, preamp.gain.value))
-      for (let i = 0; i < out.length; i++) out[i] += pre
+      if (withPreamp) {
+        const pre = 20 * Math.log10(Math.max(1e-6, preamp.gain.value))
+        for (let i = 0; i < out.length; i++) out[i] += pre
+      }
       return out
     },
     /** Whether the equalizer's bands are in the path (for tests). */

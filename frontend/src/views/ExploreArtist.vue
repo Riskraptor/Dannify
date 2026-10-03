@@ -81,6 +81,13 @@
             <Icon icon="ph:download-simple" class="h-4 w-4" />
             {{ t('explore.downloadChosen', { count: chosen.length }) }}
           </button>
+          <FollowButton
+            v-if="artist"
+            :channel-id="artist.channel_id || (String(artist.browse_id || '').startsWith('UC') ? artist.browse_id : '')"
+            :browse-id="artist.browse_id || ''"
+            :name="artist.name"
+            :cover="artist.cover_url || ''"
+          />
         </template>
       </CollectionHero>
 
@@ -131,6 +138,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import FollowButton from '/src/components/ui/FollowButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'

@@ -1,12 +1,16 @@
-import { ref } from 'vue'
+import { ref, shallowRef } from 'vue'
 import API from '/src/model/api'
 
 // Shared cache of the on-disk library (/api/library + /api/artists) for the
 // sidebar, Home and Library views. Refreshes itself (debounced) whenever the
 // server reports a change or the user deletes something.
 
-const tracks = ref([])
-const artists = ref([])
+// Shallow: the lists are only ever replaced whole, never edited in place, so
+// there is nothing for Vue to watch inside them. Deep refs wrapped every song
+// and artist in a proxy of its own, which is most of the memory a library of
+// a hundred thousand took.
+const tracks = shallowRef([])
+const artists = shallowRef([])
 const loaded = ref(false)
 const loading = ref(false)
 const error = ref(false)

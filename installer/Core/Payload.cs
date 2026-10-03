@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using FileOps = Dannify.Setup.Core.Files; // `Files` here is the payload's own list
 
 namespace Dannify.Setup.Core
 {
@@ -247,7 +248,7 @@ namespace Dannify.Setup.Core
                 ct.ThrowIfCancellationRequested();
                 string path = System.IO.Path.Combine(target, file.Path);
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
-                using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+                using (var fs = FileOps.Open(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
                     fs.SetLength(file.Size);
             }
 
@@ -315,7 +316,7 @@ namespace Dannify.Setup.Core
                 long to = Math.Min(file.Offset + file.Size, blockEnd);
                 if (to <= from) continue;
                 string path = System.IO.Path.Combine(target, file.Path);
-                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 1 << 16))
+                using (var fs = FileOps.Open(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 1 << 16))
                 {
                     fs.Seek(from - file.Offset, SeekOrigin.Begin);
                     fs.Write(data, (int)(from - block.Start), (int)(to - from));
@@ -343,7 +344,7 @@ namespace Dannify.Setup.Core
         public static string HashFile(string path, CancellationToken ct, Action<long> onBytes = null)
         {
             using (var sha = SHA256.Create())
-            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 1 << 16))
+            using (var fs = FileOps.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 1 << 16))
             {
                 var buf = new byte[1 << 20];
                 int n;
@@ -367,7 +368,7 @@ namespace Dannify.Setup.Core
         public void WriteEngine(string dest)
         {
             using (var src = new FileStream(SourcePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            using (var dst = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var dst = FileOps.Open(dest, FileMode.Create, FileAccess.Write, FileShare.None))
             {
                 var buf = new byte[1 << 16];
                 long left = Offset;

@@ -1319,7 +1319,7 @@ watch(
       // closing any other way (the X, Escape, the backdrop, Cancel) left the
       // player at 0.5x, and every track after it played that slowly until a
       // restart. Here, every way out goes through it.
-      player.setPlaybackRate(1)
+      player.restoreSpeed()
       player.noAutoAdvance.value = false
       unbindWindowKeys()
       const back = giveBack
@@ -1393,7 +1393,7 @@ watch(
 
 onUnmounted(() => {
   player.clipUnloop()
-  player.setPlaybackRate(1)
+  player.restoreSpeed()
   player.noAutoAdvance.value = false
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', onKey, true)

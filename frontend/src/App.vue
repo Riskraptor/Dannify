@@ -162,6 +162,8 @@ const removeBefore = router.beforeEach((to, from) => {
 const removeAfter = router.afterEach((to, from) => {
   const pop = popNavigation
   popNavigation = false
+  // Search typing replaces the route in place: that is not leaving a page.
+  if (to.name !== from.name || to.name !== 'Search') ui.leavePage()
   // Live search replaces the route in place: keep the scroll untouched.
   if (to.name === 'Search' && from.name === 'Search' && !pop) return
   nextTick(() => restoreScroll(pop ? positions.get(to.fullPath) || 0 : 0))

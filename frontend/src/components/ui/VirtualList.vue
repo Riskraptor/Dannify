@@ -40,9 +40,15 @@ const root = ref(null)
 const start = ref(0)
 const end = ref(0)
 
+// Never past the end of the list as it is now. The range is measured a frame
+// after the list changes, and a list that had just got shorter (a filter, a
+// search) was drawn once with rows that were no longer there: the render
+// failed on the first missing one and the whole list, or the page it was on,
+// came up empty.
 const indices = computed(() => {
   const out = []
-  for (let i = start.value; i < end.value; i++) out.push(i)
+  const last = Math.min(end.value, props.items.length)
+  for (let i = start.value; i < last; i++) out.push(i)
   return out
 })
 

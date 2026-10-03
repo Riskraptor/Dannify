@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -511,6 +512,89 @@ def library_playlists(limit: int = 50) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+_CHANNEL = re.compile(r'^UC[A-Za-z0-9_-]{22}$')
+_VIDEO = re.compile(r'^[A-Za-z0-9_-]{11}$')
+
+
+def subscriptions(limit: int = 100) -> list[dict[str, Any]]:
+    """The artists the account follows on YouTube Music."""
+
+    rows = client(require_auth=True).get_library_subscriptions(limit=limit) or []
+    out = []
+    for row in rows:
+        if not isinstance(row, dict) or not row.get('browseId'):
+            continue
+        out.append(
+            {
+                'type': 'artist',
+                'browse_id': row['browseId'],
+                'name': row.get('artist') or row.get('title') or '',
+                'cover_url': _thumb(row, 240),
+                'subscribers': str(row.get('subscribers') or ''),
+            }
+        )
+    return out
+
+
+def follow(channel_id: str, on: bool) -> dict[str, Any]:
+    """Follow or stop following an artist (their channel) on YouTube Music."""
+
+    if not _CHANNEL.match(str(channel_id or '')):
+        raise ValueError('not an artist channel')
+    yt = client(require_auth=True)
+    if on:
+        yt.subscribe_artists([channel_id])
+    else:
+        yt.unsubscribe_artists([channel_id])
+    return {'channel_id': channel_id, 'following': bool(on)}
+
+
+def history() -> list[dict[str, Any]]:
+    """What the account played lately on YouTube Music, newest first."""
+
+    out = []
+    seen: set[str] = set()
+    for track in client(require_auth=True).get_history() or []:
+        song = song_from_item(track)
+        if song and song['song_id'] not in seen:
+            seen.add(song['song_id'])
+            out.append(song)
+    return out
+
+
+def add_to_playlist(playlist_id: str, video_ids: list[str]) -> dict[str, Any]:
+    """Add songs to one of the account's playlists on YouTube Music."""
+
+    ids = [v for v in video_ids if _VIDEO.match(str(v or ''))][:200]
+    if not ids:
+        raise ValueError('no songs to add')
+    pid = str(playlist_id or '')
+    if pid.startswith('VL'):
+        pid = pid[2:]
+    if not pid or pid in ('LM', 'SE'):
+        raise ValueError('not a playlist that can be added to')
+    result = client(require_auth=True).add_playlist_items(pid, ids, duplicates=False)
+    status = result.get('status') if isinstance(result, dict) else None
+    if status and 'SUCCEEDED' not in str(status):
+        raise RuntimeError(f'YouTube Music said {status}')
+    return {'playlist_id': pid, 'added': len(ids)}
+
+
+def add_history(video_id: str) -> bool:
+    """Tell YouTube Music this song was listened to, as its own player does,
+    so the account's history and recommendations include what is played in
+    Dannify."""
+
+    if not _VIDEO.match(str(video_id or '')):
+        return False
+    yt = client(require_auth=True)
+    song = yt.get_song(video_id)
+    if not isinstance(song, dict) or not song.get('playbackTracking'):
+        return False
+    response = yt.add_history_item(song)
+    return getattr(response, 'status_code', 0) in (200, 204)
 
 
 def rate(video_id: str, liked: bool) -> dict[str, Any]:
