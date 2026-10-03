@@ -134,6 +134,23 @@
       </Shelf>
 
       <Shelf
+        v-if="account.signedIn.value && historyRows.length"
+        :title="t('account.recentlyPlayed')"
+      >
+        <MediaCard
+          v-for="(row, i) in historyRows.slice(0, 12)"
+          :key="row.key"
+          :item="{ name: row.title, cover: row.cover }"
+          kind="track"
+          :subtitle-text="row.artistText"
+          playable
+          :menu="() => trackMenu([row], { source: historyRows })"
+          @open="playRows(historyRows, i)"
+          @play="playRows(historyRows, i)"
+        />
+      </Shelf>
+
+      <Shelf
         v-if="account.playlists.value.length"
         :title="t('account.yourPlaylists')"
       >
@@ -214,7 +231,7 @@ import { useDeferred } from '/src/model/deferred'
 import { desktop } from '/src/desktop/bridge'
 import { usePlayer } from '/src/model/player'
 import { useLibrary } from '/src/model/library'
-import { useRecent, trackKey } from '/src/model/recent'
+import { useRecent, sameSong } from '/src/model/recent'
 import { useHomeFeed } from '/src/model/home'
 import { useConnectivity, whenOnline } from '/src/model/connectivity'
 import { useAccount } from '/src/model/account'
@@ -237,6 +254,15 @@ const account = useAccount()
 const feed = useHomeFeed()
 const ex = useExplore()
 const support = useSupport()
+// What the account played lately on YouTube Music (signed in).
+const historyRows = computed(() => (account.history.value || []).map(songRow))
+watch(
+  () => account.signedIn.value,
+  (on) => {
+    if (on) account.loadHistory()
+  },
+  { immediate: true }
+)
 
 lib.ensureLoaded()
 feed.load().then(warmFirstShelf)
@@ -363,7 +389,7 @@ function playRecent(i) {
   const list = recent.played.value
   const tr = list[i]
   if (!tr) return
-  if (player.currentTrack.value && trackKey(player.currentTrack.value) === trackKey(tr)) {
+  if (player.currentTrack.value && sameSong(player.currentTrack.value, tr)) {
     player.toggle()
     return
   }

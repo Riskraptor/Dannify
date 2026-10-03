@@ -4,8 +4,8 @@
     <div v-if="tile" class="vh-tile" :class="tile.kind">
       <Icon :icon="tile.icon" class="vh-tile-icon" />
     </div>
-    <div class="min-w-0 flex-1">
-      <p v-if="eyebrow" class="eyebrow mb-1">{{ eyebrow }}</p>
+    <div class="vh-text">
+      <p v-if="eyebrow" class="eyebrow mb-1 truncate">{{ eyebrow }}</p>
       <h1 class="vh-title">{{ title }}</h1>
       <p v-if="subtitle || $slots.meta" class="vh-sub">
         <slot name="meta">{{ subtitle }}</slot>
@@ -38,6 +38,13 @@ defineProps({
   gap: 16px;
   padding-top: 28px;
   padding-bottom: 20px;
+}
+/* A real width before the actions get any: with none, a header with a
+   search box and a button squeezed its title until "Your library" broke
+   over two lines. Now the actions go to a row of their own instead. */
+.vh-text {
+  flex: 1 1 260px;
+  min-width: 0;
 }
 .vh-title {
   font-size: 30px;

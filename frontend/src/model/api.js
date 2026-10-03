@@ -292,6 +292,22 @@ function getLikedSongs(limit = 250) {
 function getLibraryPlaylists(limit = 50) {
   return API.get('/api/library/playlists', { params: { limit } })
 }
+// The account on YouTube Music, beyond likes.
+function getFollowing() {
+  return API.get('/api/account/following')
+}
+function setFollowing(channelId, follow) {
+  return API.post('/api/account/follow', { channel_id: channelId, follow })
+}
+function getHistory() {
+  return API.get('/api/account/history')
+}
+function addHistory(videoId) {
+  return API.post('/api/account/history/add', { video_id: videoId })
+}
+function addToYouTubePlaylist(playlistId, videoIds) {
+  return API.post('/api/account/playlist/add', { playlist_id: playlistId, video_ids: videoIds })
+}
 function rateSong(videoId, liked) {
   return API.post('/api/rate', { video_id: videoId, liked })
 }
@@ -485,6 +501,11 @@ export default {
   getLikedSongs,
   getLibraryPlaylists,
   rateSong,
+  getFollowing,
+  setFollowing,
+  getHistory,
+  addHistory,
+  addToYouTubePlaylist,
   getRadio,
   // support + updates
   getSupportConfig,

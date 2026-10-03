@@ -49,7 +49,7 @@ import urllib.request
 import webbrowser
 from ctypes import wintypes
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 # The shell's own diagnostics. loguru's logger is a singleton, so this is the
 # same sink main.py configures; importing it here is not a second logger.
@@ -3590,6 +3590,29 @@ def _schedule_media_identity() -> None:
 
 
 _OPEN_FILE = _DATA_DIR / 'open.json'
+# When this copy started. A file handed over by a second copy is always
+# written after that (the second copy only hands over once it finds this one
+# running), so anything older was left by an earlier run.
+_STARTED_NS = time.time_ns()
+
+
+def _file_from_note(note: Any, started_ns: int) -> str:
+    """The file a hand-over note asks this copy to play, or ''.
+
+    The note stays on disk after it is read. Each new run read it afresh and
+    played it: a song double-clicked days ago began by itself the next time
+    Dannify was opened.
+    """
+
+    if not isinstance(note, dict):
+        return ''
+    try:
+        stamp = int(note.get('n') or 0)
+    except (TypeError, ValueError):
+        return ''
+    if stamp < started_ns:
+        return ''
+    return str(note.get('path') or '')
 
 
 def _file_argument() -> str:
@@ -3646,7 +3669,7 @@ def _watch_for_opened_files() -> None:
             if not stamp or stamp == last:
                 continue
             last = stamp
-            wanted = str(note.get('path') or '')
+            wanted = _file_from_note(note, _STARTED_NS)
         except Exception:
             continue
         if wanted:
@@ -3740,9 +3763,12 @@ def main() -> None:
         # One page, one renderer. Without this WebView2 keeps spare processes
         # around that cost 40-60 MB each and buy us nothing.
         '--renderer-process-limit=1',
-        # The whole UI holds a few thousand track objects at most; letting V8
-        # grow to the default (a share of system RAM) just delays collection.
-        '--js-flags=--max-old-space-size=256',
+        # A ceiling for the page's memory, not a target: V8 collects long
+        # before it. It was 256 MB, and a library of a couple of hundred
+        # thousand artists went past that while sorting; the page then died
+        # and came back blank. The default is a share of the machine's RAM,
+        # which lets a runaway page take far more than a music player should.
+        '--js-flags=--max-old-space-size=1024',
         # A music player plays in the background. Chromium slows the timers
         # of a page it thinks nobody is looking at, and the change to the
         # next song (crossfade, gapless) is timed by one: minimized or in the
@@ -3935,7 +3961,10 @@ def main() -> None:
     os._exit(0)
 
 
-if __name__ == '__main__':
+def entry() -> None:
+    """Start the app: what running this file does, and what a shipped build's
+    boot.py calls once the app's code is where Python finds it."""
+
     # PoW solver sub-mode: if this exe was respawned by the lyrics-publish
     # flow to chase a nonce, just run the search loop and exit (no
     # FastAPI, no window, no log file). Detected via two env vars our own
@@ -3980,3 +4009,7 @@ if __name__ == '__main__':
         # A crash reporting itself as success made the helper stop retrying
         # and declare the update finished, with nothing on screen.
         sys.exit(3)
+
+
+if __name__ == '__main__':
+    entry()

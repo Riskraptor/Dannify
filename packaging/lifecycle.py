@@ -119,7 +119,23 @@ def check(label, ok, detail=''):
     print(('PASS ' if ok else 'FAIL ') + label + (f'  [{detail}]' if detail else ''), flush=True)
     if not ok:
         FAILED.append(label)
+        keep_logs(len(FAILED))
     return ok
+
+
+def keep_logs(n):
+    """The app's and the setup's logs as they were at a failure. The next
+    stage starts from a clean install and takes them with it, and twice that
+    left a failure with nothing to go on."""
+    for name in ('dannify.log', 'setup.log'):
+        src = DATA / name
+        if src.is_file():
+            dst = SCR / f'{NAME}-fail{n}-{name}'
+            try:
+                dst.write_bytes(src.read_bytes())
+                print(f'     kept {dst}', flush=True)
+            except OSError:
+                pass
 
 
 def sha(p):
@@ -857,6 +873,15 @@ def stage_setup_over_previous():
     mark = len(app_log())
     code, took = run([str(SETUP), '--quiet', '--sandbox', NAME, '--root', str(ROOT), '--data', str(DATA)])
     check(f'quiet setup over a running {PREVIOUS} exits 0', code == 0, f'{code} in {took:.1f}s')
+    if code != 0:
+        # The next stage starts from a clean install and takes this log with
+        # it: say what the setup said while it is still here.
+        log = DATA / 'setup.log'
+        if log.exists():
+            lines = log.read_text(encoding='utf-8', errors='replace').splitlines()[-40:]
+            print('  setup.log:')
+            for line in lines:
+                print('    ' + line)
     check(f'{PREVIOUS} was closed for it', not procs_under(ROOT / 'app'))
     same, count = same_files(ROOT / 'app', new)
     check(f'app folder is the {VERSION} build', same == len(new) == count, f'{same}/{len(new)}, {count} installed')

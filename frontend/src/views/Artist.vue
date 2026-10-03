@@ -97,6 +97,13 @@
             <Icon icon="ph:arrow-square-out" class="h-4 w-4" />
             {{ t('artist.fullPage') }}
           </button>
+          <FollowButton
+            v-if="online"
+            :channel-id="online.channel_id || (String(online.browse_id || '').startsWith('UC') ? online.browse_id : '')"
+            :browse-id="online.browse_id || ''"
+            :name="online.name || artist.name"
+            :cover="online.cover_url || ''"
+          />
         </template>
       </CollectionHero>
 
@@ -223,6 +230,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import FollowButton from '/src/components/ui/FollowButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'

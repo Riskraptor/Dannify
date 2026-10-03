@@ -125,7 +125,16 @@
     <!-- RIGHT: panels, volume, window modes -->
     <div class="pb-right">
       <button
-        class="icon-btn is-round pb-sleep"
+        class="icon-btn is-round pb-more"
+        :class="{ 'is-on': player.sleepMode.value !== 'off' }"
+        :title="t('actions.more')"
+        :aria-label="t('actions.more')"
+        @click="onMoreMenu"
+      >
+        <Icon icon="ph:dots-three-outline" class="h-[18px] w-[18px]" />
+      </button>
+      <button
+        class="icon-btn is-round pb-sleep pb-extra"
         :class="{ 'is-on': player.sleepMode.value !== 'off' }"
         :title="sleepTitle"
         :aria-label="sleepTitle"
@@ -135,7 +144,7 @@
         <span v-if="sleepLeft" class="pb-sleep-left">{{ sleepLeft }}</span>
       </button>
       <button
-        class="icon-btn is-round"
+        class="icon-btn is-round pb-extra"
         :class="{ 'is-active-dot': ui.panel.value === 'about' && !onNowPlaying && cur }"
         :disabled="!cur"
         :title="t('panel.aboutButton')"
@@ -190,7 +199,7 @@
       </div>
       <button
         v-if="desktop.isDesktop"
-        class="icon-btn is-round"
+        class="icon-btn is-round pb-extra"
         :title="`${t('player.miniPlayer')} (Ctrl+Shift+M)`"
         @click="desktop.setMini(true)"
       >
@@ -218,7 +227,7 @@ import { useUi } from '/src/model/ui'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 import { useAccount } from '/src/model/account'
 import { queueRow, trackMenu, isRowDownloaded, downloadRows, songVideoId } from '/src/model/tracks'
-import { openContextMenu } from '/src/model/contextMenu'
+import { openContextMenu, openMenuAt, lastMenuPoint } from '/src/model/contextMenu'
 import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
 import CoverImage from '../ui/CoverImage.vue'
@@ -262,11 +271,9 @@ const sleepTitle = computed(() => {
   if (player.sleepMode.value === 'track') return t('player.sleepAfterSong')
   return t('player.sleep')
 })
-function onSleepMenu(e) {
+function sleepItems() {
   const mode = player.sleepMode.value
-  openContextMenu(
-    e,
-    [
+  return [
       { header: mode === 'off' ? t('player.sleep') : sleepTitle.value },
       ...[15, 30, 45, 60, 90].map((m) => ({
         label: t('player.sleepMinutes', { count: m }),
@@ -282,6 +289,33 @@ function onSleepMenu(e) {
       },
       { divider: true },
       { label: t('player.sleepOff'), icon: 'ph:x', disabled: mode === 'off', action: () => player.cancelSleep() },
+  ]
+}
+function onSleepMenu(e) {
+  openContextMenu(e, sleepItems(), { anchor: true })
+}
+// Narrow windows: what does not fit beside the volume, one click away.
+function onMoreMenu(e) {
+  openContextMenu(
+    e,
+    [
+      {
+        label: player.sleepMode.value === 'off' ? t('player.sleep') : sleepTitle.value,
+        icon: player.sleepMode.value === 'off' ? 'ph:moon' : 'ph:moon-fill',
+        // Its own choices, where this menu was.
+        action: () => setTimeout(() => openMenuAt(lastMenuPoint(), sleepItems())),
+      },
+      {
+        label: t('panel.aboutButton'),
+        icon: 'ph:vinyl-record',
+        disabled: !cur.value,
+        action: () => ui.setPanel('about'),
+      },
+      desktop.isDesktop && {
+        label: t('player.miniPlayer'),
+        icon: 'ph:picture-in-picture',
+        action: () => desktop.setMini(true),
+      },
     ],
     { anchor: true }
   )
@@ -493,10 +527,22 @@ function onTrackMenu(e) {
   flex: 1;
 }
 
-/* Medium windows: tighten the right side. */
+.pb-more {
+  display: none;
+}
+
+/* Medium windows: tighten the right side. Sleep, About and the mini player
+   go behind a More button: all nine buttons kept their room and the song's
+   own name, the one thing everyone reads, was cut to three letters. */
 @media (max-width: 1000px) {
   .pbar {
-    grid-template-columns: minmax(140px, 1fr) minmax(260px, 1.6fr) auto;
+    grid-template-columns: minmax(150px, 1fr) minmax(240px, 1.5fr) auto;
+  }
+  .pb-extra {
+    display: none;
+  }
+  .pb-more {
+    display: inline-flex;
   }
   .pb-volume {
     width: auto;

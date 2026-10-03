@@ -57,7 +57,7 @@
     <template v-else>
       <div v-if="filtered.length" class="grid-cards">
         <MediaCard
-          v-for="a in filtered"
+          v-for="a in shownArtists"
           :key="a.name"
           :item="{
             name: a.name,
@@ -88,7 +88,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, inject, nextTick, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
@@ -99,6 +99,7 @@ import { onRefresh } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
 import { useArtistLinks } from '/src/model/artistLinks'
 import { refreshArtists } from '/src/model/details'
+import { sortedBy } from '/src/model/textSort'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
 import MediaCard from '/src/components/MediaCard.vue'
 import TrackTable from '/src/components/ui/TrackTable.vue'
@@ -124,11 +125,50 @@ async function refreshPictures() {
 }
 onRefresh(() => lib.refresh())
 
+const sortedArtists = computed(() => sortedBy(lib.artists.value, (a) => a.name))
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
-  const list = [...lib.artists.value].sort((a, b) => a.name.localeCompare(b.name))
+  const list = sortedArtists.value
   return q ? list.filter((a) => a.name.toLowerCase().includes(q)) : list
 })
+
+// A batch of cards at a time, more as the page nears the end of them: a
+// library of thousands of artists used to draw every card, and fetch every
+// picture, the moment the page opened.
+const BATCH = 120
+const limit = ref(BATCH)
+const shownArtists = computed(() => filtered.value.slice(0, limit.value))
+watch(query, () => {
+  limit.value = BATCH
+})
+const pageScroller = inject('viewScroller', ref(null))
+function moreIfNearEnd() {
+  const sc = pageScroller.value
+  if (!sc || limit.value >= filtered.value.length) return
+  if (sc.scrollTop + sc.clientHeight > sc.scrollHeight - 1200) {
+    limit.value += BATCH
+    // A tall window may still not be full: look again once these are drawn.
+    nextTick(moreIfNearEnd)
+  }
+}
+let bound = null
+function bindScroll() {
+  unbindScroll()
+  bound = pageScroller.value
+  if (bound) bound.addEventListener('scroll', moreIfNearEnd, { passive: true })
+  nextTick(moreIfNearEnd)
+}
+function unbindScroll() {
+  if (bound) bound.removeEventListener('scroll', moreIfNearEnd)
+  bound = null
+}
+onMounted(bindScroll)
+onActivated(bindScroll)
+// Opened straight onto this page, it is up before the app's scroll pane is:
+// bound as soon as that is there.
+watch(pageScroller, bindScroll)
+onDeactivated(unbindScroll)
+onBeforeUnmount(unbindScroll)
 
 const songMatches = computed(() => {
   const q = query.value.trim().toLowerCase()

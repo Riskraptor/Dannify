@@ -8,6 +8,7 @@ import { useLibrary } from '/src/model/library'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 import { localRow, songRow, songVideoId } from '/src/model/tracks'
 import { t } from '/src/i18n'
+import { useAccount } from '/src/model/account'
 
 // Playlists the listener makes. They live on this PC (Backend/dannify/
 // playlists.py), not in a Google account, so they work signed out and
@@ -99,6 +100,20 @@ function sameSong(a, b) {
   return !!a.file && a.file === b.file
 }
 
+// The library's songs by file, made once per reading of the library: each
+// row used to search the whole library for its file, which for a long
+// playlist and a big library was millions of comparisons per redraw.
+let byFileOf = null
+let byFile = new Map()
+function savedByFile() {
+  const tracks = useLibrary().tracks.value
+  if (tracks !== byFileOf) {
+    byFileOf = tracks
+    byFile = new Map(tracks.map((tr) => [tr.file, tr]))
+  }
+  return byFile
+}
+
 /**
  * A playlist entry as a table row: the saved file when it is still there
  * (or the same song saved again under another name), the song online when
@@ -106,11 +121,11 @@ function sameSong(a, b) {
  * removing whatever the table shows.
  */
 export function entryRow(entry, index) {
-  const lib = useLibrary()
   const index_ = useLibraryIndex()
-  let file = entry.file && lib.tracks.value.some((tr) => tr.file === entry.file) ? entry.file : ''
+  const byFile = savedByFile()
+  let file = entry.file && byFile.has(entry.file) ? entry.file : ''
   if (!file && entry.video_id) file = index_.localFileFor({ video_id: entry.video_id }) || ''
-  const saved = file ? lib.tracks.value.find((tr) => tr.file === file) : null
+  const saved = file ? byFile.get(file) : null
   let row
   if (saved) {
     row = localRow(saved)
@@ -227,15 +242,51 @@ async function addRows(pid, rows) {
   }
 }
 
+/** Add `rows` to one of the account's YouTube Music playlists. */
+async function addRowsToYouTube(playlist, rows) {
+  const ids = rows.map((r) => songVideoId(r) || (r.raw && r.raw.video_id) || '').filter(Boolean)
+  if (!ids.length) return
+  try {
+    await useAccount().addToYouTubePlaylist(playlist, ids)
+    toast(
+      ids.length === 1
+        ? t('account.addedToYt', { name: playlist.name })
+        : t('account.addedToYtMany', { count: ids.length, name: playlist.name }),
+      { icon: 'ph:youtube-logo', key: `yt:${playlist.browse_id}` }
+    )
+  } catch {
+    toast(t('account.ytAddFailed'), { tone: 'error', icon: 'ph:warning' })
+  }
+}
+
 /** The menu of playlists to add `rows` to. */
-function pickerItems(rows) {
+function pickerItems(rows, all = false) {
+  const account = useAccount()
+  // Liked Music fills itself from likes, and Episodes for Later is podcasts.
+  const yt = account.signedIn.value
+    ? (account.playlists.value || []).filter((p) => p && p.browse_id && !['LM', 'SE', 'VLLM', 'VLSE'].includes(p.browse_id))
+    : []
+  const PICK = 15
+  const many = !all && recent.value.length > PICK
+  const mine = many ? recent.value.slice(0, PICK) : recent.value
   return [
     { label: t('playlists.new'), icon: 'ph:plus', action: () => createPlaylist(rows) },
-    recent.value.length && { divider: true },
-    ...recent.value.map((p) => ({
+    mine.length && { divider: true },
+    ...mine.map((p) => ({
       label: p.name,
       icon: 'ph:playlist',
       action: () => addRows(p.id, rows),
+    })),
+    many && {
+      label: t('playlists.morePlaylists', { count: recent.value.length - PICK }),
+      icon: 'ph:dots-three',
+      action: () => openMenuAt(lastMenuPoint(), pickerItems(rows, true)),
+    },
+    yt.length && { header: t('account.ytPlaylists') },
+    ...yt.map((p) => ({
+      label: p.name,
+      icon: 'ph:youtube-logo',
+      action: () => addRowsToYouTube(p, rows),
     })),
   ]
 }

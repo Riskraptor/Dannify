@@ -50,6 +50,9 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# Ours is written by hand (what goes in the program, the code archives), not
+# generated: it is the recipe for every release.
+!dannify.spec
 
 # Installer logs
 pip-log.txt

@@ -600,6 +600,7 @@ def artist(browse_id: str) -> dict[str, Any]:
         'cover_url': _thumb(data),
         'subscribers': data.get('subscribers') or '',
         'monthly_listeners': data.get('monthlyListeners') or '',
+        'channel_id': data.get('channelId') or (browse_id if str(browse_id).startswith('UC') else ''),
         'songs': _done('songs', []),
         'albums': _done('albums', []),
         'singles': _done('singles', []),

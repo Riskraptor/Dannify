@@ -2398,6 +2398,69 @@ async def library_playlists_endpoint(limit: int = Query(50)) -> dict[str, Any]:
     return {'playlists': playlists}
 
 
+@router.get('/api/account/following')
+async def account_following_endpoint() -> dict[str, Any]:
+    if not account.is_signed_in():
+        return {'artists': []}
+    try:
+        return {'artists': await asyncio.to_thread(account.subscriptions, 200)}
+    except Exception:
+        logger.opt(exception=True).debug('subscriptions failed')
+        return {'artists': []}
+
+
+@router.post('/api/account/follow')
+async def account_follow_endpoint(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if not account.is_signed_in():
+        raise HTTPException(status_code=401, detail='Not signed in')
+    try:
+        return await asyncio.to_thread(
+            account.follow, str(payload.get('channel_id') or ''), bool(payload.get('follow', True))
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.opt(exception=True).info('follow failed')
+        raise HTTPException(status_code=502, detail='YouTube Music did not answer') from exc
+
+
+@router.get('/api/account/history')
+async def account_history_endpoint() -> dict[str, Any]:
+    if not account.is_signed_in():
+        return {'songs': []}
+    try:
+        return {'songs': await asyncio.to_thread(account.history)}
+    except Exception:
+        logger.opt(exception=True).debug('history failed')
+        return {'songs': []}
+
+
+@router.post('/api/account/history/add')
+async def account_history_add_endpoint(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if not account.is_signed_in():
+        return {'added': False}
+    try:
+        added = await asyncio.to_thread(account.add_history, str(payload.get('video_id') or ''))
+    except Exception:
+        logger.opt(exception=True).debug('history item failed')
+        added = False
+    return {'added': added}
+
+
+@router.post('/api/account/playlist/add')
+async def account_playlist_add_endpoint(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if not account.is_signed_in():
+        raise HTTPException(status_code=401, detail='Not signed in')
+    ids = payload.get('video_ids') if isinstance(payload.get('video_ids'), list) else []
+    try:
+        return await asyncio.to_thread(account.add_to_playlist, str(payload.get('playlist_id') or ''), ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.opt(exception=True).info('adding to a YouTube Music playlist failed')
+        raise HTTPException(status_code=502, detail='YouTube Music did not take it') from exc
+
+
 @router.post('/api/rate')
 async def rate_endpoint(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Like / unlike a song on the signed-in YouTube Music account."""

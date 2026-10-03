@@ -67,17 +67,43 @@ persist('dn.panelWidth', panelWidth)
 // Dock the panel beside the content when there's room, float it otherwise.
 const panelFloating = computed(() => viewport.value.w < 1100)
 
+// A docked panel is put away when the window gets too narrow to dock it,
+// and comes back when there is room again. Floating, it used to stay open
+// over every page, a third of the window, until it was closed by hand.
+// Kept across restarts, so a window opened narrow still gets it back later.
+const stowedPanel = ref(load('dn.panelStowed', null))
+persist('dn.panelStowed', stowedPanel)
+function fitPanelToWindow(floating) {
+  if (floating && panel.value) {
+    stowedPanel.value = panel.value
+    panel.value = null
+  } else if (!floating && stowedPanel.value) {
+    if (!panel.value) panel.value = stowedPanel.value
+    stowedPanel.value = null
+  }
+}
+fitPanelToWindow(panelFloating.value)
+watch(panelFloating, fitPanelToWindow)
+
 export const PANEL_MIN = 300
 export const PANEL_MAX = 560
 
 function setPanel(name) {
   panel.value = panel.value === name ? null : name
+  stowedPanel.value = null
 }
 function openPanel(name) {
   panel.value = name
+  stowedPanel.value = null
 }
 function closePanel() {
   panel.value = null
+  stowedPanel.value = null
+}
+// Going to another page closes a floating panel: it was opened to glance at
+// the queue or the words, over the page that was there.
+function leavePage() {
+  if (panelFloating.value && panel.value) panel.value = null
 }
 function setPanelWidth(px) {
   panelWidth.value = Math.round(Math.max(PANEL_MIN, Math.min(PANEL_MAX, px)))
@@ -114,6 +140,7 @@ export function useUi() {
     setPanel,
     openPanel,
     closePanel,
+    leavePage,
     setPanelWidth,
     autoOpenLyrics,
     lyricsSyncOpen,

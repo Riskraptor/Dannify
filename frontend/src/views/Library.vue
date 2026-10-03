@@ -120,6 +120,7 @@ import { useLibrary } from '/src/model/library'
 import { usePlayer } from '/src/model/player'
 import { useUi } from '/src/model/ui'
 import { localRow, playRows, shuffleRows } from '/src/model/tracks'
+import { sortedBy } from '/src/model/textSort'
 import { openContextMenu } from '/src/model/contextMenu'
 import { onRefresh } from '/src/model/useRefresh'
 import { desktop } from '/src/desktop/bridge'
@@ -156,10 +157,6 @@ onActivated(() => {
   }
 })
 
-function norm(s) {
-  return String(s || '').toLowerCase()
-}
-
 const rows = computed(() => {
   let list = lib.tracks.value
   const q = query.value.trim().toLowerCase()
@@ -170,14 +167,16 @@ const rows = computed(() => {
       return terms.every((term) => hay.includes(term))
     })
   }
-  const dir = sortDir.value === 'asc' ? 1 : -1
+  const desc = sortDir.value !== 'asc'
   const key = sortKey.value
-  const sorted = [...list].sort((a, b) => {
-    if (key === 'duration' || key === 'added') return ((a[key] || 0) - (b[key] || 0)) * dir
-    const av = key === 'artist' ? norm(a.artist_display || a.artist) : norm(a[key])
-    const bv = key === 'artist' ? norm(b.artist_display || b.artist) : norm(b[key])
-    return av.localeCompare(bv) * dir || norm(a.title).localeCompare(norm(b.title))
-  })
+  const sorted =
+    key === 'duration' || key === 'added'
+      ? sortedBy(list, { by: (tr) => tr[key] || 0, desc })
+      : sortedBy(
+          list,
+          { by: (tr) => (key === 'artist' ? tr.artist_display || tr.artist : tr[key]) || '', desc },
+          (tr) => tr.title || ''
+        )
   return sorted.map(localRow)
 })
 

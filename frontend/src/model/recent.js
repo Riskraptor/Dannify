@@ -8,6 +8,7 @@ const PLAYED_KEY = 'dn.recentPlayed'
 const SEARCH_KEY = 'dn.recentSearches'
 const MAX_PLAYED = 40
 const MAX_SEARCHES = 12
+const YT_VIDEO = /^[A-Za-z0-9_-]{11}$/
 
 // A saved track's URL is rebuilt from its path, never replayed from storage.
 //
@@ -63,12 +64,38 @@ function savePlayed() {
   )
 }
 
-const played = ref(load(PLAYED_KEY))
+// A history written before songs were matched by their video too can hold
+// the same song twice: the newest of each is kept.
+function firstOfEach(list) {
+  const out = []
+  for (const t of list) if (!out.some((o) => sameSong(o, t))) out.push(t)
+  return out
+}
+const played = ref(firstOfEach(load(PLAYED_KEY)))
 const searches = ref(load(SEARCH_KEY))
 
 export function trackKey(t) {
   if (!t) return ''
   return t.file ? `f:${t.file}` : `s:${t.song_id || t.video_id || t.url || t.title}`
+}
+
+function videoOf(t) {
+  const v = t && (t.video_id || t.song_id)
+  return typeof v === 'string' && YT_VIDEO.test(v) ? v : ''
+}
+
+/**
+ * The same song, saved or streamed. By file alone, a song played from its
+ * file and later from YouTube Music (its file deleted, or not saved yet)
+ * was two songs, and the shelf showed it twice.
+ */
+export function sameSong(a, b) {
+  if (!a || !b) return false
+  if (a.file && b.file && a.file === b.file) return true
+  const va = videoOf(a)
+  const vb = videoOf(b)
+  if (va && vb) return va === vb
+  return trackKey(a) === trackKey(b)
 }
 
 // Only keep what's needed to replay the track later (and nothing huge).
@@ -110,18 +137,13 @@ function slim(track) {
 
 export function rememberPlayed(track) {
   if (!track || !track.url || oneOff(track)) return
-  const key = trackKey(track)
-  const next = [
-    rebuilt(slim(track)),
-    ...played.value.filter((t) => trackKey(t) !== key),
-  ]
+  const next = [rebuilt(slim(track)), ...played.value.filter((t) => !sameSong(t, track))]
   played.value = next.slice(0, MAX_PLAYED)
   savePlayed()
 }
 
 export function forgetPlayed(track) {
-  const key = trackKey(track)
-  played.value = played.value.filter((t) => trackKey(t) !== key)
+  played.value = played.value.filter((t) => !sameSong(t, track))
   savePlayed()
 }
 

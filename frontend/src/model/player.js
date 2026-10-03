@@ -1,6 +1,7 @@
-import { ref, shallowRef, computed } from 'vue'
+import { ref, shallowRef, computed, watch } from 'vue'
 import API from '/src/model/api'
 import { useLibraryIndex } from '/src/model/libraryIndex'
+import { useLibrary } from '/src/model/library'
 import { useUi } from '/src/model/ui'
 import { rememberPlayed } from '/src/model/recent'
 import { notePlayed } from '/src/model/support'
@@ -152,12 +153,13 @@ function readEq() {
   try {
     const v = JSON.parse(readStored(EQ_KEY) || 'null')
     if (v && Array.isArray(v.gains) && v.gains.length === EQ_BANDS.length) {
-      return { on: !!v.on, preset: String(v.preset || 'custom'), gains: v.gains.map((g) => Number(g) || 0) }
+      const preamp = typeof v.preamp === 'number' && Number.isFinite(v.preamp) ? v.preamp : 'auto'
+      return { on: !!v.on, preset: String(v.preset || 'custom'), gains: v.gains.map((g) => Number(g) || 0), preamp }
     }
   } catch {
     // a damaged setting: start flat
   }
-  return { on: false, preset: 'flat', gains: [...EQ_PRESETS.flat] }
+  return { on: false, preset: 'flat', gains: [...EQ_PRESETS.flat], preamp: 'auto' }
 }
 function storeSetting(key, value) {
   try {
@@ -167,7 +169,7 @@ function storeSetting(key, value) {
   }
 }
 function applyEq() {
-  if (engine) engine.setEq(eq.value.on, eq.value.gains)
+  if (engine) engine.setEq(eq.value.on, eq.value.gains, eq.value.preamp === 'auto' ? null : eq.value.preamp)
 }
 function setEq(next) {
   eq.value = next
@@ -178,14 +180,83 @@ function setEqEnabled(on) {
   setEq({ ...eq.value, on: !!on })
 }
 function setEqPreset(name) {
-  if (!EQ_PRESETS[name]) return
-  setEq({ on: true, preset: name, gains: [...EQ_PRESETS[name]] })
+  const own = String(name).startsWith('user:') ? eqUserPresets.value.find((p) => 'user:' + p.name === name) : null
+  const gains = own ? own.gains : EQ_PRESETS[name]
+  if (!gains) return
+  setEq({ ...eq.value, on: true, preset: name, gains: [...gains] })
 }
 function setEqBand(index, db) {
   if (index < 0 || index >= EQ_BANDS.length) return
   const gains = [...eq.value.gains]
   gains[index] = Math.max(-12, Math.min(12, Math.round(Number(db) * 2) / 2 || 0))
-  setEq({ on: true, preset: 'custom', gains })
+  setEq({ ...eq.value, on: true, preset: 'custom', gains })
+}
+/** 'auto' (half the biggest boost taken back) or dB, -12 to +12. */
+function setEqPreamp(v) {
+  const preamp = v === 'auto' ? 'auto' : Math.max(-12, Math.min(12, Math.round(Number(v) * 2) / 2 || 0))
+  setEq({ ...eq.value, preamp })
+}
+
+// Equalizer settings of the listener's own, by name.
+const EQ_USER_KEY = 'dannify-eq-user'
+const EQ_USER_MAX = 12
+const eqUserPresets = ref((() => {
+  try {
+    const v = JSON.parse(readStored(EQ_USER_KEY) || '[]')
+    return Array.isArray(v)
+      ? v.filter((p) => p && p.name && Array.isArray(p.gains) && p.gains.length === EQ_BANDS.length).slice(0, EQ_USER_MAX)
+      : []
+  } catch {
+    return []
+  }
+})())
+function saveEqPreset(name) {
+  const clean = String(name || '').trim().slice(0, 40)
+  if (!clean) return false
+  const list = eqUserPresets.value.filter((p) => p.name !== clean)
+  list.unshift({ name: clean, gains: [...eq.value.gains] })
+  eqUserPresets.value = list.slice(0, EQ_USER_MAX)
+  storeSetting(EQ_USER_KEY, JSON.stringify(eqUserPresets.value))
+  setEq({ ...eq.value, preset: 'user:' + clean })
+  return true
+}
+function deleteEqPreset(name) {
+  eqUserPresets.value = eqUserPresets.value.filter((p) => p.name !== name)
+  storeSetting(EQ_USER_KEY, JSON.stringify(eqUserPresets.value))
+  if (eq.value.preset === 'user:' + name) setEq({ ...eq.value, preset: 'custom' })
+}
+
+// Listening speed, kept between runs, and whether the pitch stays put.
+const SPEED_KEY = 'dannify-speed'
+const PITCH_KEY = 'dannify-keep-pitch'
+const speed = ref(Math.max(0.5, Math.min(2, Number(readStored(SPEED_KEY)) || 1)))
+const keepPitch = ref(readStored(PITCH_KEY) !== '0')
+function setSpeed(v) {
+  speed.value = Math.max(0.5, Math.min(2, Math.round((Number(v) || 1) * 20) / 20))
+  storeSetting(SPEED_KEY, String(speed.value))
+  setPlaybackRate(speed.value)
+}
+function setKeepPitch(on) {
+  keepPitch.value = !!on
+  storeSetting(PITCH_KEY, on ? '1' : '0')
+  if (audio) {
+    try {
+      audio.preservesPitch = keepPitch.value
+    } catch {
+      // not supported here
+    }
+  }
+}
+/** Back to the listener's own speed (after the lyrics editor's slow motion). */
+function restoreSpeed() {
+  setPlaybackRate(speed.value)
+}
+/** The output's spectrum into `out` (dB per bin); false without the engine. */
+function spectrum(out) {
+  return engine && typeof engine.spectrum === 'function' ? engine.spectrum(out) : false
+}
+function spectrumInfo() {
+  return engine ? { bins: engine.bins || 0, sampleRate: engine.sampleRate || 48000 } : { bins: 0, sampleRate: 48000 }
 }
 function setCrossfade(seconds) {
   crossfade.value = Math.max(0, Math.min(12, Math.round(Number(seconds) || 0)))
@@ -258,7 +329,7 @@ function remembered(key, allowed, fallback) {
 
 const repeatMode = ref(remembered(REPEAT_KEY, ['off', 'all', 'one'], 'off'))
 const shuffle = ref(remembered(SHUFFLE_KEY, ['0', '1'], '0') === '1')
-const playbackRate = ref(1.0)
+const playbackRate = ref(Math.max(0.5, Math.min(2, Number(readStored('dannify-speed')) || 1)))
 // Autoplay: when the queue runs dry, keep going with YouTube Music's endless
 // mix for the last track: the behaviour every streaming app has.
 const AUTOPLAY_KEY = 'dannify-autoplay-radio'
@@ -735,41 +806,24 @@ function makeElement() {
         readyState: audio.readyState,
         src: audio.currentSrc,
       })
-      deadRun += 1
-      if (deadRun >= DEAD_RUN_LIMIT) {
-        toast(t('player.manyUnplayable'), { tone: 'error' })
-        isPlaying.value = false
-        deadRun = 0
-        return
-      }
-      // Which message depends on why, and the audio element cannot say why:
-      // a 404 and a 409 both reach it as MEDIA_ERR_SRC_NOT_SUPPORTED. So ask
-      // the server. A 409 is the backend's answer for a container this
-      // installation has no key for, and telling that person their file may
-      // have been moved or deleted sends them looking in the wrong place for
-      // a file that is sitting right there.
+      // Why, first: the audio element cannot say (a 404 and a 409 both reach
+      // it as MEDIA_ERR_SRC_NOT_SUPPORTED), so the server is asked. A file
+      // that is simply not there any more is not a failure at all when the
+      // song is on YouTube Music: it goes on from there, where it was.
       const src = audio.currentSrc
-      const fallback = err && err.code === 3 ? 'fileUnreadable' : 'fileUnplayable'
-      // A file that is there and will not play can be repaired. One that is
-      // not there cannot: that is somebody having moved or deleted it.
-      const file = track.file && /\/downloads\//.test(src) ? track.file : ''
-      // Named: two broken songs are two messages, each with its own Repair
-      // button. One wording for all of them merged them into a single
-      // message whose button repaired only the newer file.
-      const say = (kind, status) =>
-        toast(t(`player.${kind}`, { title: track.title || t('common.unknownTrack') }), {
-          tone: 'error',
-          ...(kind === 'fileUnreadable' ? repairAction(file, status !== 409) : {}),
-        })
+      const gen = playGen
+      const at = currentTime.value
       fetch(src, { method: 'HEAD' })
-        .then((probe) => {
-          if (probe.status === 409) say('fileUnreadable', 409)
-          else if (probe.status === 404) say('fileUnplayable', 404)
-          else say(fallback, probe.status)
+        .then(
+          (probe) => probe.status,
+          () => 0
+        )
+        .then((status) => {
+          if (gen !== playGen || currentTrack.value !== track) return
+          const copy = status === 404 ? onlineCopyOf(track) : null
+          if (copy) useOnlineCopy(currentIndex.value, copy, at)
+          else savedTrackFailed(track, err, src, status)
         })
-        .catch(() => say(fallback, 0))
-      if (hasNextInOrder()) next()
-      else isPlaying.value = false
       return
     }
     const gen = playGen
@@ -780,6 +834,15 @@ function makeElement() {
     // there "playing" with no sound and a frozen bar.
     reportNetworkFailure().then((isOnline) => {
       if (gen !== playGen || currentTrack.value !== track) return
+      if (!isOnline && track.savedCopyGone && hasNextInOrder()) {
+        // Its saved copy has gone and there is no connection to play it
+        // from. Waiting here would hold up every saved song after it.
+        toast(t('player.notSavedOffline', { title: track.title || t('common.unknownTrack') }), {
+          key: 'not-saved-offline',
+        })
+        next()
+        return
+      }
       if (!isOnline) {
         // Died because the network did: carry on when it is back.
         whenOnline(() => {
@@ -793,7 +856,7 @@ function makeElement() {
       // address that a fresh request replaces, so try again quietly.
       if (!streamRetried.has(track)) {
         streamRetried.add(track)
-        playAt(currentIndex.value)
+        playAt(currentIndex.value, { again: true })
         if (at > 1) setTimeout(() => seek(at), 600)
         return
       }
@@ -846,6 +909,136 @@ function makeElement() {
 // there.
 const fileUrl = (file) => API.downloadFileURL(file)
 const coverUrl = (file) => API.coverFileURL(file)
+
+// ---------------------------------------------------------------------------
+// Saved songs that are not saved any more
+// ---------------------------------------------------------------------------
+// A song deleted from this computer (here, or in Explorer) is usually still
+// on YouTube Music. The queue used to find out by trying: the song failed,
+// a message said it "may have been moved or deleted", and it was skipped,
+// though it would have played perfectly well online.
+
+const _library = useLibrary()
+const YT_VIDEO = /^[A-Za-z0-9_-]{11}$/
+
+/** The YouTube Music copy of a saved song, or null when it has none. */
+function onlineCopyOf(track) {
+  const vid = track && track.video_id
+  if (!vid || !YT_VIDEO.test(vid)) return null
+  return {
+    type: 'stream',
+    file: null,
+    song_id: vid,
+    video_id: vid,
+    spotify_url: '',
+    url: API.streamURL(vid),
+    // Its picture was in the file. YouTube Music's is asked for when the
+    // song comes up (one request, not one per song in a long queue).
+    cover: '',
+    title: track.title || '',
+    artist: track.artist || '',
+    album: track.album || '',
+    duration: track.duration || 0,
+    savedCopyGone: true,
+  }
+}
+
+function fillOnlineDetails(track) {
+  API.resolveStream(`https://music.youtube.com/watch?v=${track.video_id}`)
+    .then((res) => {
+      const song = (res && res.data) || {}
+      if (song.cover_url && !track.cover) track.cover = song.cover_url
+      if (!track.duration && song.duration > 0) track.duration = song.duration
+      if (currentTrack.value !== track) return
+      syncMediaSession()
+      // Its tile on Home now has the picture, in place of the saved
+      // copy's, which went with the file.
+      rememberPlayed(track)
+    })
+    .catch(() => {
+      // Offline, or YouTube said no: the song plays without a picture.
+    })
+}
+
+/** Put the online copy in a saved song's place and play it from *at*. */
+function useOnlineCopy(index, copy, at = 0) {
+  if (index < 0 || index >= playlist.value.length) return
+  const list = [...playlist.value]
+  list[index] = copy
+  playlist.value = list
+  playAt(index, { again: true })
+  if (at > 1) setTimeout(() => seek(at), 600)
+}
+
+// A saved song that would not play, and has no online copy to go to.
+function savedTrackFailed(track, err, src, status) {
+  // Skipping raises the next error, which skips again, so one click on a
+  // folder of bad files walked the whole queue and stacked a toast for each.
+  // It stops after a few in a row, and says that instead.
+  deadRun += 1
+  if (deadRun >= DEAD_RUN_LIMIT) {
+    toast(t('player.manyUnplayable'), { tone: 'error' })
+    isPlaying.value = false
+    deadRun = 0
+    return
+  }
+  const title = track.title || t('common.unknownTrack')
+  const index = currentIndex.value
+  if (status === 404) {
+    // Not there any more, and nowhere else to play it from: said once, and
+    // out of the queue so it does not come round again.
+    toast(t('player.fileGone', { title }), { key: `gone:${track.file}` })
+    if (hasNextInOrder()) next()
+    else isPlaying.value = false
+    if (playlist.value[index] === track) removeFromQueue(index)
+    return
+  }
+  // A 409 is the backend's answer for a container this installation has no
+  // key for: the file is right there, so it is offered a repair rather than
+  // a hint that it was moved. Named, so two broken songs are two messages,
+  // each with its own Repair button.
+  const kind = status === 409 || (err && err.code === 3) ? 'fileUnreadable' : 'fileUnplayable'
+  const file = track.file && /\/downloads\//.test(src) ? track.file : ''
+  toast(t(`player.${kind}`, { title }), {
+    tone: 'error',
+    ...(kind === 'fileUnreadable' ? repairAction(file, status !== 409) : {}),
+  })
+  if (hasNextInOrder()) next()
+  else isPlaying.value = false
+}
+
+// Put the queue right whenever the library is read again (a download, a
+// delete here, a file moved in Explorer, coming back to the window): a saved
+// song whose file has gone plays from its new place if it was only moved,
+// from YouTube Music if it is there, and otherwise leaves the queue, before
+// it ever comes up. The playing song is left to finish what it has.
+function settleMissingSaved() {
+  if (!_library.loaded.value || _library.error.value) return
+  const list = playlist.value
+  if (!list.length) return
+  const saved = new Set()
+  const byVideo = new Map()
+  for (const tr of _library.tracks.value) {
+    if (!tr || !tr.file) continue
+    saved.add(tr.file)
+    if (tr.video_id && !tr.problem) byVideo.set(tr.video_id, tr.file)
+  }
+  let swapped = null
+  const gone = []
+  list.forEach((tr, i) => {
+    if (!tr || tr.type !== 'local' || !tr.file || saved.has(tr.file)) return
+    if (i === currentIndex.value) return
+    const moved = tr.video_id && byVideo.get(tr.video_id)
+    const replacement = moved
+      ? { ...tr, file: moved, url: API.downloadFileURL(moved), cover: API.coverFileURL(moved) }
+      : onlineCopyOf(tr)
+    if (replacement) (swapped || (swapped = [...list]))[i] = replacement
+    else gone.push(i)
+  })
+  if (swapped) playlist.value = swapped
+  for (const i of gone.reverse()) removeFromQueue(i)
+}
+watch([() => _library.tracks.value, () => _library.loaded.value], settleMissingSaved)
 
 function trackFromFile(file) {
   const noExt = file.replace(/\.[^.]+$/, '')
@@ -1349,8 +1542,10 @@ function addToShuffleOrder(at, count, { next = false, mix = false } = {}) {
   for (let k = 0; k < count; k++) added.push(at + k)
   if (mix) shuffled(added)
   const order = shuffleOrder.value.map((i) => (i >= at ? i + count : i))
-  order.splice(next ? shufflePosition() + 1 : order.length, 0, ...added)
-  shuffleOrder.value = order
+  const where = next ? shufflePosition() + 1 : order.length
+  // Not splice(where, 0, ...added): that passes every index as an argument
+  // and runs out of stack when a whole big library is queued.
+  shuffleOrder.value = [...order.slice(0, where), ...added, ...order.slice(where)]
   return added
 }
 
@@ -1431,12 +1626,11 @@ function enqueue(items, { next: asNext = false } = {}) {
     .filter(Boolean)
     .map(toTrack)
   if (!tracks.length) return
-  const list = [...playlist.value]
+  const before = playlist.value
   const afterCurrent = asNext && currentIndex.value >= 0
-  const at = afterCurrent ? currentIndex.value + 1 : list.length
+  const at = afterCurrent ? currentIndex.value + 1 : before.length
   if (shuffle.value) addToShuffleOrder(at, tracks.length, { next: afterCurrent })
-  list.splice(at, 0, ...tracks)
-  playlist.value = list
+  playlist.value = [...before.slice(0, at), ...tracks, ...before.slice(at)]
   if (currentIndex.value < 0) playAt(at)
 }
 
@@ -1556,7 +1750,9 @@ function mediaCommand(cmd) {
 // *autoplay* false loads the track and leaves it paused, for a change of
 // track the listener did not ask to hear (removing the playing one while
 // paused).
-function playAt(index, { autoplay = true, fade = null } = {}) {
+// *again*: the same song started over (a retry, its online copy taking over
+// from a saved file that went), which is not another listen to record.
+function playAt(index, { autoplay = true, fade = null, again = false } = {}) {
   if (index < 0 || index >= playlist.value.length) return
   ensureAudio()
   cancelTransition()
@@ -1607,6 +1803,7 @@ function playAt(index, { autoplay = true, fade = null } = {}) {
   // Re-apply playback rate: browsers reset it to 1.0 on src change.
   try {
     a.playbackRate = playbackRate.value
+    a.preservesPitch = keepPitch.value
   } catch {
     // ignore
   }
@@ -1643,8 +1840,15 @@ function playAt(index, { autoplay = true, fade = null } = {}) {
   }
   loadLyricsForCurrent()
   syncMediaSession()
-  rememberPlayed(track)
-  notePlayed()
+  if (track.savedCopyGone && !track.cover) fillOnlineDetails(track)
+  if (!again) {
+    rememberPlayed(track)
+    notePlayed()
+    // For whoever keeps a history of listens (the YouTube Music account).
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('dannify:played', { detail: track }))
+    }
+  }
   saveSession()
   // First-play affordance: surface the lyrics panel the very first time
   // the user plays something this session, so they see the headline
@@ -2274,6 +2478,17 @@ export function usePlayer() {
     autoplayRadio,
     setAutoplayRadio,
     normalizeLoudness,
+    eqUserPresets,
+    saveEqPreset,
+    deleteEqPreset,
+    setEqPreamp,
+    speed,
+    setSpeed,
+    keepPitch,
+    setKeepPitch,
+    restoreSpeed,
+    spectrum,
+    spectrumInfo,
     volumeLevel,
     setVolumeLevel,
     balance,

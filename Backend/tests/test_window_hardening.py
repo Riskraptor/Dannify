@@ -135,3 +135,16 @@ def test_a_shipped_copy_updates_only_from_where_it_was_built_to(tmp_path, monkey
         monkeypatch.delattr(sys, 'frozen', raising=False)
         support.init(tmp_path / 'nothing-here')
         updates._settings['repo'] = ''
+
+
+def test_a_file_handed_over_to_an_earlier_run_is_not_played_again():
+    from typing import Any
+
+    ns = _load('_file_from_note', Any=Any)
+    pick = ns['_file_from_note']
+    started = 1_000_000
+    assert pick({'path': 'C:/Music/new.dnf', 'n': started + 5}, started) == 'C:/Music/new.dnf'
+    # Left on disk by the run before: Dannify used to start playing it.
+    assert pick({'path': 'C:/Music/old.dnf', 'n': started - 5}, started) == ''
+    assert pick({'path': 'C:/Music/x.dnf', 'n': 'garbage'}, started) == ''
+    assert pick(['not', 'a', 'note'], started) == ''

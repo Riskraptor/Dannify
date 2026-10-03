@@ -199,9 +199,10 @@ describe('the sound path', () => {
     for (const n of chain(ctx.sources[0]).filter((x) => x.kind === 'filter')) {
       n.getFrequencyResponse = (f, mag) => mag.fill(Math.pow(10, 2 / 20))
     }
-    const curve = engine.eqResponse([100, 1000])
-    const preamp = -3 // half the +6 dB boost taken back
-    expect(curve[0]).toBeCloseTo(EQ_BANDS.length * 2 + preamp, 1)
+    // The bands' shape, through the handles...
+    expect(engine.eqResponse([100, 1000])[0]).toBeCloseTo(EQ_BANDS.length * 2, 1)
+    // ...and what is heard, with the pre-amp: half the +6 dB boost taken back.
+    expect(engine.eqResponse([100, 1000], true)[0]).toBeCloseTo(EQ_BANDS.length * 2 - 3, 1)
   })
 
   it('two decks meet at the same point before the equalizer', () => {

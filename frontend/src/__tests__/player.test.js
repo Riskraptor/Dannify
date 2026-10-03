@@ -623,3 +623,43 @@ describe('the volume level for evened-out songs (4.5)', () => {
     expect(store.get('dannify-mono')).toBe('1')
   })
 })
+
+describe('the mixer (4.6)', () => {
+  it('saves your own equalizer settings by name, and loads and deletes them', () => {
+    P.setEqBand(0, 5)
+    P.setEqBand(9, -3)
+    expect(P.saveEqPreset('My bass')).toBe(true)
+    expect(P.eq.value.preset).toBe('user:My bass')
+    P.setEqPreset('flat')
+    expect(P.eq.value.gains.every((g) => g === 0)).toBe(true)
+    P.setEqPreset('user:My bass')
+    expect(P.eq.value.gains[0]).toBe(5)
+    expect(P.eq.value.gains[9]).toBe(-3)
+    expect(JSON.parse(store.get('dannify-eq-user'))[0].name).toBe('My bass')
+    P.deleteEqPreset('My bass')
+    expect(P.eqUserPresets.value).toEqual([])
+    expect(P.eq.value.preset).toBe('custom')
+  })
+
+  it('takes a pre-amp of your own, or works it out', () => {
+    P.setEqPreamp(-4.3)
+    expect(P.eq.value.preamp).toBe(-4.5)
+    P.setEqPreamp(40)
+    expect(P.eq.value.preamp).toBe(12)
+    P.setEqPreamp('auto')
+    expect(P.eq.value.preamp).toBe('auto')
+  })
+
+  it('remembers the listening speed and plays at it', () => {
+    start(2)
+    P.setSpeed(1.27)
+    expect(P.speed.value).toBe(1.25)
+    expect(audio.playbackRate).toBe(1.25)
+    expect(store.get('dannify-speed')).toBe('1.25')
+    P.setPlaybackRate(0.5) // the lyrics editor's slow motion
+    P.restoreSpeed()
+    expect(audio.playbackRate).toBe(1.25)
+    P.setSpeed(9)
+    expect(P.speed.value).toBe(2)
+  })
+})
