@@ -12,13 +12,24 @@
 
     <div class="ql-head flex items-center justify-between">
       <span>{{ t('player.upNext') }}</span>
-      <button
-        v-if="upNext.length"
-        class="btn-ghost h-6 px-2 text-[11px] normal-case tracking-normal"
-        @click="player.clearUpcoming()"
-      >
-        {{ t('panel.clearQueue') }}
-      </button>
+      <span class="flex items-center gap-1">
+        <button
+          v-if="player.playlist.value.length > 1"
+          class="btn-ghost h-6 px-2 text-[11px] normal-case tracking-normal"
+          :title="t('playlists.saveQueue')"
+          @click="saveAsPlaylist"
+        >
+          <Icon icon="ph:playlist" class="h-3.5 w-3.5" />
+          {{ t('playlists.saveQueue') }}
+        </button>
+        <button
+          v-if="upNext.length"
+          class="btn-ghost h-6 px-2 text-[11px] normal-case tracking-normal"
+          @click="player.clearUpcoming()"
+        >
+          {{ t('panel.clearQueue') }}
+        </button>
+      </span>
     </div>
 
     <div v-if="!upNext.length" class="ql-empty">
@@ -32,9 +43,10 @@
       :item-height="52"
       :item-key="(r) => r.key"
     >
-      <template #default="{ item }">
+      <template #default="{ item, index }">
         <QueueItem
           :row="item"
+          :pos="index"
           @play="player.playAt(item.queueIndex)"
           @remove="player.removeFromQueue(item.queueIndex)"
           @menu="(e) => openMenu(e, item)"
@@ -45,10 +57,11 @@
 </template>
 
 <script setup>
-import { computed, h } from 'vue'
+import { computed, h, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { usePlayer, formatTime } from '/src/model/player'
 import { queueRow, trackMenu } from '/src/model/tracks'
+import { usePlaylists } from '/src/model/playlists'
 import { openContextMenu } from '/src/model/contextMenu'
 import { useI18n } from '/src/i18n'
 import VirtualList from '../ui/VirtualList.vue'
@@ -73,17 +86,74 @@ function openMenu(e, row) {
   openContextMenu(e, trackMenu([row], { queue: true }))
 }
 
+// The whole queue, in the order it is listed, as a playlist of its own.
+const playlists = usePlaylists()
+function saveAsPlaylist() {
+  const rows = player.playlist.value.map((tr, i) => queueRow(tr, i))
+  const date = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  playlists.createPlaylist(rows, { name: t('playlists.queueName', { date }) })
+}
+
+// ----- dragging -----------------------------------------------------------------
+// A song in "Up next" can be dragged to another place in it, and any song
+// here onto a playlist in the side bar.
+const dragFrom = ref(-1)
+const dropAt = ref(null) // { pos, after }
+
+function onDragStart(e, row, pos) {
+  dragFrom.value = pos
+  playlists.dragging.value = [row]
+  e.dataTransfer.effectAllowed = pos >= 0 ? 'copyMove' : 'copy'
+  e.dataTransfer.setData('text/plain', `${row.artistText} - ${row.title}`)
+}
+function onDragOver(e, pos) {
+  if (dragFrom.value < 0 || pos < 0) return
+  e.preventDefault()
+  e.dataTransfer.dropEffect = 'move'
+  const r = e.currentTarget.getBoundingClientRect()
+  const after = e.clientY > r.top + r.height / 2
+  if (!dropAt.value || dropAt.value.pos !== pos || dropAt.value.after !== after) {
+    dropAt.value = { pos, after }
+  }
+}
+function onDrop(e) {
+  if (dragFrom.value < 0 || !dropAt.value) return
+  e.preventDefault()
+  const from = dragFrom.value
+  const to = dropAt.value.pos + (dropAt.value.after ? 1 : 0)
+  player.moveUpcoming(from, to > from ? to - 1 : to)
+  onDragEnd()
+}
+function onDragEnd() {
+  dragFrom.value = -1
+  dropAt.value = null
+  playlists.dragging.value = null
+}
+
 const QueueItem = {
-  props: { row: Object, active: Boolean },
+  props: { row: Object, active: Boolean, pos: { type: Number, default: -1 } },
   emits: ['play', 'remove', 'menu'],
   setup(props, { emit }) {
     return () => {
       const r = props.row
       const playing = props.active && player.isPlaying.value
+      const drop = dropAt.value && dropAt.value.pos === props.pos ? dropAt.value : null
       return h(
         'div',
         {
-          class: ['ql-item', { 'is-active': props.active }],
+          class: [
+            'ql-item',
+            {
+              'is-active': props.active,
+              'is-drop-before': drop && !drop.after,
+              'is-drop-after': drop && drop.after,
+            },
+          ],
+          draggable: 'true',
+          onDragstart: (e) => onDragStart(e, r, props.active ? -1 : props.pos),
+          onDragover: (e) => onDragOver(e, props.active ? -1 : props.pos),
+          onDrop,
+          onDragend: onDragEnd,
           onDblclick: () => emit('play'),
           onContextmenu: (e) => emit('menu', e),
           title: `${r.title}. ${r.artistText}`,
@@ -222,5 +292,11 @@ const QueueItem = {
 }
 .ql :deep(.ql-item:hover .ql-time) {
   display: none;
+}
+.ql :deep(.ql-item.is-drop-before) {
+  box-shadow: inset 0 2px 0 rgb(var(--c-accent));
+}
+.ql :deep(.ql-item.is-drop-after) {
+  box-shadow: inset 0 -2px 0 rgb(var(--c-accent));
 }
 </style>

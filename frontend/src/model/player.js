@@ -11,6 +11,7 @@ import {
 import { toast } from '/src/model/toast'
 import { repairFiles } from '/src/model/repair'
 import { t } from '/src/i18n'
+import { createEngine, EQ_PRESETS, EQ_BANDS } from '/src/model/audioEngine'
 
 const connectivity = useConnectivity()
 
@@ -60,12 +61,12 @@ const volume = ref(parseFloat(readStored(VOLUME_KEY) || '0.85'))
 // difference is jarring. YouTube publishes how far above its own target each
 // track was mastered, so the fix is to turn the loud ones down.
 //
-// Attenuate only. Boosting a quiet track means clipping its peaks, and a
-// limiter to catch them is not worth the complexity here, so anything at or
-// below the target is left exactly as it is. In practice that is most
-// tracks: the filter is the exception, not the rule.
+// Loud tracks are turned down. Quiet ones are turned up too, by at most 6 dB,
+// but only through the sound engine, whose limiter catches the peaks that
+// lifting them would otherwise clip; without it, only down.
 const TARGET_LUFS = -7 // YouTube Music's target, not the video site's -14
 const MAX_ATTENUATION_DB = -24
+const MAX_BOOST_DB = 6
 const trackGain = ref(1)
 // A setting ("Even out loudness"): on unless it has been turned off.
 const NORMALIZE_KEY = 'dannify-normalize'
@@ -74,16 +75,120 @@ const normalizeLoudness = ref(readStored(NORMALIZE_KEY) !== '0')
 function gainFor(loudnessDb) {
   if (typeof loudnessDb !== 'number' || !Number.isFinite(loudnessDb)) return 1
   const db = TARGET_LUFS - (loudnessDb - 14)
-  if (db >= -0.05) return 1 // at or under target: leave it alone
+  if (Math.abs(db) < 0.05) return 1
+  if (db > 0) return engine ? Math.pow(10, Math.min(db, MAX_BOOST_DB) / 20) : 1
   return Math.pow(10, Math.max(db, MAX_ATTENUATION_DB) / 20)
 }
 
-// Everything that sets the element's volume goes through here, so the user's
-// setting and the per-track gain can never get out of step.
-function applyVolume() {
+// What each song measures, by video id, kept between runs. Each song used
+// to start at full level and drop a moment later, when its measurement came
+// back from the network: an audible jump at the start of almost every song.
+// Known in advance (from here, or fetched while the song before it plays),
+// the level is right from the first note.
+const LOUDNESS_KEY = 'dannify-loudness'
+const LOUDNESS_MAX = 4000
+const loudnessCache = (() => {
+  try {
+    const raw = JSON.parse(readStored(LOUDNESS_KEY) || '{}')
+    return new Map(Object.entries(raw && typeof raw === 'object' ? raw : {}))
+  } catch {
+    return new Map()
+  }
+})()
+let loudnessSaveTimer = 0
+function rememberLoudness(id, db) {
+  if (!id || typeof db !== 'number' || !Number.isFinite(db)) return
+  loudnessCache.delete(id)
+  loudnessCache.set(id, db)
+  while (loudnessCache.size > LOUDNESS_MAX) loudnessCache.delete(loudnessCache.keys().next().value)
+  clearTimeout(loudnessSaveTimer)
+  loudnessSaveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(LOUDNESS_KEY, JSON.stringify(Object.fromEntries(loudnessCache)))
+    } catch {
+      // storage full or blocked: measured again next time
+    }
+  }, 1500)
+}
+function loudnessOf(track) {
+  if (!track) return undefined
+  if (typeof track.loudness === 'number') return track.loudness
+  const id = videoIdOf(track)
+  return id && loudnessCache.has(id) ? loudnessCache.get(id) : undefined
+}
+function gainOfTrack(track) {
+  return gainFor(loudnessOf(track))
+}
+
+// Everything that sets a level goes through here, so the user's volume, the
+// mute and the per-track gain can never get out of step.
+function applyVolume(immediate = false) {
   if (!audio) return
   const gain = normalizeLoudness.value ? trackGain.value : 1
+  if (engine) {
+    engine.setVolume(isMuted.value ? 0 : volume.value)
+    if (deck) deck.setNorm(gain, immediate ? 0.005 : 0.25)
+    return
+  }
   audio.volume = Math.max(0, Math.min(1, volume.value * gain))
+}
+
+// --- Crossfade, gapless, equalizer: the sound engine's settings ---
+const CROSSFADE_KEY = 'dannify-crossfade'
+const GAPLESS_KEY = 'dannify-gapless'
+const EQ_KEY = 'dannify-eq'
+const crossfade = ref(Math.max(0, Math.min(12, Number(readStored(CROSSFADE_KEY)) || 0)))
+const gapless = ref(readStored(GAPLESS_KEY) !== '0')
+const eq = ref(readEq())
+
+function readEq() {
+  try {
+    const v = JSON.parse(readStored(EQ_KEY) || 'null')
+    if (v && Array.isArray(v.gains) && v.gains.length === EQ_BANDS.length) {
+      return { on: !!v.on, preset: String(v.preset || 'custom'), gains: v.gains.map((g) => Number(g) || 0) }
+    }
+  } catch {
+    // a damaged setting: start flat
+  }
+  return { on: false, preset: 'flat', gains: [...EQ_PRESETS.flat] }
+}
+function storeSetting(key, value) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // blocked storage: the choice lasts this session
+  }
+}
+function applyEq() {
+  if (engine) engine.setEq(eq.value.on, eq.value.gains)
+}
+function setEq(next) {
+  eq.value = next
+  storeSetting(EQ_KEY, JSON.stringify(next))
+  applyEq()
+}
+function setEqEnabled(on) {
+  setEq({ ...eq.value, on: !!on })
+}
+function setEqPreset(name) {
+  if (!EQ_PRESETS[name]) return
+  setEq({ on: true, preset: name, gains: [...EQ_PRESETS[name]] })
+}
+function setEqBand(index, db) {
+  if (index < 0 || index >= EQ_BANDS.length) return
+  const gains = [...eq.value.gains]
+  gains[index] = Math.max(-12, Math.min(12, Math.round(Number(db) * 2) / 2 || 0))
+  setEq({ on: true, preset: 'custom', gains })
+}
+function setCrossfade(seconds) {
+  crossfade.value = Math.max(0, Math.min(12, Math.round(Number(seconds) || 0)))
+  storeSetting(CROSSFADE_KEY, String(crossfade.value))
+  cancelTransition()
+}
+function setGapless(on) {
+  gapless.value = !!on
+  storeSetting(GAPLESS_KEY, on ? '1' : '0')
+  cancelTransition()
 }
 
 function setNormalizeLoudness(on) {
@@ -332,6 +437,17 @@ const lyricVersionCount = ref(0) // how many versions exist
 let lyricsToken = 0
 
 let audio = null
+// The sound engine (see audioEngine.js), or null where there is none and the
+// element's own volume does the work. *deck* is the one playing; the other
+// waits, holds the next song ready, or fades out the last one.
+let engine = null
+let engineTried = false
+let deck = null
+const decks = []
+// How long a song fades out when another is picked by hand, so a skip does
+// not click. Automatic changes use the crossfade (or the gapless overlap).
+const MANUAL_FADE = 0.25
+const GAPLESS_OVERLAP = 0.12
 // The shuffled play order: every queue index exactly once. What sits before
 // the playing track in it has played, what sits after it is still to come.
 // There is no separate position to keep in step: it is wherever the playing
@@ -346,10 +462,145 @@ let streamBaseOffset = 0
 
 function ensureAudio() {
   if (audio) return audio
-  audio = new Audio()
-  audio.preload = 'metadata'
-  applyVolume()
-  audio.addEventListener('timeupdate', () => {
+  if (!engineTried) {
+    engineTried = true
+    const made = createEngine()
+    engine = made.available ? made : null
+  }
+  audio = makeElement()
+  if (engine) {
+    try {
+      deck = engine.attach(audio)
+      decks.push(deck)
+      applyEq()
+    } catch {
+      // The element would not join the graph: play without the engine.
+      engine = null
+      deck = null
+    }
+  }
+  applyVolume(true)
+  return audio
+}
+
+// The deck that is not playing, made the first time it is needed.
+function otherDeck() {
+  if (!engine) return null
+  if (decks.length < 2) {
+    try {
+      decks.push(engine.attach(makeElement()))
+    } catch {
+      return null
+    }
+  }
+  return decks.find((d) => d !== deck) || null
+}
+
+function stopElement(el) {
+  try {
+    el.pause()
+  } catch {
+    // already stopped
+  }
+  el.removeAttribute('src')
+  try {
+    el.load()
+  } catch {
+    // nothing to unload
+  }
+}
+
+// The song that was playing goes quiet on its own deck and then stops,
+// while the next one starts on the other.
+function retire(d, seconds) {
+  if (!d || !d.el.src) return
+  d.preloaded = null
+  if (d.el.paused || seconds <= 0.01) {
+    stopElement(d.el)
+    return
+  }
+  d.fadeTo(0, seconds).then(() => {
+    if (d !== deck) stopElement(d.el)
+  })
+}
+
+// Stop anything still fading out (a pause, the sleep timer).
+function silenceRetiring() {
+  for (const d of decks) if (d !== deck && d.el.src) stopElement(d.el)
+}
+
+// The next song, loaded on the waiting deck before it is needed: gapless
+// means starting it the instant this one stops, and that only works if it is
+// already there.
+function preloadNext(i) {
+  const nxt = playlist.value[i]
+  if (!engine || !nxt) return
+  const d = otherDeck()
+  if (!d || d.preloaded === nxt) return
+  if (d.el.src && !d.el.paused) return // still fading out the last one
+  d.preloaded = nxt
+  d.el.preload = 'auto'
+  d.el.src = nxt.url
+  try {
+    d.el.load()
+  } catch {
+    // it loads when played
+  }
+}
+
+// --- Crossfade and gapless: the change to the next song, near the end ---
+let transitionTimer = 0
+let transitionFor = -1
+function plannedOverlap() {
+  if (!engine) return -1
+  if (repeatMode.value === 'one' || noAutoAdvance.value || clipLoopStart.value != null) return -1
+  if (sleepMode.value === 'track') return -1
+  if (crossfade.value > 0) return crossfade.value
+  return gapless.value ? GAPLESS_OVERLAP : -1
+}
+function maybeTransition() {
+  if (!audio || audio.paused || transitionFor === playGen) return
+  const overlap = plannedOverlap()
+  if (overlap < 0) return
+  const d = duration.value
+  // Short tracks (an intro, a skit) are not faded over half their length.
+  if (!(d > 0) || d < overlap * 2 + 4) return
+  const remaining = d - elementTime()
+  if (remaining > overlap + 20) return
+  const i = nextIndex()
+  if (i < 0) return
+  preloadNext(i)
+  if (remaining > overlap + 1.5) return
+  transitionFor = playGen
+  const gen = playGen
+  const rate = audio.playbackRate || 1
+  transitionTimer = setTimeout(() => {
+    transitionTimer = 0
+    if (gen !== playGen || !audio || audio.paused) {
+      if (gen === playGen) transitionFor = -1
+      return
+    }
+    const j = nextIndex()
+    if (j >= 0) playAt(j, { fade: overlap })
+  }, Math.max(0, ((remaining - overlap) / rate) * 1000))
+}
+function cancelTransition() {
+  clearTimeout(transitionTimer)
+  transitionTimer = 0
+  transitionFor = -1
+}
+
+let visibilityHooked = false
+function makeElement() {
+  const el = new Audio()
+  el.preload = 'metadata'
+  // Only the deck that is playing speaks for the player. The other one's
+  // events (its fade-out ending, its src being cleared) are not news.
+  const on = (type, fn) =>
+    el.addEventListener(type, (e) => {
+      if (el === audio) fn(e)
+    })
+  on('timeupdate', () => {
     const track = currentTrack.value
     // With the byte-range proxy the browser knows the real currentTime
     // for streams too: no need for the virtual clock anymore. The
@@ -377,8 +628,9 @@ function ensureAudio() {
       }
     }
     updateActiveLyric()
+    maybeTransition()
   })
-  audio.addEventListener('loadedmetadata', () => {
+  on('loadedmetadata', () => {
     const track = currentTrack.value
     // Byte-range proxy streams now expose a real numeric duration via
     // Content-Length: use it directly. Only fall back to /api/stream/info
@@ -401,25 +653,25 @@ function ensureAudio() {
       }
     }
   })
-  audio.addEventListener('durationchange', () => {
+  on('durationchange', () => {
     const track = currentTrack.value
     if (track && track.type === 'stream') return // length-less remux
     if (isFinite(audio.duration) && audio.duration > 0) {
       duration.value = audio.duration
     }
   })
-  audio.addEventListener('waiting', () => {
+  on('waiting', () => {
     isBuffering.value = true
   })
-  audio.addEventListener('playing', () => {
+  on('playing', () => {
     isBuffering.value = false
     deadRun = 0
   })
-  audio.addEventListener('canplay', () => {
+  on('canplay', () => {
     isBuffering.value = false
   })
-  audio.addEventListener('ended', onEnded)
-  audio.addEventListener('error', () => {
+  on('ended', onEnded)
+  on('error', () => {
     const track = currentTrack.value
     if (!track) return
     isBuffering.value = false
@@ -514,30 +766,34 @@ function ensureAudio() {
       if (hasNextInOrder()) next()
     })
   })
-  audio.addEventListener('play', () => {
+  on('play', () => {
     isPlaying.value = true
     syncMediaSession()
     startFrameClock()
   })
-  audio.addEventListener('pause', () => {
+  on('pause', () => {
     isPlaying.value = false
     syncMediaSession()
     stopFrameClock()
   })
-  audio.addEventListener('seeked', () => {
+  on('seeked', () => {
     frameTime.value = elementTime()
+    syncPositionState()
   })
+  on('durationchange', syncPositionState)
+  on('ratechange', syncPositionState)
   // Ended or failed without pausing: nothing to draw, so no loop either.
-  audio.addEventListener('ended', stopFrameClock)
-  audio.addEventListener('error', stopFrameClock)
-  audio.addEventListener('emptied', stopFrameClock)
-  if (typeof document !== 'undefined' && document.addEventListener) {
+  on('ended', stopFrameClock)
+  on('error', stopFrameClock)
+  on('emptied', stopFrameClock)
+  if (!visibilityHooked && typeof document !== 'undefined' && document.addEventListener) {
+    visibilityHooked = true
     // A hidden window draws nothing; the loop stops and picks up on return.
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && audio && !audio.paused) startFrameClock()
     })
   }
-  return audio
+  return el
 }
 
 // One implementation of the path encoding, in api.js. There were three, and
@@ -843,7 +1099,7 @@ async function ensureStreamDuration(track) {
   // The gain is worth one more call even when the duration is known: the
   // backend answers this from the same cache entry it resolved the stream
   // from, so a warm track costs about a millisecond.
-  if (haveDuration && track.gain !== undefined) return
+  if (haveDuration && loudnessOf(track) !== undefined) return
   try {
     const res = await API.getStreamInfo(track.video_id)
     const d = (res.data && res.data.duration) || 0
@@ -852,13 +1108,23 @@ async function ensureStreamDuration(track) {
       // Only apply if this is still the current track.
       if (currentTrack.value === track) duration.value = d
     }
-    track.gain = gainFor(res.data && res.data.loudness_db)
-    if (currentTrack.value === track) {
-      trackGain.value = track.gain
-      applyVolume()
-    }
+    noteLoudness(track, res.data && res.data.loudness_db)
   } catch {
     // ignore: duration stays 0 (live/unknown) and the volume stays untouched
+  }
+}
+
+function noteLoudness(track, db) {
+  if (typeof db === 'number' && Number.isFinite(db)) {
+    track.loudness = db
+    rememberLoudness(videoIdOf(track), db)
+  } else if (track.loudness === undefined) {
+    track.loudness = null // asked, and there is none
+  }
+  track.gain = gainOfTrack(track)
+  if (currentTrack.value === track) {
+    trackGain.value = track.gain
+    applyVolume()
   }
 }
 
@@ -867,17 +1133,20 @@ async function ensureStreamDuration(track) {
 // streamed songs down and left the saved ones loud: the opposite of the point.
 // Offline this fails quietly and the song plays at its own level.
 async function ensureLocalGain(track) {
-  if (!track || track.type !== 'local' || !track.video_id || track.gain !== undefined) return
+  if (!track || track.type !== 'local' || !track.video_id || loudnessOf(track) !== undefined) return
   try {
     const res = await API.getStreamInfo(track.video_id)
-    track.gain = gainFor(res.data && res.data.loudness_db)
-    if (currentTrack.value === track) {
-      trackGain.value = track.gain
-      applyVolume()
-    }
+    noteLoudness(track, res.data && res.data.loudness_db)
   } catch {
     // unity gain
   }
+}
+
+// Resolves once a song's loudness is known, or after *ms* regardless: a song
+// is not held back for long by a slow network.
+function loudnessReady(track, pending, ms) {
+  if (loudnessOf(track) !== undefined || !pending) return Promise.resolve()
+  return Promise.race([pending.catch(() => {}), new Promise((r) => setTimeout(r, ms))])
 }
 
 // Warm the next stream's cache file (and lyrics) so advancing the queue is
@@ -891,7 +1160,16 @@ function prefetchNext() {
     if (!nxt || nxt === currentTrack.value) return
     if (nxt.type === 'stream' && nxt.video_id) {
       // prefetch=1 → server transcodes the next track to cache in background.
-      API.getStreamInfo(nxt.video_id, 1).catch(() => {})
+      // Its loudness comes with it, so it starts at the right level.
+      API.getStreamInfo(nxt.video_id, 1)
+        .then((res) => {
+          const data = (res && res.data) || {}
+          if (data.duration > 0 && !(nxt.duration > 0)) nxt.duration = data.duration
+          noteLoudness(nxt, data.loudness_db)
+        })
+        .catch(() => {})
+    } else if (nxt.type === 'local') {
+      ensureLocalGain(nxt)
     }
     prefetchLyrics(nxt)
   }, 500)
@@ -951,8 +1229,30 @@ function syncMediaSession() {
     navigator.mediaSession.setActionHandler('seekto', (d) => {
       if (d.seekTime != null) seek(d.seekTime)
     })
+    navigator.mediaSession.setActionHandler('seekbackward', (d) => seek(elementTime() - ((d && d.seekOffset) || 10)))
+    navigator.mediaSession.setActionHandler('seekforward', (d) => seek(elementTime() + ((d && d.seekOffset) || 10)))
+    navigator.mediaSession.setActionHandler('stop', () => pause())
   } catch {
     // MediaSession not fully supported: ignore.
+  }
+  syncPositionState()
+}
+
+// Where the song is and how long it is, for the timeline in Windows' media
+// flyout. It had none: the flyout showed the title with no progress at all.
+function syncPositionState() {
+  try {
+    const d = duration.value
+    if (typeof navigator === 'undefined' || !navigator.mediaSession) return
+    if (typeof navigator.mediaSession.setPositionState !== 'function') return
+    if (!(d > 0) || !Number.isFinite(d)) return
+    navigator.mediaSession.setPositionState({
+      duration: d,
+      playbackRate: (audio && audio.playbackRate) || 1,
+      position: Math.max(0, Math.min(d, elementTime())),
+    })
+  } catch {
+    // a position the browser will not take: the flyout just has no timeline
   }
 }
 
@@ -1177,6 +1477,24 @@ function moveInQueue(from, to) {
   playlist.value = list
 }
 
+/**
+ * Move a song in "Up next" (dragged in the queue). `from` and `to` are places
+ * in the order the songs will play, which under shuffle is not the list's.
+ */
+function moveUpcoming(from, to) {
+  const up = upcoming.value
+  if (from === to || from < 0 || to < 0 || from >= up.length || to >= up.length) return
+  if (shuffle.value && shuffleOrder.value.length === playlist.value.length) {
+    const order = [...shuffleOrder.value]
+    const base = order.indexOf(currentIndex.value) + 1
+    const [item] = order.splice(base + from, 1)
+    order.splice(base + to, 0, item)
+    shuffleOrder.value = order
+    return
+  }
+  moveInQueue(up[from], up[to])
+}
+
 // Media keys can reach us twice (OS media session + keydown while focused).
 // Collapse identical commands that land within a few hundred milliseconds.
 let _lastMedia = { cmd: '', at: 0 }
@@ -1194,12 +1512,31 @@ function mediaCommand(cmd) {
 // *autoplay* false loads the track and leaves it paused, for a change of
 // track the listener did not ask to hear (removing the playing one while
 // paused).
-function playAt(index, { autoplay = true } = {}) {
+function playAt(index, { autoplay = true, fade = null } = {}) {
   if (index < 0 || index >= playlist.value.length) return
-  const a = ensureAudio()
+  ensureAudio()
+  cancelTransition()
+  const track = playlist.value[index]
+  // With the engine, the next song goes on the other deck: the one that was
+  // playing fades out by itself (briefly when picked by hand, over the
+  // crossfade when it ran out), so a change never cuts or clicks.
+  let preloaded = false
+  if (engine && deck) {
+    const incoming = otherDeck()
+    if (incoming) {
+      const outgoing = deck
+      const playing = !!(outgoing.el.src && !outgoing.el.paused)
+      retire(outgoing, fade != null ? fade : playing ? MANUAL_FADE : 0)
+      preloaded = incoming.preloaded === track && !!incoming.el.src
+      incoming.preloaded = null
+      deck = incoming
+      audio = incoming.el
+      deck.setFade(fade != null && fade > GAPLESS_OVERLAP ? 0 : 1)
+    }
+  }
+  const a = audio
   currentIndex.value = index
   if (shuffle.value) ensureShuffleOrder()
-  const track = playlist.value[index]
   // Bump the generation token so any in-flight async work (duration/lyrics
   // fetches, the previous stream's media events) from the prior track is
   // ignored: this prevents "wrong audio / wrong metadata" races when the
@@ -1219,8 +1556,10 @@ function playAt(index, { autoplay = true } = {}) {
   } catch {
     // ignore
   }
-  a.src = track.url
-  a.currentTime = 0
+  if (!preloaded) {
+    a.src = track.url
+    a.currentTime = 0
+  }
   // Re-apply playback rate: browsers reset it to 1.0 on src change.
   try {
     a.playbackRate = playbackRate.value
@@ -1234,7 +1573,30 @@ function playAt(index, { autoplay = true } = {}) {
   lyricsLines.value = []
   lyricsPlain.value = null
   activeLyricIndex.value = -1
-  if (autoplay) a.play().catch(() => {})
+  // The song's level before its first note (see loudnessCache).
+  trackGain.value = gainOfTrack(track)
+  track.gain = trackGain.value
+  applyVolume(true)
+  const info = track.type === 'stream' ? ensureStreamDuration(track) : ensureLocalGain(track)
+  if (autoplay) {
+    const gen = playGen
+    const d = deck
+    const begin = () => {
+      if (gen !== playGen) return
+      trackGain.value = gainOfTrack(track)
+      applyVolume(true)
+      if (engine) engine.resume()
+      a.play().catch(() => {})
+      if (d && fade != null && fade > GAPLESS_OVERLAP) d.fadeTo(1, fade)
+    }
+    // Waiting on the measurement only when it changes something: levelling
+    // on, a song YouTube measures, and nothing known about it yet.
+    if (normalizeLoudness.value && videoIdOf(track) && loudnessOf(track) === undefined) {
+      loudnessReady(track, info, 700).then(begin)
+    } else {
+      begin()
+    }
+  }
   loadLyricsForCurrent()
   syncMediaSession()
   rememberPlayed(track)
@@ -1253,18 +1615,6 @@ function playAt(index, { autoplay = true } = {}) {
     _ui.openPanel('lyrics')
   }
   _lyricsAutoOpened = true
-  // A new track starts at unity gain. Carrying the previous track's
-  // attenuation over would make the next one quiet for no reason; the real
-  // value lands a moment later, before the first chorus.
-  trackGain.value = typeof track.gain === 'number' ? track.gain : 1
-  applyVolume()
-  // For streams, the transcoded body has no length header: fetch the real
-  // duration so the progress bar + end time work.
-  if (track.type === 'stream') {
-    ensureStreamDuration(track)
-  } else {
-    ensureLocalGain(track)
-  }
   // Warm the next track (stream cache + lyrics) regardless of type.
   prefetchNext()
 }
@@ -1281,11 +1631,16 @@ function play() {
   if (!a.src) {
     a.src = playlist.value[currentIndex.value].url
   }
+  // Playing again while the sleep timer fades out means "not yet".
+  if (sleepFading) cancelSleep()
+  if (engine) engine.resume()
   a.play().catch(() => {})
 }
 
 function pause() {
   if (audio) audio.pause()
+  cancelTransition()
+  silenceRetiring()
 }
 
 function toggle() {
@@ -1324,6 +1679,9 @@ function seek(seconds) {
   }
   currentTime.value = clamped
   frameTime.value = clamped
+  // A change near the end was planned from the old position.
+  cancelTransition()
+  syncPositionState()
 }
 
 function seekRatio(ratio) {
@@ -1374,13 +1732,71 @@ function setVolume(v) {
   }
   if (clamped > 0 && isMuted.value) {
     isMuted.value = false
-    if (audio) audio.muted = false
+    if (audio && !engine) audio.muted = false
+    applyVolume()
   }
 }
 
 function toggleMute() {
   isMuted.value = !isMuted.value
-  if (audio) audio.muted = isMuted.value
+  if (engine) applyVolume()
+  else if (audio) audio.muted = isMuted.value
+}
+
+// --- Sleep timer ---
+//
+// After a time, or at the end of this song. On a time, the last ten seconds
+// fade out rather than cut, the way someone turning it down would.
+const sleepMode = ref('off') // off | time | track
+const sleepEndsAt = ref(0)
+const SLEEP_FADE_S = 10
+let sleepTimer = 0
+let sleepFading = false
+
+function setSleepTimer(minutes) {
+  cancelSleep()
+  const ms = Math.max(1, Number(minutes) || 0) * 60000
+  sleepMode.value = 'time'
+  sleepEndsAt.value = Date.now() + ms
+  sleepTimer = setTimeout(sleepFadeOut, Math.max(0, ms - SLEEP_FADE_S * 1000))
+}
+
+function setSleepAfterTrack() {
+  cancelSleep()
+  sleepMode.value = 'track'
+  cancelTransition()
+}
+
+function sleepFadeOut() {
+  if (!isPlaying.value) {
+    cancelSleep()
+    return
+  }
+  sleepFading = true
+  if (engine) engine.rampVolume(0, SLEEP_FADE_S)
+  else if (audio) {
+    const from = audio.volume
+    const steps = 20
+    for (let k = 1; k <= steps; k++) {
+      setTimeout(() => {
+        if (sleepFading && audio) audio.volume = from * (1 - k / steps)
+      }, (SLEEP_FADE_S * 1000 * k) / steps)
+    }
+  }
+  sleepTimer = setTimeout(() => {
+    pause()
+    cancelSleep()
+  }, SLEEP_FADE_S * 1000)
+}
+
+function cancelSleep() {
+  clearTimeout(sleepTimer)
+  sleepTimer = 0
+  const wasFading = sleepFading
+  sleepFading = false
+  sleepMode.value = 'off'
+  sleepEndsAt.value = 0
+  if (wasFading) applyVolume()
 }
 
 // Under shuffle the shuffled order ends the way the list does. It used to
@@ -1510,8 +1926,10 @@ function next() {
 }
 
 function prev() {
-  const a = ensureAudio()
-  if (a.currentTime > 3) {
+  ensureAudio()
+  // Where the song really is: on the fallback stream the element counts from
+  // where that stream started, not from the top of the song.
+  if (elementTime() > 3) {
     seek(0)
     return
   }
@@ -1521,6 +1939,12 @@ function prev() {
 }
 
 function onEnded() {
+  // "Stop after this song": it has ended, so stop here.
+  if (sleepMode.value === 'track') {
+    cancelSleep()
+    isPlaying.value = false
+    return
+  }
   if (repeatMode.value === 'one') {
     seek(0)
     if (audio) audio.play().catch(() => {})
@@ -1785,6 +2209,7 @@ export function usePlayer() {
     removeFromQueue,
     clearUpcoming,
     moveInQueue,
+    moveUpcoming,
     mediaCommand,
     playAt,
     play,
@@ -1806,6 +2231,22 @@ export function usePlayer() {
     normalizeLoudness,
     setNormalizeLoudness,
     startRadio,
+    // the sound engine
+    hasEngine: () => !!(ensureAudio() && engine),
+    crossfade,
+    setCrossfade,
+    gapless,
+    setGapless,
+    eq,
+    setEqEnabled,
+    setEqPreset,
+    setEqBand,
+    // sleep timer
+    sleepMode,
+    sleepEndsAt,
+    setSleepTimer,
+    setSleepAfterTrack,
+    cancelSleep,
     // sync-editor extras
     playbackRate,
     setPlaybackRate,

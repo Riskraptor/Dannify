@@ -98,6 +98,13 @@ namespace Dannify.Setup.Core
             if (appPath == null || appPath.IndexOf(env.Root, StringComparison.OrdinalIgnoreCase) >= 0)
                 TryDelete(env.AppPathsKey);
 
+            // Started with Windows (a setting in the app): only while it still
+            // starts this copy, so a removed app does not leave a dead entry
+            // in the Startup list.
+            string run = ReadValue(env.RunKey, env.RunValueName);
+            if (run != null && run.IndexOf(env.Root, StringComparison.OrdinalIgnoreCase) >= 0)
+                TryDeleteValue(env.RunKey, env.RunValueName);
+
             Notify(env);
         }
 
@@ -134,6 +141,18 @@ namespace Dannify.Setup.Core
             catch
             {
                 return (null, null);
+            }
+        }
+
+        private static string ReadValue(string path, string name)
+        {
+            try
+            {
+                using (var k = Registry.CurrentUser.OpenSubKey(path)) return k?.GetValue(name) as string;
+            }
+            catch
+            {
+                return null;
             }
         }
 

@@ -21,6 +21,9 @@ function open(kind, opts) {
         cancelText: opts.cancelText || '',
         danger: !!opts.danger,
         icon: opts.icon || null,
+        label: opts.label || '',
+        value: opts.value || '',
+        maxLength: opts.maxLength || 120,
         resolve,
       },
     ]
@@ -34,6 +37,17 @@ export function confirmDialog(opts = {}) {
 
 export function alertDialog(opts = {}) {
   return open('alert', opts)
+}
+
+/**
+ * Ask for a line of text (a playlist's name). Resolves to what was typed,
+ * trimmed, or null when cancelled. An empty answer counts as cancelled.
+ */
+export async function promptDialog(opts = {}) {
+  const value = await open('prompt', opts)
+  if (typeof value !== 'string') return null
+  const text = value.trim()
+  return text || null
 }
 
 export function settleDialog(value) {

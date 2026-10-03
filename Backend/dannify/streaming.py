@@ -604,9 +604,12 @@ def _container_for(acodec: str, ext: str) -> tuple[str, list[str]]:
 
     Fragmented MP4/WebM looked faster on paper but browsers refuse to play a
     length-less, non-seekable fragmented stream in ``<audio>``, which is what
-    broke playback. A light, fast LAME encode (``-q:a 5``) keeps CPU low so the
-    box still serves many concurrent streams, and MP3 plays on phones, TVs,
-    laptops and every browser.
+    broke playback. MP3 plays on phones, TVs, laptops and every browser.
+
+    ``-q:a 2`` (about 190 kbps): this is the fallback for a song that could
+    not be streamed as it is, and it used to be ``-q:a 5``, about 130 kbps,
+    a quality drop anyone with good headphones could hear. One listener's
+    encode is nothing for a desktop to keep up with.
     """
 
     return (
@@ -615,7 +618,7 @@ def _container_for(acodec: str, ext: str) -> tuple[str, list[str]]:
             '-c:a',
             'libmp3lame',
             '-q:a',
-            '5',  # VBR ~130kbps, fast encode (much lighter than CBR 160)
+            '2',  # VBR ~190 kbps
             '-write_xing',
             '0',  # progressive: emit frames immediately, no seek header
             '-f',

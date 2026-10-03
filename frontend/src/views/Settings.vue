@@ -234,6 +234,35 @@
             @change="setTray({ closeToTray: $event.target.checked })"
           />
         </label>
+        <label v-if="desktop.state.autostart && desktop.state.autostart.available" class="row">
+          <Icon icon="ph:power" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('settings.autostart') }}</p>
+            <p class="row-hint">{{ t('settings.autostartHint') }}</p>
+          </div>
+          <input
+            type="checkbox"
+            class="switch"
+            :checked="desktop.state.autostart.on"
+            @change="desktop.setAutostart($event.target.checked)"
+          />
+        </label>
+        <label class="row">
+          <Icon icon="ph:keyboard" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('settings.globalHotkeys') }}</p>
+            <p class="row-hint">{{ t('settings.globalHotkeysHint') }}</p>
+            <p v-if="desktop.state.globalHotkeys && desktop.state.hotkeysTaken.length" class="row-hint text-danger">
+              {{ t('settings.hotkeysTaken', { keys: desktop.state.hotkeysTaken.join(', ') }) }}
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            class="switch"
+            :checked="desktop.state.globalHotkeys"
+            @change="desktop.setGlobalHotkeys($event.target.checked)"
+          />
+        </label>
       </section>
 
       <!-- Playback -->
@@ -273,6 +302,100 @@
             @change="player.setNormalizeLoudness($event.target.checked)"
           />
         </label>
+        <template v-if="engineOn">
+          <div class="row">
+            <Icon icon="ph:intersect" class="row-icon" />
+            <div class="row-text">
+              <p class="row-label">{{ t('settings.crossfade') }}</p>
+              <p class="row-hint">{{ t('settings.crossfadeHint') }}</p>
+            </div>
+            <div class="xf">
+              <RangeSlider
+                class="xf-slider"
+                :value="player.crossfade.value / 12"
+                :step="1 / 12"
+                :label="t('settings.crossfade')"
+                :tooltip="(r) => crossfadeLabel(Math.round(r * 12))"
+                @input="(v) => player.setCrossfade(Math.round(v * 12))"
+              />
+              <span class="xf-value">{{ crossfadeLabel(player.crossfade.value) }}</span>
+            </div>
+          </div>
+          <label class="row" :class="{ 'is-disabled': player.crossfade.value > 0 }">
+            <Icon icon="ph:infinity" class="row-icon" />
+            <div class="row-text">
+              <p class="row-label">{{ t('settings.gapless') }}</p>
+              <p class="row-hint">
+                {{ player.crossfade.value > 0 ? t('settings.gaplessWithCrossfade') : t('settings.gaplessHint') }}
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              :disabled="player.crossfade.value > 0"
+              :checked="player.gapless.value || player.crossfade.value > 0"
+              @change="player.setGapless($event.target.checked)"
+            />
+          </label>
+          <label class="row">
+            <Icon icon="ph:sliders-horizontal" class="row-icon" />
+            <div class="row-text">
+              <p class="row-label">{{ t('settings.equalizer') }}</p>
+              <p class="row-hint">{{ t('settings.equalizerHint') }}</p>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              :checked="player.eq.value.on"
+              @change="player.setEqEnabled($event.target.checked)"
+            />
+          </label>
+          <div v-if="player.eq.value.on" class="row eq">
+            <div class="eq-presets" role="radiogroup" :aria-label="t('settings.equalizer')">
+              <button
+                v-for="name in eqPresetNames"
+                :key="name"
+                class="eq-chip"
+                role="radio"
+                :aria-checked="player.eq.value.preset === name"
+                :class="{ 'is-active': player.eq.value.preset === name }"
+                @click="player.setEqPreset(name)"
+              >
+                {{ t(`settings.eqPreset.${name}`) }}
+              </button>
+              <span v-if="player.eq.value.preset === 'custom'" class="eq-chip is-active">
+                {{ t('settings.eqPreset.custom') }}
+              </span>
+            </div>
+            <div class="eq-bands">
+              <label v-for="(hz, i) in EQ_BANDS" :key="hz" class="eq-band">
+                <span class="eq-db">{{ formatDb(player.eq.value.gains[i]) }}</span>
+                <input
+                  type="range"
+                  class="eq-slider"
+                  min="-12"
+                  max="12"
+                  step="0.5"
+                  :value="player.eq.value.gains[i]"
+                  :aria-label="`${formatHz(hz)} ${formatDb(player.eq.value.gains[i])}`"
+                  @input="player.setEqBand(i, $event.target.value)"
+                />
+                <span class="eq-hz">{{ formatHz(hz) }}</span>
+              </label>
+            </div>
+          </div>
+        </template>
+        <div v-if="desktop.isDesktop" class="row">
+          <Icon icon="ph:headphones" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('settings.outputDevice') }}</p>
+            <p class="row-hint">{{ t('settings.outputDeviceHint') }}</p>
+          </div>
+          <button class="btn" @click="desktop.openSoundSettings()">
+            <Icon icon="ph:arrow-square-out" class="h-4 w-4" />
+            {{ t('settings.openSoundSettings') }}
+          </button>
+        </div>
       </section>
 
       <!-- Library -->
@@ -529,6 +652,18 @@
             {{ t('settings.showShortcuts') }}
           </button>
         </div>
+        <div class="row">
+          <Icon icon="ph:bug" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('problems.title') }}</p>
+            <p class="row-hint">{{ t('problems.hint') }}</p>
+          </div>
+          <button class="btn" :disabled="reporting" @click="makeReport">
+            <span v-if="reporting" class="spinner h-4 w-4" />
+            <Icon v-else icon="ph:file-zip" class="h-4 w-4" />
+            {{ t('problems.save') }}
+          </button>
+        </div>
       </section>
       </div>
     </div>
@@ -545,12 +680,15 @@ import { accentFromArt, setAccentFromArt } from '/src/model/artAccent'
 import { useFonts } from '/src/model/fonts'
 import { useUi } from '/src/model/ui'
 import { usePlayer } from '/src/model/player'
+import { EQ_BANDS, EQ_PRESETS } from '/src/model/audioEngine'
+import RangeSlider from '/src/components/ui/RangeSlider.vue'
 import { useAccount } from '/src/model/account'
 import { useUpdates } from '/src/model/updates'
 import { useConnectivity } from '/src/model/connectivity'
 import { desktop } from '/src/desktop/bridge'
 import { ZOOM_STEPS, currentZoom, setZoom } from '/src/desktop/shortcuts'
 import { toast } from '/src/model/toast'
+import { saveProblemReport } from '/src/model/problems'
 import { useI18n } from '/src/i18n'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
 
@@ -566,6 +704,17 @@ const connectivity = useConnectivity()
 const s = computed(() => sm.settings.value)
 
 const version = appVersion
+
+// "Report a problem": the logs in one file, shown in Explorer.
+const reporting = ref(false)
+async function makeReport() {
+  reporting.value = true
+  try {
+    await saveProblemReport()
+  } finally {
+    reporting.value = false
+  }
+}
 
 // One long scroll of nine headings was hard to search by eye, so the groups
 // are panes now and the rail says what is where. The choice is remembered:
@@ -794,6 +943,20 @@ async function changeFolder() {
 // Tray behaviour lives in the native shell's config.
 const tray = reactive({ closeToTray: false })
 
+// --- The sound engine's settings (see audioEngine.js) ---
+const engineOn = player.hasEngine()
+const eqPresetNames = Object.keys(EQ_PRESETS)
+function crossfadeLabel(seconds) {
+  return seconds > 0 ? t('settings.seconds', { count: seconds }) : t('settings.crossfadeOff')
+}
+function formatDb(db) {
+  const v = Number(db) || 0
+  return `${v > 0 ? '+' : ''}${v % 1 ? v.toFixed(1) : v} dB`
+}
+function formatHz(hz) {
+  return hz >= 1000 ? `${hz / 1000}k` : String(hz)
+}
+
 onMounted(async () => {
   API.getSupportConfig()
     .then((res) => Object.assign(support, res.data || {}))
@@ -811,6 +974,92 @@ async function setTray(patch) {
 </script>
 
 <style scoped>
+/* Crossfade: a short slider with its value beside it. */
+.xf {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 220px;
+  max-width: 100%;
+}
+.xf-slider {
+  flex: 1;
+}
+.xf-value {
+  min-width: 34px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: rgb(var(--c-fg) / 0.7);
+}
+/* Equalizer: presets as chips, then ten upright sliders. */
+.row.eq {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+/* The rule that sends a row's control to the right would bunch the bands
+   up against the edge: here they span the card. */
+.row.row.eq > .eq-presets,
+.row.row.eq > .eq-bands {
+  margin-left: 0;
+  flex-shrink: 1;
+}
+.eq-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.eq-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgb(var(--c-tint) / 0.07);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgb(var(--c-fg) / 0.75);
+}
+.eq-chip:hover {
+  background: rgb(var(--c-tint) / 0.12);
+  color: rgb(var(--c-fg));
+}
+.eq-chip.is-active {
+  background: rgb(var(--c-accent));
+  color: rgb(var(--c-on-accent, 0 0 0));
+}
+.eq-bands {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 4px;
+}
+.eq-band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.eq-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 22px;
+  height: 120px;
+  accent-color: rgb(var(--c-accent));
+  cursor: pointer;
+}
+.eq-db {
+  font-size: 10.5px;
+  color: rgb(var(--c-fg) / 0.7);
+  white-space: nowrap;
+}
+.eq-hz {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(var(--c-fg) / 0.55);
+}
+
 .set-search {
   position: relative;
 }

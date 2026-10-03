@@ -11,6 +11,7 @@ import './model/theme'
 import { installShortcuts } from './desktop/shortcuts'
 import { installDesktopIntegration } from './desktop/integration'
 import { startArtAccent } from './model/artAccent'
+import { installErrorReporting } from './model/problems'
 
 import './index.css'
 
@@ -18,6 +19,7 @@ import './index.css'
 addCollection(icons)
 
 const app = createApp(App)
+installErrorReporting(app)
 app.use(router)
 installShortcuts()
 installDesktopIntegration()

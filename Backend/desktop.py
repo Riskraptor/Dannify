@@ -177,6 +177,77 @@ def logger_print(*args) -> None:  # noqa: D401, ANN001
         pass
 
 
+def _reveal_in_explorer(target: Path) -> bool:
+    """Open Explorer on the folder of ``target`` with it selected."""
+
+    initialized = False
+    try:
+        # apartment-threaded, per worker thread; balanced below, since the
+        # bridge reuses its threads for other calls
+        initialized = ole32.CoInitializeEx(None, 0x2) in (0, 1)
+        pidl = ctypes.c_void_p()
+        if shell32.SHParseDisplayName(str(target), None, ctypes.byref(pidl), 0, None) == 0:
+            shell32.SHOpenFolderAndSelectItems(pidl, 0, None, 0)
+            ole32.CoTaskMemFree(pidl)
+            return True
+    except Exception:
+        pass
+    finally:
+        if initialized:
+            try:
+                ole32.CoUninitialize()
+            except Exception:
+                pass
+    try:
+        import subprocess
+
+        subprocess.Popen(f'explorer /select,"{target}"')
+        return True
+    except Exception:
+        return False
+
+
+def _install_crash_hooks() -> None:
+    """Get anything that escapes into the log, and a trace of a hard crash.
+
+    A packaged app has no console: an exception nobody caught in a worker
+    thread, or Python itself going down, used to leave nothing behind at all.
+    """
+
+    import traceback
+
+    global _crash_file
+    try:
+        import faulthandler
+
+        _crash_file = open(_DATA_DIR / 'crash.log', 'a', encoding='utf-8')  # noqa: SIM115
+        faulthandler.enable(_crash_file)
+    except Exception:
+        _crash_file = None
+
+    before = sys.excepthook
+
+    def on_uncaught(kind, exc, tb):
+        if not issubclass(kind, KeyboardInterrupt):
+            logger_print('uncaught: ' + ''.join(traceback.format_exception(kind, exc, tb)))
+        before(kind, exc, tb)
+
+    def on_thread(args):
+        if args.exc_type is SystemExit:
+            return
+        name = args.thread.name if args.thread else '?'
+        logger_print(
+            f'uncaught in thread {name}: '
+            + ''.join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+        )
+
+    sys.excepthook = on_uncaught
+    threading.excepthook = on_thread
+
+
+_crash_file = None
+
+
 def _fatal() -> None:
     """Last resort when the app cannot start.
 
@@ -293,6 +364,8 @@ if _WIN:
         return fn
 
     _proto(user32.PostMessageW, wintypes.BOOL, HWND, UINT, WPARAM, LPARAM)
+    _proto(user32.RegisterHotKey, wintypes.BOOL, HWND, ctypes.c_int, UINT, UINT)
+    _proto(user32.UnregisterHotKey, wintypes.BOOL, HWND, ctypes.c_int)
     _proto(user32.IsZoomed, wintypes.BOOL, HWND)
     _proto(user32.IsIconic, wintypes.BOOL, HWND)
     _proto(user32.IsWindowVisible, wintypes.BOOL, HWND)
@@ -347,6 +420,20 @@ if _WIN:
         _HAS_DPI_API = False
 
 # Window messages / constants
+WM_HOTKEY = 0x0312
+MOD_ALT = 0x0001
+MOD_CONTROL = 0x0002
+MOD_NOREPEAT = 0x4000
+# System-wide shortcuts (a setting, off unless turned on): Ctrl+Alt with
+# P, Right and Left. P, not Space: Ctrl+Alt+Space is held by other programs
+# often enough (it was on the PC this was built on). Off by default because some graphics drivers use
+# Ctrl+Alt+arrows to turn the screen, and an app should not take keys away
+# from the rest of the PC without being asked.
+_HOTKEYS = {
+    1: (0x50, 'toggle', 'Ctrl+Alt+P'),
+    2: (0x27, 'next', 'Ctrl+Alt+Right'),
+    3: (0x25, 'prev', 'Ctrl+Alt+Left'),
+}
 WM_NCCALCSIZE = 0x0083
 WM_NCDESTROY = 0x0082
 WM_COMMAND = 0x0111
@@ -481,8 +568,10 @@ class _CustomFrame:
         on_taskbar_created=None,
         on_maximize=None,
         on_max_hover=None,
+        on_hotkey=None,
     ):
         self.hwnd = hwnd
+        self._on_hotkey = on_hotkey
         self.installed = False
         self._on_command = on_command
         self._on_taskbar_created = on_taskbar_created
@@ -531,6 +620,10 @@ class _CustomFrame:
                     if msg == WM_COMMAND and (wparam >> 16) & 0xFFFF == THBN_CLICKED:
                         if self._on_command:
                             self._on_command(wparam & 0xFFFF)
+                        return 0
+                    if msg == WM_HOTKEY:
+                        if self._on_hotkey:
+                            self._on_hotkey(int(wparam))
                         return 0
                     if self._taskbar_msg and msg == self._taskbar_msg:
                         if self._on_taskbar_created:
@@ -1292,6 +1385,9 @@ class DesktopApi:
             _write_prefs({'minimize_to_tray': False})
         # The "still running here" notice has been seen before, on any launch.
         self._tray_hint_shown = bool(prefs.get('tray_hint_shown'))
+        self._global_hotkeys = bool(prefs.get('global_hotkeys', False))
+        # Shortcuts another program already holds: said in Settings.
+        self._hotkeys_taken: list[str] = []
         self._hidden = False
         # When the browser engine's renderer last died, so a reload loop
         # cannot get going.
@@ -1329,6 +1425,7 @@ class DesktopApi:
             on_taskbar_created=self._on_taskbar_created,
             on_maximize=self.win_toggle_maximize,
             on_max_hover=self._on_max_hover,
+            on_hotkey=self._on_hotkey,
         )
         if self._native_frame_pref:
             # Keep the Windows caption; the subclass is still needed for the
@@ -1336,6 +1433,8 @@ class DesktopApi:
             self._frame._nccalcsize = lambda hwnd, msg, w, l: self._frame._comctl.DefSubclassProc(hwnd, msg, w, l)  # noqa: E731
         ok = self._frame.install()
         self._native_frame = self._native_frame_pref or not ok
+        if self._global_hotkeys:
+            self._register_hotkeys()
         self._guard_renderer()
 
     def _ui(self, fn, wait: bool = False):  # noqa: ANN001
@@ -1390,6 +1489,61 @@ class DesktopApi:
             args=(f"window.__dannifyMedia && window.__dannifyMedia('{cmd}')",),
             daemon=True,
         ).start()
+
+    # --- system-wide shortcuts ------------------------------------------------
+    def _register_hotkeys(self) -> None:
+        """UI thread (the window's own): RegisterHotKey belongs to it."""
+
+        self._hotkeys_taken = []
+        if not (_WIN and self._hwnd):
+            return
+        for hid, (vk, _cmd, label) in _HOTKEYS.items():
+            if not user32.RegisterHotKey(self._hwnd, hid, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, vk):
+                self._hotkeys_taken.append(label)
+        if self._hotkeys_taken:
+            logger.info('Shortcuts already taken by another program: {}', ', '.join(self._hotkeys_taken))
+
+    def _unregister_hotkeys(self) -> None:
+        if not (_WIN and self._hwnd):
+            return
+        for hid in _HOTKEYS:
+            user32.UnregisterHotKey(self._hwnd, hid)
+        self._hotkeys_taken = []
+
+    def _on_hotkey(self, hotkey_id: int) -> None:
+        entry = _HOTKEYS.get(hotkey_id)
+        if entry:
+            self._media(entry[1])
+
+    def app_set_global_hotkeys(self, on: bool) -> dict:
+        self._global_hotkeys = bool(on)
+        _write_prefs({'global_hotkeys': self._global_hotkeys})
+        if self._form is not None:
+            self._ui(self._register_hotkeys if self._global_hotkeys else self._unregister_hotkeys, wait=True)
+        self._push_state()
+        return self.win_state()
+
+    # --- start with Windows ----------------------------------------------------
+    def app_set_autostart(self, on: bool) -> dict:
+        _set_autostart(bool(on))
+        self._push_state()
+        return self.win_state()
+
+    def shell_open_sound_settings(self) -> bool:
+        """Windows' own page for which speakers each app plays through.
+
+        The window cannot offer a list of outputs itself: the browser engine
+        names them only for a page allowed to use the microphone, and a music
+        player has no business asking for that.
+        """
+
+        if not _WIN:
+            return False
+        try:
+            os.startfile('ms-settings:apps-volume')  # noqa: S606  (a fixed address)
+            return True
+        except OSError:
+            return False
 
     def _on_thumb_button(self, button_id: int) -> None:
         cmd = {BTN_PREV: 'prev', BTN_PLAY: 'toggle', BTN_NEXT: 'next'}.get(button_id)
@@ -1515,6 +1669,9 @@ class DesktopApi:
             'nativeFrame': self._native_frame,
             'nativeFramePref': self._native_frame_pref,
             'closeToTray': self._close_to_tray,
+            'globalHotkeys': self._global_hotkeys,
+            'hotkeysTaken': list(self._hotkeys_taken),
+            'autostart': _autostart_state(),
         }
 
     def win_minimize(self) -> None:
@@ -2039,31 +2196,25 @@ class DesktopApi:
         target = _library_path(rel_path)
         if target is None or not target.exists():
             return False
-        initialized = False
-        try:
-            # apartment-threaded, per worker thread; balanced below, since the
-            # bridge reuses its threads for other calls
-            initialized = ole32.CoInitializeEx(None, 0x2) in (0, 1)
-            pidl = ctypes.c_void_p()
-            if shell32.SHParseDisplayName(str(target), None, ctypes.byref(pidl), 0, None) == 0:
-                shell32.SHOpenFolderAndSelectItems(pidl, 0, None, 0)
-                ole32.CoTaskMemFree(pidl)
-                return True
-        except Exception:
-            pass
-        finally:
-            if initialized:
-                try:
-                    ole32.CoUninitialize()
-                except Exception:
-                    pass
-        try:
-            import subprocess
+        return _reveal_in_explorer(target)
 
-            subprocess.Popen(f'explorer /select,"{target}"')
-            return True
-        except Exception:
+    def shell_reveal_report(self, path: str) -> bool:
+        """Show a problem report the app just saved, selected in Explorer.
+
+        Only a report: a file named like one, in a folder called reports.
+        """
+        try:
+            target = Path(str(path or '')).resolve()
+        except (OSError, ValueError):
             return False
+        if (
+            target.parent.name != 'reports'
+            or not target.name.startswith('Dannify-report-')
+            or target.suffix.lower() != '.zip'
+            or not target.is_file()
+        ):
+            return False
+        return _reveal_in_explorer(target)
 
     def shell_open_library(self) -> bool:
         base = _library_path('')
@@ -2567,6 +2718,64 @@ def _quit_until_gone(api) -> None:  # noqa: ANN001
         logger.opt(exception=True).debug('could not close the window')
 
 
+_RUN_KEY = r'Software\Microsoft\Windows\CurrentVersion\Run'
+
+
+def _autostart_target() -> Optional[Path]:
+    """What Windows should start at sign-in: the installed launcher, or
+    nothing for a copy that is not installed (it would start the wrong thing
+    after an update)."""
+
+    if not (_WIN and _FROZEN):
+        return None
+    try:
+        from dannify import layout
+
+        launcher = layout.launcher()
+    except Exception:
+        return None
+    return launcher if launcher is not None and launcher.is_file() else None
+
+
+def _autostart_name() -> str:
+    return 'Dannify' + os.environ.get('DANNIFY_INSTANCE', '')
+
+
+def _autostart_state() -> dict:
+    target = _autostart_target()
+    if target is None:
+        return {'available': False, 'on': False}
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY) as key:
+            value, _ = winreg.QueryValueEx(key, _autostart_name())
+        on = str(target).lower() in str(value).lower()
+    except OSError:
+        on = False
+    return {'available': True, 'on': on}
+
+
+def _set_autostart(on: bool) -> None:
+    target = _autostart_target()
+    if target is None:
+        return
+    import winreg
+
+    try:
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+            if on:
+                # Minimized: at sign-in it should be there, not in the way.
+                winreg.SetValueEx(key, _autostart_name(), 0, winreg.REG_SZ, f'"{target}" --minimized')
+            else:
+                try:
+                    winreg.DeleteValue(key, _autostart_name())
+                except FileNotFoundError:
+                    pass
+    except OSError:
+        logger.opt(exception=True).warning('could not change starting with Windows')
+
+
 def _signal_quit_request() -> bool:
     """Ask a running copy to exit. True if one was there to ask."""
 
@@ -2810,20 +3019,26 @@ def _start_server(port: int, token: str):
         loop.set_exception_handler(_quiet)
         try:
             loop.run_until_complete(server.serve())
-        except Exception:
-            pass
+        except BaseException:
+            # uvicorn says it could not start (a port taken, a bind refused)
+            # by raising SystemExit. It used to vanish with this thread, and
+            # the window waited out its whole half minute before saying
+            # anything at all.
+            logger.opt(exception=True).error('The server stopped or could not start')
         finally:
+            server.dannify_stopped = True
             try:
                 loop.close()
             except Exception:
                 pass
 
+    server.dannify_stopped = False
     thread = threading.Thread(target=_run, name='dannify-server', daemon=True)
     thread.start()
     return server
 
 
-def _wait_until_up(port: int, timeout: float = 30.0, token: str = '') -> bool:
+def _wait_until_up(port: int, timeout: float = 30.0, token: str = '', server=None) -> bool:
     """Poll until the API answers us.
 
     Carries the session key like any other request. It used to hit an
@@ -2834,6 +3049,9 @@ def _wait_until_up(port: int, timeout: float = 30.0, token: str = '') -> bool:
     url = f'http://127.0.0.1:{port}/api/version'
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        # A server that has stopped is not going to answer: say so now.
+        if server is not None and getattr(server, 'dannify_stopped', False):
+            return False
         try:
             request = urllib.request.Request(url)
             if token:
@@ -3332,6 +3550,7 @@ def main() -> None:
         _signal_quit_request()
         sys.exit(0)
 
+    _install_crash_hooks()
     _claim_app_identity()
     opening = _file_argument()
     if not _acquire_single_instance():
@@ -3411,6 +3630,15 @@ def main() -> None:
         # The whole UI holds a few thousand track objects at most; letting V8
         # grow to the default (a share of system RAM) just delays collection.
         '--js-flags=--max-old-space-size=256',
+        # A music player plays in the background. Chromium slows the timers
+        # of a page it thinks nobody is looking at, and the change to the
+        # next song (crossfade, gapless) is timed by one: minimized or in the
+        # tray, it came late. And sound may start without a click first: it
+        # is the user's own app, not a web page.
+        '--disable-background-timer-throttling',
+        '--disable-renderer-backgrounding',
+        '--disable-backgrounding-occluded-windows',
+        '--autoplay-policy=no-user-gesture-required',
     ]
     # Remote debugging is a development aid and a back door into the running
     # app, so a shipped build ignores the variable entirely.
@@ -3446,6 +3674,8 @@ def main() -> None:
         # size is a setting under Appearance instead.
         zoomable=False,
         maximized=maximized,
+        # Started by Windows at sign-in: there, but out of the way.
+        minimized='--minimized' in sys.argv[1:],
         shadow=False,  # the native frame already provides the DWM shadow
     )
 
@@ -3462,7 +3692,7 @@ def main() -> None:
     def _swap_to_app() -> None:
         # Give the media flyout something to call us other than "Unknown app".
         _schedule_media_identity()
-        if _wait_until_up(port, token=session_key):
+        if _wait_until_up(port, token=session_key, server=server):
             # Edge WebView2 sometimes deadlocks on load_url() called from a
             # background thread; navigating via JS sidesteps it. The query
             # flag tells the frontend it runs inside the desktop shell.

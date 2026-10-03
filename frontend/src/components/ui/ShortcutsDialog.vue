@@ -80,6 +80,7 @@ const groups = computed(() => [
     rows: [
       { label: t('shortcuts.playPause'), keys: ['Space'] },
       { label: t('shortcuts.nextPrev'), keys: ['N', 'P'] },
+      { label: t('shortcuts.nextPrev'), keys: ['Shift', '←/→'] },
       { label: t('shortcuts.seek'), keys: ['←', '→'] },
       { label: t('shortcuts.volume'), keys: ['↑', '↓'] },
       { label: t('shortcuts.mute'), keys: ['M'] },
@@ -89,7 +90,7 @@ const groups = computed(() => [
   {
     title: t('shortcuts.navigation'),
     rows: [
-      { label: t('shortcuts.search'), keys: ['Ctrl', 'K'] },
+      { label: t('shortcuts.search'), keys: ['Ctrl', 'K / F'] },
       { label: t('shortcuts.backForward'), keys: ['Alt', '←/→'] },
       { label: t('shortcuts.settings'), keys: ['Ctrl', ','] },
       { label: t('shortcuts.sidebar'), keys: ['Ctrl', 'B'] },
@@ -117,6 +118,18 @@ const groups = computed(() => [
             { label: t('shortcuts.fullscreen'), keys: ['F11'] },
             { label: t('shortcuts.refresh'), keys: ['F5'] },
             { label: t('shortcuts.help'), keys: ['Ctrl', '/'] },
+          ],
+        },
+      ]
+    : []),
+  // Shortcuts that work in any app, when they are turned on in Settings.
+  ...(desktop.isDesktop && desktop.state.globalHotkeys
+    ? [
+        {
+          title: t('shortcuts.everywhere'),
+          rows: [
+            { label: t('shortcuts.playPause'), keys: ['Ctrl', 'Alt', 'P'] },
+            { label: t('shortcuts.nextPrev'), keys: ['Ctrl', 'Alt', '←/→'] },
           ],
         },
       ]

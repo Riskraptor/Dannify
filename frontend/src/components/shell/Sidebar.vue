@@ -39,6 +39,48 @@
 
     <!-- Your artists: a quick-access list, like a streaming app's library -->
     <div class="sb-scroll">
+      <!-- Playlists made here. Songs dragged out of any list can be dropped
+           on one to add them. -->
+      <div v-if="!rail" class="sb-subrow">
+        <p class="sb-subheading">{{ t('playlists.title') }}</p>
+        <button class="icon-btn h-7 w-7" :title="t('playlists.new')" @click="playlists.createPlaylist()">
+          <Icon icon="ph:plus" class="h-4 w-4" />
+        </button>
+      </div>
+      <button v-else class="sb-artist sb-new" :title="t('playlists.new')" @click="playlists.createPlaylist()">
+        <span class="sb-avatar sb-new-mark"><Icon icon="ph:plus" class="h-4 w-4" /></span>
+      </button>
+      <router-link
+        v-for="p in playlists.recent.value"
+        :key="p.id"
+        :to="{ name: 'Playlist', params: { id: p.id } }"
+        class="sb-artist"
+        :class="{
+          'is-active': route.name === 'Playlist' && route.params.id === p.id,
+          'is-drop': dropOn === p.id,
+        }"
+        :title="rail ? p.name : ''"
+        @contextmenu="onPlaylistMenu($event, p)"
+        @dragenter="onDragOver($event, p)"
+        @dragover="onDragOver($event, p)"
+        @dragleave="onDragLeave($event, p)"
+        @drop="onDrop($event, p)"
+      >
+        <PlaylistArt :covers="p.covers" :size="36" radius="sm" class="sb-plart" />
+        <span v-if="!rail" class="min-w-0 flex-1">
+          <span class="block truncate text-[13px] font-medium">{{ p.name }}</span>
+          <span class="block truncate text-[11px] text-fg/50">
+            {{ t('playlists.songsCount', { count: p.count }) }}
+          </span>
+        </span>
+      </router-link>
+      <p
+        v-if="!rail && playlists.loaded.value && !playlists.list.value.length"
+        class="sb-note"
+      >
+        {{ t('playlists.none') }}
+      </p>
+
       <template v-if="topArtists.length">
         <p v-if="!rail" class="sb-subheading">{{ t('nav.yourArtists') }}</p>
         <router-link
@@ -94,7 +136,7 @@
 </template>
 
 <script setup>
-import { computed, h } from 'vue'
+import { computed, h, ref } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
@@ -106,7 +148,9 @@ import { openContextMenu } from '/src/model/contextMenu'
 import { playRows, shuffleRows, localRow, onArtistPage } from '/src/model/tracks'
 import { useI18n } from '/src/i18n'
 import CoverImage from '/src/components/ui/CoverImage.vue'
+import PlaylistArt from '/src/components/ui/PlaylistArt.vue'
 import { useArtistLinks } from '/src/model/artistLinks'
+import { usePlaylists, entryRow } from '/src/model/playlists'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -147,6 +191,50 @@ function onArtistMenu(e, a) {
       action: () => router.push({ name: 'Artist', params: { name: a.name } }),
     },
   ])
+}
+
+// ----- playlists -------------------------------------------------------------
+const playlists = usePlaylists()
+playlists.ensureLoaded()
+
+async function playlistRows(p) {
+  try {
+    const res = await API.getPlaylist(p.id)
+    return (res.data.tracks || []).map(entryRow)
+  } catch {
+    return []
+  }
+}
+
+function onPlaylistMenu(e, p) {
+  openContextMenu(e, [
+    { label: t('actions.play'), icon: 'ph:play', action: async () => playRows(await playlistRows(p), 0) },
+    { label: t('actions.shuffle'), icon: 'ph:shuffle', action: async () => shuffleRows(await playlistRows(p)) },
+    { divider: true },
+    { label: t('playlists.rename'), icon: 'ph:pencil-simple', action: () => playlists.renamePlaylist(p.id) },
+    { label: t('playlists.delete'), icon: 'ph:trash', danger: true, action: () => playlists.deletePlaylist(p.id) },
+  ])
+}
+
+// Songs dragged from a list onto a playlist here are added to it.
+const dropOn = ref(null)
+function onDragOver(e, p) {
+  if (!playlists.dragging.value) return
+  e.preventDefault()
+  e.dataTransfer.dropEffect = 'copy'
+  dropOn.value = p.id
+}
+function onDragLeave(e, p) {
+  // Leaving for one of its own children is not leaving.
+  if (e.currentTarget.contains(e.relatedTarget)) return
+  if (dropOn.value === p.id) dropOn.value = null
+}
+function onDrop(e, p) {
+  const rows = playlists.dragging.value
+  dropOn.value = null
+  if (!rows || !rows.length) return
+  e.preventDefault()
+  playlists.addRows(p.id, rows)
 }
 
 // Compact nav item (icon + label, tooltip-only in rail mode).
@@ -326,6 +414,33 @@ const SideLink = {
   overflow: hidden;
   border-radius: 999px;
   background: rgb(var(--c-tint) / 0.08);
+}
+.sb-subrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 4px;
+}
+.sb-artist.is-drop {
+  background: rgb(var(--c-accent) / 0.18);
+  box-shadow: inset 0 0 0 1px rgb(var(--c-accent));
+}
+.sb-plart {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+.sb-new {
+  width: 100%;
+}
+.sb-new-mark {
+  color: rgb(var(--c-fg) / 0.7);
+}
+.sb-note {
+  margin: 0 12px 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: rgb(var(--c-fg) / 0.45);
 }
 .sb-empty {
   margin: 12px 4px;

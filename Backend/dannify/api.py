@@ -6,10 +6,8 @@ working without changes:
 
 * ``GET  /api/version``
 * ``GET  /api/songs/search``
-* ``GET  /api/song/url`` and ``GET /api/url`` (alias)
 * ``POST /api/download/url`` (optional JSON body: resolved Spotify row so
   ``track_number`` / ``album_track_total`` survive re-fetch by URL)
-* ``POST /api/playlist/m3u``
 * ``GET  /api/settings``
 * ``POST /api/settings/update``
 * ``WS   /api/ws``
@@ -19,8 +17,10 @@ working without changes:
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 import contextlib
+from collections import deque
 import json
 import re
 import shutil
@@ -48,10 +48,11 @@ from . import lyrics_offsets
 from . import lyrics_publish
 from . import explorer
 from . import artist_links
+from . import playlists as playlists_mod
+from . import report as report_mod
 from . import details as details_mod
 from . import layout, m3u, providers, repair, spotify, streaming, support, updates, vault
 from .downloader import Downloader
-from .monitor import PlaylistMonitorDB, check_playlist
 
 # What a saved song is inside its container. Not a choice any more: every
 # saved song plays in Dannify and nowhere else, so the format inside is ours to
@@ -161,6 +162,50 @@ class ConnectionManager:
             self.disconnect(client_id, ws)
 
 
+class DownloadSlots:
+    """How many songs download at once, with a limit that can change while
+    songs are waiting.
+
+    It was a semaphore, made afresh when the setting changed. Songs already
+    waiting held on to the old one, so turning "Parallel downloads" from 1 to
+    5 in the middle of a long batch changed nothing for that batch.
+    """
+
+    def __init__(self, limit: int) -> None:
+        self.limit = max(1, int(limit))
+        self.busy = 0
+        self._waiters: deque[asyncio.Future] = deque()
+
+    async def __aenter__(self) -> 'DownloadSlots':
+        while self.busy >= self.limit:
+            waiter = asyncio.get_running_loop().create_future()
+            self._waiters.append(waiter)
+            try:
+                await waiter
+            except asyncio.CancelledError:
+                with contextlib.suppress(ValueError):
+                    self._waiters.remove(waiter)
+                raise
+        self.busy += 1
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        self.busy -= 1
+        self._wake()
+
+    def resize(self, limit: int) -> None:
+        self.limit = max(1, int(limit))
+        self._wake()
+
+    def _wake(self) -> None:
+        free = self.limit - self.busy
+        while free > 0 and self._waiters:
+            waiter = self._waiters.popleft()
+            if not waiter.done():
+                waiter.set_result(None)
+                free -= 1
+
+
 class AppState:
     version: str = '0.0.0'
     # Shared secret the desktop shell hands to its own window. When set, any
@@ -172,9 +217,8 @@ class AppState:
     settings: dict[str, Any] = dict(DEFAULT_SETTINGS)
     settings_path: Optional[Path] = None
     loop: Optional[asyncio.AbstractEventLoop] = None
-    monitor_db: Optional[PlaylistMonitorDB] = None
     download_jobs: dict[str, dict[str, Any]] = {}
-    download_semaphore: Optional[asyncio.Semaphore] = None
+    download_semaphore: Optional[DownloadSlots] = None
     download_dir: Optional[Path] = None
     data_dir: Optional[Path] = None
     executor: Any = None
@@ -378,36 +422,6 @@ def check_update() -> Optional[dict[str, Any]]:
 @router.get('/api/songs/search')
 async def search_endpoint(query: str = Query('')) -> list[dict[str, Any]]:
     return await asyncio.to_thread(providers.search_songs, query, 20)
-
-
-@router.get('/api/song/url')
-async def song_url_endpoint(url: str = Query(...)):
-    return await asyncio.to_thread(_resolve_url, url)
-
-
-@router.get('/api/url')
-async def url_endpoint(url: str = Query(...)):
-    return await asyncio.to_thread(_resolve_url, url)
-
-
-def _resolve_url(url: str):
-    parsed = spotify.parse_spotify_url(url)
-    if parsed is None:
-        raise HTTPException(status_code=400, detail='Invalid Spotify URL')
-    kind, sid = parsed
-    try:
-        if kind == 'track':
-            return spotify.track_from_id(sid)
-        if kind == 'album':
-            return spotify.album_tracks_from_id(sid)
-        if kind == 'playlist':
-            return spotify.playlist_tracks_from_id(sid)
-    except Exception as exc:
-        logger.exception('Failed to resolve Spotify URL {}', url)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    raise HTTPException(
-        status_code=400, detail=f'Unsupported entity type: {kind}'
-    )
 
 
 def _merge_client_track_hints(
@@ -824,62 +838,6 @@ def remove_queue_item(song_id: str = Query(...)) -> dict:
     return {'removed': False}
 
 
-@router.post('/api/playlist/m3u')
-async def write_playlist_m3u_endpoint(request: Request) -> dict[str, Any]:
-    """Write an M3U for the playlist after the per-track downloads.
-
-    The frontend POSTs ``{playlist_url, tracks: [{filename, title,
-    artist, duration}, ...]}``. The playlist name is resolved
-    server-side via :func:`spotify.playlist_info_and_tracks` so the
-    existing ``/api/song/url`` shape stays untouched.
-    """
-
-    if state.downloader is None:
-        raise HTTPException(status_code=500, detail='Downloader not ready')
-    try:
-        payload = await request.json()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail='Invalid JSON') from exc
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail='Invalid payload')
-
-    playlist_url = str(payload.get('playlist_url') or '').strip()
-    if not playlist_url:
-        raise HTTPException(status_code=400, detail='Missing playlist_url')
-    parsed = spotify.parse_spotify_url(playlist_url)
-    if parsed is None or parsed[0] != 'playlist':
-        raise HTTPException(
-            status_code=400, detail='Not a Spotify playlist URL'
-        )
-
-    tracks = payload.get('tracks') or []
-    if not isinstance(tracks, list):
-        raise HTTPException(status_code=400, detail='tracks must be a list')
-
-    try:
-        playlist_name, _ = await asyncio.to_thread(
-            spotify.playlist_info_and_tracks, parsed[1]
-        )
-    except Exception as exc:
-        logger.exception('Failed to resolve playlist {}', playlist_url)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-    entries = [t for t in tracks if isinstance(t, dict)]
-    playlist_subdir = m3u.sanitize_playlist_name(playlist_name)
-    organize = bool(state.downloader and state.downloader.organize_by_artist)
-    target, kept = m3u.write_m3u(
-        state.downloader.download_dir,
-        playlist_name,
-        entries,
-        playlist_subdir=None if organize else playlist_subdir,
-    )
-    if target is None:
-        raise HTTPException(
-            status_code=400, detail='No tracks resolved to a file on disk'
-        )
-    return {'path': str(target), 'count': kept}
-
-
 # Settings the interface has no business seeing. Where lyrics come from is an
 # implementation detail: there is no picker for it, nothing renders it, and a
 # name travelling to the UI is a name that ends up in the shipped bundle.
@@ -982,7 +940,10 @@ def _apply_to_downloader(payload: dict[str, Any]) -> None:
     if 'max_parallel_downloads' in payload:
         try:
             count = max(1, int(payload['max_parallel_downloads']))
-            state.download_semaphore = asyncio.Semaphore(count)
+            if isinstance(state.download_semaphore, DownloadSlots):
+                state.download_semaphore.resize(count)
+            else:
+                state.download_semaphore = DownloadSlots(count)
         except (TypeError, ValueError):
             pass
 
@@ -2071,6 +2032,129 @@ async def _artist_hints(names: list[str]) -> dict[str, dict[str, list[str]]]:
         return {}
 
 
+# ---------------------------------------------------------------------------
+# Problems: errors the window ran into, and a report to send (see report.py)
+# ---------------------------------------------------------------------------
+
+# The window's errors, newest last, for the report; and when each was logged,
+# so a page stuck throwing on every frame cannot fill the log.
+_window_errors: deque = deque(maxlen=40)
+_window_error_times: deque = deque(maxlen=20)
+WINDOW_ERRORS_PER_MINUTE = 20
+
+
+@router.post('/api/client-error')
+async def client_error_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    now = time.time()
+    message = str(payload.get('message') or 'error')[:500]
+    stack = str(payload.get('stack') or '')[:4000]
+    where = str(payload.get('route') or '')[:200]
+    # The same error again soon after is counted, not written again.
+    last = _window_errors[-1] if _window_errors else None
+    if last and last['message'] == message and now - last['at'] < 60:
+        last['times'] += 1
+        return {'logged': False}
+    while _window_error_times and now - _window_error_times[0] > 60:
+        _window_error_times.popleft()
+    if len(_window_error_times) >= WINDOW_ERRORS_PER_MINUTE:
+        return {'logged': False}
+    _window_error_times.append(now)
+    _window_errors.append(
+        {
+            'at': now,
+            'when': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now)),
+            'message': message,
+            'stack': stack,
+            'route': where,
+            'times': 1,
+        }
+    )
+    logger.bind(component='window').error('{} (on {})\n{}', message, where or '?', stack)
+    return {'logged': True}
+
+
+@router.post('/api/support/report')
+async def support_report_endpoint() -> dict[str, Any]:
+    if not state.data_dir:
+        raise HTTPException(status_code=503, detail='No data folder')
+    facts = {
+        'Library folder': state.settings.get('download_dir') or state.download_dir or '',
+        'Playlists': len(playlists_mod.all_playlists()),
+        'Window errors this run': len(_window_errors),
+    }
+    log_file = os.getenv('DANNIFY_LOG_FILE')
+    try:
+        path = await asyncio.to_thread(
+            report_mod.build,
+            Path(state.data_dir),
+            str(state.version or ''),
+            settings=dict(state.settings or {}),
+            facts=facts,
+            window_errors=list(_window_errors),
+            log_file=Path(log_file) if log_file else None,
+        )
+    except OSError as exc:
+        logger.opt(exception=True).warning('problem report could not be written')
+        raise HTTPException(status_code=500, detail='Could not write the report') from exc
+    logger.info('problem report written: {}', path.name)
+    return {'path': str(path), 'name': path.name, 'size': path.stat().st_size}
+
+
+# ---------------------------------------------------------------------------
+# Playlists the listener makes (see playlists.py)
+# ---------------------------------------------------------------------------
+
+
+def _playlist_or_404(fn, *args):
+    try:
+        return fn(*args)
+    except playlists_mod.NotFound as exc:
+        raise HTTPException(status_code=404, detail='Playlist not found') from exc
+
+
+@router.get('/api/playlists')
+async def playlists_endpoint() -> dict[str, Any]:
+    return {'playlists': playlists_mod.all_playlists()}
+
+
+@router.post('/api/playlists')
+async def playlist_create_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    tracks = payload.get('tracks') if isinstance(payload.get('tracks'), list) else []
+    try:
+        return playlists_mod.create(str(payload.get('name') or ''), tracks)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get('/api/playlists/{pid}')
+async def playlist_endpoint(pid: str) -> dict[str, Any]:
+    return _playlist_or_404(playlists_mod.get, pid)
+
+
+@router.patch('/api/playlists/{pid}')
+async def playlist_update_endpoint(pid: str, payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    if isinstance(payload.get('name'), str):
+        _playlist_or_404(playlists_mod.rename, pid, payload['name'])
+    if isinstance(payload.get('tracks'), list):
+        return _playlist_or_404(playlists_mod.set_tracks, pid, payload['tracks'])
+    return _playlist_or_404(playlists_mod.get, pid)
+
+
+@router.post('/api/playlists/{pid}/tracks')
+async def playlist_add_endpoint(pid: str, payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    tracks = payload.get('tracks') if isinstance(payload.get('tracks'), list) else []
+    position = payload.get('position')
+    return _playlist_or_404(
+        playlists_mod.add_tracks, pid, tracks, int(position) if isinstance(position, int) else None
+    )
+
+
+@router.delete('/api/playlists/{pid}')
+async def playlist_delete_endpoint(pid: str) -> dict[str, Any]:
+    _playlist_or_404(playlists_mod.delete, pid)
+    return {'deleted': True}
+
+
 @router.get('/api/artists-online/links')
 async def artist_links_endpoint() -> dict[str, Any]:
     """The online identity (page id and picture) of every artist in the library.
@@ -2195,158 +2279,6 @@ async def websocket_endpoint(
     except Exception:
         state.connections.disconnect(client_id, ws)
 
-
-# ---------------------------------------------------------------------------
-# Playlist monitoring endpoints
-# ---------------------------------------------------------------------------
-
-
-def _require_monitor_db() -> PlaylistMonitorDB:
-    if state.monitor_db is None:
-        raise HTTPException(
-            status_code=500, detail='Monitor database not ready'
-        )
-    return state.monitor_db
-
-
-@router.get('/api/monitor/playlists')
-async def list_monitor_playlists() -> list[dict[str, Any]]:
-    db = _require_monitor_db()
-    playlists = await asyncio.to_thread(db.list_playlists)
-    return [p.to_dict() for p in playlists]
-
-
-@router.post('/api/monitor/playlists')
-async def add_monitor_playlist(request: Request) -> dict[str, Any]:
-    db = _require_monitor_db()
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-
-    url = payload.get('url', '')
-    interval_minutes = int(payload.get('interval_minutes', 60))
-
-    parsed = spotify.parse_spotify_url(url)
-    if parsed is None or parsed[0] != 'playlist':
-        raise HTTPException(
-            status_code=400, detail='A valid Spotify playlist URL is required'
-        )
-
-    _, spotify_id = parsed
-
-    existing = await asyncio.to_thread(db.get_by_spotify_id, spotify_id)
-    if existing is not None:
-        raise HTTPException(
-            status_code=409, detail='This playlist is already being monitored'
-        )
-
-    try:
-        name, _tracks = await asyncio.to_thread(
-            spotify.playlist_info_and_tracks, spotify_id
-        )
-    except Exception as exc:
-        logger.exception('Failed to resolve playlist {}', spotify_id)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-    playlist = await asyncio.to_thread(
-        db.add_playlist, spotify_id, name, url, interval_minutes
-    )
-
-    # Kick off the first download pass immediately so the user does not have
-    # to wait up to a full monitor sweep interval for the initial backfill.
-    if state.downloader is not None:
-        loop = state.loop or asyncio.get_running_loop()
-
-        async def _initial_check(pl=playlist) -> None:
-            try:
-                await check_playlist(
-                    pl,
-                    db,
-                    state.downloader,  # type: ignore[arg-type]
-                    state.connections.broadcast,
-                    loop,
-                    state.settings,
-                )
-            except Exception:
-                logger.exception('Initial check failed for playlist {}', pl.id)
-
-        asyncio.create_task(_initial_check())
-
-    return playlist.to_dict()
-
-
-@router.patch('/api/monitor/playlists/{playlist_id}')
-async def update_monitor_playlist(
-    playlist_id: int, request: Request
-) -> dict[str, Any]:
-    db = _require_monitor_db()
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-
-    kwargs: dict[str, Any] = {}
-    if 'interval_minutes' in payload:
-        kwargs['interval_minutes'] = int(payload['interval_minutes'])
-    if 'enabled' in payload:
-        kwargs['enabled'] = bool(payload['enabled'])
-
-    updated = await asyncio.to_thread(
-        db.update_playlist, playlist_id, **kwargs
-    )
-    if updated is None:
-        raise HTTPException(
-            status_code=404, detail='Monitored playlist not found'
-        )
-    return updated.to_dict()
-
-
-@router.delete('/api/monitor/playlists/{playlist_id}')
-async def delete_monitor_playlist(playlist_id: int) -> dict[str, Any]:
-    db = _require_monitor_db()
-    deleted = await asyncio.to_thread(db.delete_playlist, playlist_id)
-    if not deleted:
-        raise HTTPException(
-            status_code=404, detail='Monitored playlist not found'
-        )
-    return {'deleted': True, 'id': playlist_id}
-
-
-@router.post('/api/monitor/playlists/{playlist_id}/check')
-async def manual_check_playlist(playlist_id: int) -> dict[str, Any]:
-    db = _require_monitor_db()
-    playlist = await asyncio.to_thread(db.get_playlist, playlist_id)
-    if playlist is None:
-        raise HTTPException(
-            status_code=404, detail='Monitored playlist not found'
-        )
-    if state.downloader is None:
-        raise HTTPException(status_code=500, detail='Downloader not ready')
-
-    loop = state.loop or asyncio.get_running_loop()
-
-    async def _run() -> None:
-        try:
-            count = await check_playlist(
-                playlist,  # type: ignore[arg-type]
-                db,
-                state.downloader,  # type: ignore[arg-type]
-                state.connections.broadcast,
-                loop,
-            )
-            logger.info(
-                'Manual check: downloaded {} new track(s) from "{}"',
-                count,
-                playlist.name,
-            )  # type: ignore[union-attr]
-        except Exception:
-            logger.exception(
-                'Manual check failed for playlist {}', playlist_id
-            )
-
-    asyncio.create_task(_run())
-    return {'status': 'check_started', 'id': playlist_id}
 
 # ---------------------------------------------------------------------------
 # Account (YouTube Music sign-in), personalized feeds and likes

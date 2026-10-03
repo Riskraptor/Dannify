@@ -1,16 +1,22 @@
 import { createWebHistory, createRouter } from 'vue-router'
 import Home from '/src/views/Home.vue'
-import Search from '/src/views/Search.vue'
 import Library from '/src/views/Library.vue'
-import Artists from '/src/views/Artists.vue'
-import Artist from '/src/views/Artist.vue'
-import Downloads from '/src/views/Downloads.vue'
-import Liked from '/src/views/Liked.vue'
-import NowPlaying from '/src/views/NowPlaying.vue'
-import ExploreArtist from '/src/views/ExploreArtist.vue'
-import ExploreCollection from '/src/views/ExploreCollection.vue'
-import Settings from '/src/views/Settings.vue'
 import config from '/src/config'
+
+// Home and Songs are where the app opens, so they come with it. Every other
+// page is its own file, read the first time it is needed: the window has less
+// to read before it can show anything. They are all fetched quietly once the
+// app has settled (below), so going to one later is still instant.
+const Search = () => import('/src/views/Search.vue')
+const Artists = () => import('/src/views/Artists.vue')
+const Artist = () => import('/src/views/Artist.vue')
+const Downloads = () => import('/src/views/Downloads.vue')
+const Liked = () => import('/src/views/Liked.vue')
+const Playlist = () => import('/src/views/Playlist.vue')
+const NowPlaying = () => import('/src/views/NowPlaying.vue')
+const ExploreArtist = () => import('/src/views/ExploreArtist.vue')
+const ExploreCollection = () => import('/src/views/ExploreCollection.vue')
+const Settings = () => import('/src/views/Settings.vue')
 
 const routes = [
   { path: '/', name: 'Home', component: Home },
@@ -19,6 +25,7 @@ const routes = [
   { path: '/artists', name: 'Artists', component: Artists },
   { path: '/artists/:name', name: 'Artist', component: Artist },
   { path: '/liked', name: 'Liked', component: Liked },
+  { path: '/playlists/:id', name: 'Playlist', component: Playlist },
   { path: '/downloads', name: 'Downloads', component: Downloads, alias: '/download' },
   { path: '/now-playing', name: 'NowPlaying', component: NowPlaying, alias: '/player' },
   { path: '/explore/artist/:id', name: 'ExploreArtist', component: ExploreArtist },
@@ -42,5 +49,35 @@ const router = createRouter({
   history: createWebHistory(config.BASEURL),
   routes,
 })
+
+// A page's file that cannot be read is almost always one the app no longer
+// has: it was updated while this window stayed open, and the file names
+// changed with it. Opening the page afresh reads the new ones. Once: if that
+// fails too, the error is real and reloading again would only loop.
+const RELOADED = 'dn.chunkReload'
+router.onError((err, to) => {
+  const text = String((err && err.message) || err || '')
+  if (!/dynamically imported module|module script failed|Loading chunk|Importing a module/i.test(text)) return
+  let last = 0
+  try {
+    last = Number(sessionStorage.getItem(RELOADED) || 0)
+    sessionStorage.setItem(RELOADED, String(Date.now()))
+  } catch {
+    // storage blocked: the reload still happens, just not the guard
+  }
+  if (Date.now() - last < 15000) return
+  window.location.assign(to ? router.resolve(to).href : window.location.href)
+})
+
+// Fetch the other pages once things are quiet, so none waits on its file.
+function warmPages() {
+  for (const load of [Search, Artists, Artist, Downloads, Liked, Playlist, NowPlaying, ExploreArtist, ExploreCollection, Settings]) {
+    load().catch(() => {})
+  }
+}
+if (typeof window !== 'undefined') {
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500))
+  setTimeout(() => idle(warmPages, { timeout: 4000 }), 2500)
+}
 
 export default router
