@@ -79,7 +79,7 @@
           :class="{
             'is-selected': selected.has(row.key),
             'is-current': isRowCurrent(row),
-            'is-cursor': focused && cursor === index,
+            'is-cursor': focused && byKeys && cursor === index,
             'is-broken': !!row.problem,
             'is-gone': !!row.gone,
             'is-drop-before': dropAt && dropAt.index === index && !dropAt.after,
@@ -521,7 +521,13 @@ function isInteractive(target) {
   return !!target.closest('a, button, input')
 }
 
+// The outline on the row the keyboard is on is for finding your place with
+// the arrows. After a click the row's own highlight says where you are, and a
+// frame around it as well looked like a web page's focus box.
+const byKeys = ref(false)
+
 function onRowDown(e, i) {
+  byKeys.value = false
   if (isInteractive(e.target)) return
   if (e.button === 2) {
     // Right-click keeps an existing multi-selection that includes the row,
@@ -670,6 +676,7 @@ function moveCursor(to, extend) {
 }
 
 function onKey(e) {
+  if (/^(Arrow|Page|Home|End)/.test(e.key)) byKeys.value = true
   const n = shown.value.length
   if (!n || e.target !== root.value) return
   const pageRows = Math.max(1, Math.floor(((scroller.value && scroller.value.clientHeight) || 600) / rowHeight.value) - 2)

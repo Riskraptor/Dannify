@@ -108,6 +108,8 @@
           :show-cover="isPlaylist"
           :show-album="isPlaylist"
           :sticky-offset="56"
+          selectable
+          selection-bar
           :on-play="(i) => playRows(rows, i)"
         />
       </div>
@@ -138,6 +140,7 @@ import { openContextMenu } from '/src/model/contextMenu'
 import { copyText } from '/src/model/clipboard'
 import { toast } from '/src/model/toast'
 import { onRefresh } from '/src/model/useRefresh'
+import { usePlaylists } from '/src/model/playlists'
 import { useI18n } from '/src/i18n'
 import CollectionHero from '/src/components/ui/CollectionHero.vue'
 import TrackTable from '/src/components/ui/TrackTable.vue'
@@ -222,6 +225,8 @@ function playAll() {
   playRows(rows.value, 0)
 }
 
+const playlists = usePlaylists()
+
 function openMore(e) {
   const link = isPlaylist.value
     ? `https://music.youtube.com/playlist?list=${String(route.params.id).replace(/^VL/, '')}`
@@ -231,6 +236,18 @@ function openMore(e) {
     [
       { label: t('actions.playNext'), icon: 'ph:queue', action: () => playNext(rows.value) },
       { label: t('actions.addToQueue'), icon: 'ph:list-plus', action: () => addToQueue(rows.value) },
+      { divider: true },
+      // Kept in Dannify, in this order, whatever later happens to it online.
+      rows.value.length && {
+        label: t('playlists.saveAsMine'),
+        icon: 'ph:playlist',
+        action: () => playlists.createPlaylist(rows.value, { name: album.value.name || '' }),
+      },
+      rows.value.length && {
+        label: t('playlists.addTo'),
+        icon: 'ph:list-plus',
+        action: () => playlists.pickPlaylist(rows.value),
+      },
       { divider: true },
       pendingCount.value > 0 && {
         label: t('explore.downloadAll'),

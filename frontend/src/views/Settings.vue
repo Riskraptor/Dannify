@@ -99,7 +99,7 @@
               :key="opt.value"
               class="seg-item"
               :class="{ 'is-active': theme.preference.value === opt.value }"
-              @click="theme.setPreference(opt.value)"
+              @click="restyle(() => theme.setPreference(opt.value), $event.currentTarget)"
             >
               <Icon :icon="opt.icon" class="h-4 w-4" />
               {{ t(opt.label) }}
@@ -125,7 +125,7 @@
               :aria-checked="zoom === step.value"
               :class="{ 'is-active': zoom === step.value }"
               :title="`${Math.round(step.value * 100)}%`"
-              @click="pickZoom(step.value)"
+              @click="pickZoom(step.value, $event.currentTarget)"
             >
               <span class="zoom-glyph" :style="{ fontSize: `${10 + (step.value - 0.9) * 16}px` }">Aa</span>
               {{ t(step.label) }}
@@ -141,26 +141,43 @@
             <p class="row-label">{{ t('settings.palette') }}</p>
             <p class="row-hint">{{ t('settings.paletteHint') }}</p>
           </div>
-          <div class="palette-grid">
-            <button
-              v-for="p in theme.themes"
-              :key="p.id"
-              class="palette press"
-              :class="{ 'is-active': theme.currentTheme.value === p.id }"
-              :title="t(p.name)"
-              :aria-pressed="theme.currentTheme.value === p.id"
-              @click="theme.setTheme(p.id)"
+          <!-- One palette for each side, each remembered: the side on screen
+               now says so, and the other shows what it will come back to. -->
+          <div class="palette-sides">
+            <div
+              v-for="side in paletteSides"
+              :key="side.mode"
+              class="palette-side"
+              :class="{ 'is-now': theme.currentMode.value === side.mode }"
             >
-              <span class="palette-chip" :style="{ background: p.bg }">
-                <span class="palette-dot" :style="{ background: p.accent }" />
-                <Icon
-                  v-if="theme.currentTheme.value === p.id"
-                  icon="ph:check-bold"
-                  class="palette-tick"
-                />
-              </span>
-              <span class="palette-name">{{ t(p.name) }}</span>
-            </button>
+              <p class="palette-side-label">
+                <Icon :icon="side.icon" class="h-3.5 w-3.5" />
+                {{ t(side.label) }}
+                <span v-if="theme.currentMode.value === side.mode" class="palette-side-now">
+                  {{ t('settings.paletteOnScreen') }}
+                </span>
+              </p>
+              <div class="palette-grid">
+                <button
+                  v-for="p in side.items"
+                  :key="p.id"
+                  class="palette press"
+                  :class="{
+                    'is-active': side.chosen === p.id,
+                    'is-live': theme.currentTheme.value === p.id,
+                  }"
+                  :title="t(p.name)"
+                  :aria-pressed="side.chosen === p.id"
+                  @click="restyle(() => theme.setTheme(p.id), $event.currentTarget)"
+                >
+                  <span class="palette-chip" :style="{ background: p.bg }">
+                    <span class="palette-dot" :style="{ background: p.accent }" />
+                    <Icon v-if="side.chosen === p.id" icon="ph:check-bold" class="palette-tick" />
+                  </span>
+                  <span class="palette-name">{{ t(p.name) }}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         <label class="row">
@@ -173,7 +190,7 @@
             type="checkbox"
             class="switch"
             :checked="accentFromArt"
-            @change="setAccentFromArt($event.target.checked)"
+            @change="restyle(() => setAccentFromArt($event.target.checked), $event.target)"
           />
         </label>
         <!-- Typeface. Two bundled faces plus whatever Windows offers, each
@@ -191,7 +208,7 @@
               class="font-card press"
               :class="{ 'is-active': fonts.current.value === f.id }"
               :aria-pressed="fonts.current.value === f.id"
-              @click="fonts.setFont(f.id)"
+              @click="restyle(() => fonts.setFont(f.id), $event.currentTarget)"
             >
               <span class="font-sample" :style="{ fontFamily: f.display }">Aa</span>
               <span class="font-meta">
@@ -689,6 +706,8 @@ import { desktop } from '/src/desktop/bridge'
 import { ZOOM_STEPS, currentZoom, setZoom } from '/src/desktop/shortcuts'
 import { toast } from '/src/model/toast'
 import { saveProblemReport } from '/src/model/problems'
+import { restyle, resize } from '/src/model/smoothChange'
+import { useSupport } from '/src/model/support'
 import { useI18n } from '/src/i18n'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
 
@@ -741,9 +760,29 @@ const zoomSteps = ZOOM_STEPS.map((value) => ({
   label: ZOOM_NAMES[value] || `${Math.round(value * 100)}%`,
 }))
 const zoom = ref(currentZoom())
-function pickZoom(step) {
+// The palettes, by the side they are for.
+const paletteSides = computed(() => [
+  {
+    mode: 'dark',
+    label: 'settings.paletteDark',
+    icon: 'ph:moon',
+    items: theme.themes.filter((p) => p.mode === 'dark'),
+    chosen: theme.darkTheme.value,
+  },
+  {
+    mode: 'light',
+    label: 'settings.paletteLight',
+    icon: 'ph:sun',
+    items: theme.themes.filter((p) => p.mode === 'light'),
+    chosen: theme.lightTheme.value,
+  },
+])
+
+function pickZoom(step, anchor) {
+  if (step === zoom.value) return
+  const from = zoom.value
   zoom.value = step
-  setZoom(step)
+  resize(() => setZoom(step), from, step, anchor)
 }
 
 // The notes come back as one block of text. Split it for reading, and never
@@ -851,14 +890,8 @@ watch(
   { immediate: true }
 )
 
-// --- Support the app (one link, see support.py)
-const support = reactive({ configured: false, link: '', message: '' })
-
-function donate() {
-  // Straight out to the browser. No card details, no checkout, nothing to
-  // get wrong on our side.
-  if (support.configured) desktop.openExternal(support.link)
-}
+// --- Support the app (one link, see support.py and model/support.js)
+const { config: support, openSupport: donate } = useSupport()
 
 const themeOptions = [
   { value: 'system', label: 'settings.themeSystem', icon: 'ph:desktop' },
@@ -958,9 +991,6 @@ function formatHz(hz) {
 }
 
 onMounted(async () => {
-  API.getSupportConfig()
-    .then((res) => Object.assign(support, res.data || {}))
-    .catch(() => {})
   if (!desktop.isDesktop) return
   await desktop.whenReady()
   tray.closeToTray = !!desktop.state.closeToTray
@@ -1301,9 +1331,38 @@ async function setTray(patch) {
   color: rgb(var(--c-accent));
 }
 
+.palette-sides {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+.palette-side-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(var(--c-fg) / 0.5);
+}
+.palette-side.is-now .palette-side-label {
+  color: rgb(var(--c-fg) / 0.78);
+}
+.palette-side-now {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: rgb(var(--c-accent));
+  background: rgb(var(--c-accent) / 0.12);
+}
 .palette-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
   gap: 10px;
   width: 100%;
 }
@@ -1334,7 +1393,11 @@ async function setTray(patch) {
 .palette:hover .palette-chip {
   transform: translateY(-1px);
 }
+/* Chosen for its side: a thin ring. On screen now: the full one. */
 .palette.is-active .palette-chip {
+  border-color: rgb(var(--c-tint) / 0.4);
+}
+.palette.is-live .palette-chip {
   border-color: rgb(var(--c-accent));
   box-shadow: 0 0 0 2px rgb(var(--c-accent) / 0.35);
 }

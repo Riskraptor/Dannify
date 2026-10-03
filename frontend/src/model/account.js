@@ -1,4 +1,5 @@
 import { ref, computed, shallowRef } from 'vue'
+import router from '/src/router'
 import API from '/src/model/api'
 import { desktop } from '/src/desktop/bridge'
 import { toast } from '/src/model/toast'
@@ -128,9 +129,15 @@ async function toggleLike(song) {
     } else {
       liked.value = liked.value.filter((s) => (s.song_id || s.video_id) !== id)
     }
-    toast(next ? t('account.addedToLiked') : t('account.removedFromLiked'), {
-      icon: next ? 'ph:heart-fill' : 'ph:heart-break',
-    })
+    // The heart that was pressed already says so. Only on Liked Songs itself,
+    // where the song leaves the list, is there something to take back.
+    if (!next && router.currentRoute.value.name === 'Liked') {
+      toast(t('account.removedFromLiked'), {
+        icon: 'ph:heart-break',
+        key: 'liked',
+        action: { label: t('actions.undo'), run: () => toggleLike(song) },
+      })
+    }
     return true
   } catch {
     const revert = new Set(likedIds.value)

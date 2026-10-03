@@ -1670,7 +1670,9 @@ def repair(root: Path, on_progress=None, on_change=None) -> dict[str, int]:
     # finally so no failure can leave one behind.
     import tempfile
 
-    bench = Path(tempfile.mkdtemp(prefix='dnf-update-'))
+    from . import bench as _bench_mod  # noqa: PLC0415
+
+    bench = _bench_mod.make('dnf-update-')
     _busy = True
     changed = 0
     try:

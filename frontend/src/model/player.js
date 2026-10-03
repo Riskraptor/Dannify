@@ -3,6 +3,7 @@ import API from '/src/model/api'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 import { useUi } from '/src/model/ui'
 import { rememberPlayed } from '/src/model/recent'
+import { notePlayed } from '/src/model/support'
 import {
   reportNetworkFailure,
   useConnectivity,
@@ -768,11 +769,13 @@ function makeElement() {
   })
   on('play', () => {
     isPlaying.value = true
+    if (engine) engine.resume()
     syncMediaSession()
     startFrameClock()
   })
   on('pause', () => {
     isPlaying.value = false
+    if (engine) engine.idleSoon()
     syncMediaSession()
     stopFrameClock()
   })
@@ -1600,6 +1603,7 @@ function playAt(index, { autoplay = true, fade = null } = {}) {
   loadLyricsForCurrent()
   syncMediaSession()
   rememberPlayed(track)
+  notePlayed()
   saveSession()
   // First-play affordance: surface the lyrics panel the very first time
   // the user plays something this session, so they see the headline

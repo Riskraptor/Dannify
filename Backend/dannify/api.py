@@ -59,9 +59,12 @@ from .downloader import Downloader
 # pick, and the best pick is the stream as YouTube sends it. Its AAC is kept
 # as it comes, not re-encoded into MP3 at a guessed bitrate: faster to save,
 # and nothing lost on the way. The bitrate only matters for the rare track
-# that arrives in another codec and has to be converted.
+# that arrives in another codec and has to be converted: that source is Opus
+# at about 130 to 160 kbps, and 160 kbps AAC keeps all of it. It was 256,
+# which made those songs nearly twice the size of what they came from for
+# nothing anyone could hear.
 INTERNAL_FORMAT = 'm4a'
-INTERNAL_BITRATE = '256'
+INTERNAL_BITRATE = '160'
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     'audio_providers': ['youtube-music'],

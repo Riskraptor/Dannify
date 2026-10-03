@@ -123,8 +123,10 @@ function makeRoom(list) {
  * Show a toast.
  * @param {string} message
  * @param {{icon?: string, tone?: 'default'|'success'|'error', timeout?: number,
- *          action?: {label: string, run: Function}}} [opts]
+ *          action?: {label: string, run: Function}, key?: string}} [opts]
  *   `timeout` is in milliseconds; 0 keeps the toast until it is closed.
+ *   `key`: a toast about the same thing (songs going into the queue, one
+ *   after another) is changed in place instead of stacking another one.
  * @returns {number} the toast's id (the existing one's, when it was a repeat)
  */
 export function toast(message, opts = {}) {
@@ -132,6 +134,23 @@ export function toast(message, opts = {}) {
   const tone = opts.tone || 'default'
   const action = opts.action || null
   const timeout = opts.timeout ?? defaultTimeout(text, tone, !!action)
+
+  const key = opts.key || null
+  const keyed = key ? toasts.value.find((item) => item.key === key) : null
+  if (keyed) {
+    const changed = {
+      ...keyed,
+      message: text,
+      icon: opts.icon || keyed.icon,
+      tone,
+      action,
+      timeout,
+      count: 1,
+    }
+    toasts.value = toasts.value.map((item) => (item.id === keyed.id ? changed : item))
+    startTimer(changed)
+    return keyed.id
+  }
 
   const same = toasts.value.find((item) => item.message === text && item.tone === tone)
   if (same) {
@@ -149,6 +168,7 @@ export function toast(message, opts = {}) {
 
   const item = {
     id: ++seq,
+    key,
     message: text,
     icon: opts.icon || null,
     tone,

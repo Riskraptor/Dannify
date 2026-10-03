@@ -111,11 +111,9 @@ if (Test-Path $runtime) {
     }
 }
 
-# Ship-time settings (update repository, support link) travel inside the app
-# now, so an update can change them too. See packaging\config\README.md.
-$config = Join-Path $app 'config'
-New-Item -ItemType Directory -Force $config | Out-Null
-Copy-Item (Join-Path $PSScriptRoot 'config\*.json') $config -Force
+# Where updates come from and the support link are built into the app (see
+# updates.py, support.py): nothing in the install folder can be edited to
+# point them elsewhere. packaging\config is read by development runs only.
 
 Step 'Installer program'
 & $dotnet build $csproj -c Release -nologo -v q

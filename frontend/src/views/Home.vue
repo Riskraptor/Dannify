@@ -181,6 +181,25 @@
           @play="playArtist(a.name)"
         />
       </Shelf>
+
+      <!-- Once in a while, after real use: never a pop-up, and "Not now"
+           is believed for two months (model/support.js). -->
+      <section v-if="support.due.value" class="give-card">
+        <Icon icon="ph:coffee" class="give-icon" />
+        <div class="min-w-0 flex-1">
+          <p class="give-title">{{ t('support.nudgeTitle') }}</p>
+          <p class="give-text">{{ support.config.message || t('support.nudgeText') }}</p>
+        </div>
+        <div class="give-actions">
+          <button class="btn-ghost btn-pill h-8 px-3 text-xs" @click="support.notNow()">
+            {{ t('support.notNow') }}
+          </button>
+          <button class="btn-accent btn-pill h-8 px-4 text-xs" @click="support.openSupport()">
+            <Icon icon="ph:heart-fill" class="h-3.5 w-3.5" />
+            {{ t('support.give') }}
+          </button>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -203,6 +222,7 @@ import { useExplore } from '/src/model/explore'
 import { warmAll } from '/src/model/prefetch'
 import { onRefresh } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
+import { useSupport } from '/src/model/support'
 import Shelf from '/src/components/ui/Shelf.vue'
 import SongTile from '/src/components/ui/SongTile.vue'
 import MediaCard from '/src/components/MediaCard.vue'
@@ -215,6 +235,7 @@ const recent = useRecent()
 const account = useAccount()
 const feed = useHomeFeed()
 const ex = useExplore()
+const support = useSupport()
 
 lib.ensureLoaded()
 feed.load().then(warmFirstShelf)
@@ -490,4 +511,36 @@ function submitWelcome() {
   padding-bottom: 28px;
 }
 
+.give-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 16px;
+  margin-top: 36px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid rgb(var(--c-accent) / 0.18);
+  background: linear-gradient(120deg, rgb(var(--c-accent) / 0.1), rgb(var(--c-tint) / 0.03));
+}
+.give-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: rgb(var(--c-accent));
+}
+.give-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+.give-text {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgb(var(--c-fg) / 0.62);
+}
+.give-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
 </style>

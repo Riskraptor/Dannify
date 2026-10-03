@@ -248,6 +248,136 @@ def _install_crash_hooks() -> None:
 _crash_file = None
 
 
+# ---------------------------------------------------------------------------
+# The window's browser, kept to being an app
+# ---------------------------------------------------------------------------
+
+# Switches that turn the embedded browser into something another program can
+# drive or read from: a debugging port, extensions, security turned off.
+_RISKY_SWITCHES = (
+    'remote-debugging',
+    'remote-allow-origins',
+    'auto-open-devtools',
+    'load-extension',
+    'disable-web-security',
+    'user-data-dir',
+    'disk-cache-dir',
+)
+# Environment variables the WebView2 runtime reads, which a shortcut or a
+# script could set to attach a debugger or swap the runtime for another.
+_WEBVIEW_ENV = (
+    'WEBVIEW2_BROWSER_EXECUTABLE_FOLDER',
+    'WEBVIEW2_USER_DATA_FOLDER',
+    'WEBVIEW2_RELEASE_CHANNEL_PREFERENCE',
+    'WEBVIEW2_PIPE_FOR_SCRIPT_DEBUGGER',
+    'WEBVIEW2_WAIT_FOR_SCRIPT_DEBUGGER',
+)
+
+
+def _webview_untampered() -> bool:
+    """False when Windows has been told to open the app's browser up.
+
+    The runtime takes extra switches from a machine or user policy as well as
+    from the environment. The environment is ours to set (and is, below); a
+    policy naming this program and handing it a debugging port is somebody
+    trying to read the songs out of it.
+    """
+
+    for name in _WEBVIEW_ENV:
+        os.environ.pop(name, None)
+    if not _WIN:
+        return True
+    import winreg
+
+    exe = Path(sys.executable).name.lower()
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            key = winreg.OpenKey(hive, r'Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments')
+        except OSError:
+            continue
+        with key:
+            index = 0
+            while True:
+                try:
+                    name, value, _kind = winreg.EnumValue(key, index)
+                except OSError:
+                    break
+                index += 1
+                if str(name).lower() not in (exe, '*'):
+                    continue
+                if any(switch in str(value).lower() for switch in _RISKY_SWITCHES):
+                    logger_print('refusing: a WebView2 policy adds', value)
+                    return False
+    return True
+
+
+def _refuse_tampered() -> None:
+    if not _WIN:
+        return
+    try:
+        ctypes.windll.user32.MessageBoxW(
+            None,
+            'Dannify cannot open while this PC is set to let other programs '
+            'control it (a WebView2 policy names Dannify). Remove that setting '
+            'and open Dannify again.',
+            APP_TITLE,
+            0x10 | 0x40000,  # MB_ICONERROR | MB_TOPMOST
+        )
+    except Exception:
+        pass
+
+
+# Bumped when the window's cache has to be emptied once on the next start.
+_CACHE_GENERATION = '2'
+
+
+def _purge_window_cache() -> None:
+    """Empty the window's cache once: earlier versions let audio into it.
+
+    Before 4.4 a saved song reached the window marked "no-cache", which still
+    lets the browser keep the decrypted bytes in its cache folder. Those
+    copies go, once; nothing has been written there since.
+    """
+
+    marker = _WEBVIEW_STORAGE / '.cache-generation'
+    try:
+        if marker.read_text(encoding='utf-8').strip() == _CACHE_GENERATION:
+            return
+    except OSError:
+        pass
+    import shutil
+
+    for sub in ('Cache', 'Code Cache', 'Service Worker', 'GPUCache'):
+        for folder in (_WEBVIEW_STORAGE / 'EBWebView' / 'Default' / sub,):
+            if folder.is_dir():
+                shutil.rmtree(folder, ignore_errors=True)
+    try:
+        _WEBVIEW_STORAGE.mkdir(parents=True, exist_ok=True)
+        marker.write_text(_CACHE_GENERATION, encoding='utf-8')
+    except OSError:
+        pass
+
+
+def _lock_view_settings(core) -> None:  # noqa: ANN001
+    """What a web page may do and an app should not."""
+
+    for name, value in (
+        # Ctrl and the wheel, or a pinch, zooming the page like a browser.
+        # The interface size is a setting (and still applied, by the app).
+        ('IsZoomControlEnabled', False),
+        ('IsPinchZoomEnabled', False),
+        # Offering to remember what is typed into the app's own fields.
+        ('IsPasswordAutosaveEnabled', False),
+        ('IsGeneralAutofillEnabled', False),
+        # Swiping back and forward through pages.
+        ('IsSwipeNavigationEnabled', False),
+    ):
+        try:
+            setattr(core.Settings, name, value)
+        except Exception:
+            pass
+
+
 def _fatal() -> None:
     """Last resort when the app cannot start.
 
@@ -1595,6 +1725,7 @@ class DesktopApi:
             def subscribe(core) -> bool:
                 if core is None:
                     return False
+                _lock_view_settings(core)
                 try:
                     core.ProcessFailed += on_failed
                     return True
@@ -3642,6 +3773,10 @@ def main() -> None:
     ]
     # Remote debugging is a development aid and a back door into the running
     # app, so a shipped build ignores the variable entirely.
+    if _FROZEN and not _webview_untampered():
+        _refuse_tampered()
+        sys.exit(3)
+    _purge_window_cache()
     devtools_port = '' if _FROZEN else os.environ.get('DANNIFY_DEVTOOLS_PORT', '').strip()
     if devtools_port.isdigit():
         browser_args.append(f'--remote-debugging-port={devtools_port}')

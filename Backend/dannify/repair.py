@@ -173,7 +173,9 @@ def fix(
     # Downloaded somewhere of its own, outside the music folder: a plain copy
     # sits there for the few seconds before it is sealed, and it must never be
     # somewhere the library, or anybody browsing the folder, can see it.
-    bench = Path(tempfile.mkdtemp(prefix='dnf-repair-'))
+    from . import bench as _bench_mod  # noqa: PLC0415
+
+    bench = _bench_mod.make('dnf-repair-')
     try:
         from .downloader import Downloader  # noqa: PLC0415
 

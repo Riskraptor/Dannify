@@ -52,7 +52,7 @@ function setOnline(value) {
     stopProbing()
     if (announced) {
       announced = false
-      toast(t('net.backOnline'), { tone: 'success', icon: 'ph:wifi-high' })
+      toast(t('net.backOnline'), { tone: 'success', icon: 'ph:wifi-high', key: 'net' })
     }
     for (const fn of [...waiters]) {
       waiters.delete(fn)
@@ -100,7 +100,7 @@ export async function reportNetworkFailure() {
   }
   if (!online.value && !announced) {
     announced = true
-    toast(t('net.offline'), { tone: 'error', icon: 'ph:wifi-slash', timeout: 6000 })
+    toast(t('net.offline'), { tone: 'error', icon: 'ph:wifi-slash', timeout: 6000, key: 'net' })
   }
   return online.value
 }

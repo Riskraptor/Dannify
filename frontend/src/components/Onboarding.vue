@@ -49,7 +49,7 @@
                       :class="{ on: theme.preference.value === m.value }"
                       role="radio"
                       :aria-checked="theme.preference.value === m.value"
-                      @click="theme.setPreference(m.value)"
+                      @click="restyle(() => theme.setPreference(m.value))"
                     >
                       <Icon :icon="m.icon" class="h-4 w-4" />
                       {{ t(m.label) }}
@@ -65,7 +65,7 @@
                       :aria-checked="theme.currentTheme.value === p.id"
                       :aria-label="t(p.name)"
                       :title="t(p.name)"
-                      @click="theme.setTheme(p.id)"
+                      @click="restyle(() => theme.setTheme(p.id))"
                     >
                       <span class="ob-swatch-fill" :style="{ background: p.bg }">
                         <span class="ob-swatch-dot" :style="{ background: p.accent }" />
@@ -147,6 +147,7 @@
 </template>
 
 <script setup>
+import { restyle } from '/src/model/smoothChange'
 import { computed, nextTick, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useI18n } from '/src/i18n'

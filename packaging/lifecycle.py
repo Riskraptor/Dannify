@@ -277,20 +277,33 @@ def app_log():
 
 def open_with_app(path, port, timeout=45):
     """Open *path* the way double-clicking it does, and return what the app
-    logged about it: its own requests for the file and any complaint."""
-    mark = len(app_log())
+    logged about it: its own requests for the file and any complaint.
+
+    Only tickets handed out for this file count: a file opened just before
+    is still being played, and its player keeps asking for more of it (the
+    audio is never cached, so it asks again as it buffers)."""
+    before = app_log()
+    mark = len(before)
+    earlier = set(re.findall(r'GET /opened/([A-Za-z0-9_-]+)', before))
+
+    def requests(text):
+        return [
+            line for line in text.splitlines()
+            if 'GET /opened/' in line and 'cover=1' not in line
+            and not any(f'/opened/{k}' in line for k in earlier)
+        ]
+
     launch(port, str(path))
     t, name = time.time(), Path(path).name
     while time.time() - t < timeout:
         new = app_log()[mark:]
-        served = [line for line in new.splitlines() if 'GET /opened/' in line and 'cover=1' not in line]
+        served = requests(new)
         refused = [line for line in new.splitlines() if 'cannot open' in line and name in line]
         if refused or any(re.search(r' (200|206) ', line) for line in served):
             return served, refused
         time.sleep(1)
     new = app_log()[mark:]
-    return ([line for line in new.splitlines() if 'GET /opened/' in line and 'cover=1' not in line],
-            [line for line in new.splitlines() if 'cannot open' in line and name in line])
+    return requests(new), [line for line in new.splitlines() if 'cannot open' in line and name in line]
 
 
 def open_with_vault(data, songs):
@@ -460,8 +473,9 @@ def stage_update():
 
     def tweak(src):
         (src / 'runtime' / 'marker.txt').write_text(new)
-        support = src / 'config' / 'support.json'
-        support.write_text(support.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
+        # One file that was already there changes too, not only a new one.
+        changed = src / 'runtime' / 'webview' / 'js' / 'state.js'
+        changed.write_text(changed.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
 
     build_release(new, tweak)
     port = serve(new)

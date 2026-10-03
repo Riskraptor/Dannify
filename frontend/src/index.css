@@ -354,6 +354,80 @@
     background-color: var(--scroll-thumb-hover) !important;
   }
 
+  /* Appearance changes (model/smoothChange.js): a palette or typeface
+     cross-fades in; a new interface size dips out and back. */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.32s;
+    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+  #app {
+    transition: opacity 0.16s ease;
+  }
+  html.is-resizing #app {
+    opacity: 0;
+    transition-duration: 0.11s;
+  }
+
+  /* Overlay scrollbars (model/overlayScroll.js): the pane's own bar is
+     hidden, and a thin one floats over the content instead. */
+  .os-host {
+    scrollbar-width: none;
+  }
+  .os-host::-webkit-scrollbar {
+    display: none;
+  }
+  .os-bar {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    height: 0;
+    pointer-events: none;
+  }
+  .os-bar.is-off {
+    display: none;
+  }
+  .os-track {
+    position: absolute;
+    top: 3px;
+    right: 2px;
+    width: 10px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .os-bar.is-on .os-track,
+  .os-bar.is-drag .os-track {
+    opacity: 1;
+    transition-duration: 0.12s;
+  }
+  .os-thumb {
+    position: absolute;
+    top: 0;
+    right: 1px;
+    width: 5px;
+    border-radius: 999px;
+    background: var(--scroll-thumb);
+    transition:
+      width 0.12s ease,
+      background-color 0.12s ease;
+    will-change: transform;
+  }
+  /* Bigger to grab than it looks. */
+  .os-thumb::before {
+    content: '';
+    position: absolute;
+    inset: -4px -2px -4px -8px;
+  }
+  .os-bar.is-on .os-thumb,
+  .os-bar.is-drag .os-thumb {
+    pointer-events: auto;
+  }
+  .os-bar.is-near .os-thumb,
+  .os-bar.is-drag .os-thumb {
+    width: 8px;
+    background: var(--scroll-thumb-hover);
+  }
+
   h1,
   h2,
   h3 {

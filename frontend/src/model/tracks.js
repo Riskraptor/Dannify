@@ -226,6 +226,31 @@ export function shuffleRows(rows) {
   })
 }
 
+// Songs sent to the queue one after another are counted in one notice
+// ("Added 4 songs to the queue") rather than a new one for each.
+const QUEUE_RUN_MS = 4000
+let queueRun = { kind: '', count: 0, at: 0, title: '' }
+
+function queueNotice(kind, list) {
+  const now = Date.now()
+  if (queueRun.kind !== kind || now - queueRun.at > QUEUE_RUN_MS) {
+    queueRun = { kind, count: 0, at: now, title: '' }
+  }
+  queueRun.count += list.length
+  queueRun.at = now
+  queueRun.title = list[0].title
+  const one = queueRun.count === 1
+  const text =
+    kind === 'next'
+      ? one
+        ? t('actions.willPlayNext', { title: queueRun.title })
+        : t('actions.willPlayNextMany', { count: queueRun.count })
+      : one
+        ? t('actions.addedToQueue', { title: queueRun.title })
+        : t('actions.addedToQueueMany', { count: queueRun.count })
+  toast(text, { icon: kind === 'next' ? 'ph:queue' : 'ph:list-plus', key: `queue:${kind}` })
+}
+
 export function playNext(rows) {
   const list = playable(rows)
   if (!list.length) {
@@ -233,12 +258,7 @@ export function playNext(rows) {
     return
   }
   usePlayer().enqueue(list.map(rowToTrack), { next: true })
-  toast(
-    list.length === 1
-      ? t('actions.willPlayNext', { title: list[0].title })
-      : t('actions.willPlayNextMany', { count: list.length }),
-    { icon: 'ph:queue' }
-  )
+  queueNotice('next', list)
 }
 
 /** Move a queued song to play straight after the current one. */
@@ -250,7 +270,7 @@ function moveUpNext(index) {
   // shuffle order as well as in the list.
   player.removeFromQueue(index)
   player.enqueue([track], { next: true })
-  toast(t('actions.willPlayNext', { title: track.title || '' }), { icon: 'ph:queue' })
+  queueNotice('next', [{ title: track.title || '' }])
 }
 
 export function addToQueue(rows) {
@@ -260,12 +280,7 @@ export function addToQueue(rows) {
     return
   }
   usePlayer().enqueue(list.map(rowToTrack))
-  toast(
-    list.length === 1
-      ? t('actions.addedToQueue', { title: list[0].title })
-      : t('actions.addedToQueueMany', { count: list.length }),
-    { icon: 'ph:list-plus' }
-  )
+  queueNotice('add', list)
 }
 
 // ---------------------------------------------------------------------------
