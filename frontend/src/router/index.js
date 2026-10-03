@@ -2,6 +2,7 @@ import { createWebHistory, createRouter } from 'vue-router'
 import Home from '/src/views/Home.vue'
 import Library from '/src/views/Library.vue'
 import config from '/src/config'
+import { ensureFullWindow } from '/src/desktop/fullWindow'
 
 // Home and Songs are where the app opens, so they come with it. Every other
 // page is its own file, read the first time it is needed: the window has less
@@ -17,6 +18,7 @@ const NowPlaying = () => import('/src/views/NowPlaying.vue')
 const ExploreArtist = () => import('/src/views/ExploreArtist.vue')
 const ExploreCollection = () => import('/src/views/ExploreCollection.vue')
 const Settings = () => import('/src/views/Settings.vue')
+const Mood = () => import('/src/views/Mood.vue')
 
 const routes = [
   { path: '/', name: 'Home', component: Home },
@@ -42,6 +44,7 @@ const routes = [
     props: { mode: 'playlist' },
   },
   { path: '/settings', name: 'Settings', component: Settings },
+  { path: '/browse/:params', name: 'Mood', component: Mood },
   { path: '/:pathMatch(.*)*', redirect: { name: 'Home' } },
 ]
 
@@ -69,9 +72,15 @@ router.onError((err, to) => {
   window.location.assign(to ? router.resolve(to).href : window.location.href)
 })
 
+// Going to a page from the mini player ("Go to artist", "Open" on a notice):
+// the page is the point, so the full window comes back to show it.
+router.afterEach((to, from) => {
+  if (from.matched.length && to.fullPath !== from.fullPath) ensureFullWindow()
+})
+
 // Fetch the other pages once things are quiet, so none waits on its file.
 function warmPages() {
-  for (const load of [Search, Artists, Artist, Downloads, Liked, Playlist, NowPlaying, ExploreArtist, ExploreCollection, Settings]) {
+  for (const load of [Search, Artists, Artist, Downloads, Liked, Playlist, NowPlaying, ExploreArtist, ExploreCollection, Settings, Mood]) {
     load().catch(() => {})
   }
 }

@@ -1,6 +1,7 @@
 <template>
   <div class="pb-12">
     <ViewHeader
+      :tile="{ icon: 'ph:users-three-fill', kind: 'tile-artists' }"
       :title="t('artists.title')"
       :eyebrow="t('nav.yourLibrary')"
       :subtitle="lib.artists.value.length ? t('artists.count', { count: lib.artists.value.length }) : t('artists.subtitle')"

@@ -853,6 +853,12 @@ def build_app() -> FastAPI:
 
         asyncio.create_task(_tidy_benches())
 
+        async def _flush_reports() -> None:
+            await asyncio.sleep(20.0)
+            await api.flush_reports()
+
+        asyncio.create_task(_flush_reports())
+
         # Watch the music folder for changes made outside the app. Deleting an
         # album in Explorer used to leave it listed here until the next
         # restart, with play buttons that led nowhere.

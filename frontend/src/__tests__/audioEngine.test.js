@@ -58,6 +58,11 @@ class FakeContext {
   createDynamicsCompressor() {
     return new Node('limiter')
   }
+  createStereoPanner() {
+    const n = new Node('panner')
+    n.pan = new Param(0)
+    return n
+  }
   createMediaElementSource(el) {
     const n = new Node('source')
     n.el = el
@@ -108,11 +113,12 @@ describe('the sound path', () => {
   it('goes deck level, fade, equalizer, preamp, volume, limiter, speakers', () => {
     const { nodes, el } = made()
     const kinds = nodes.map((n) => n.kind)
-    // source, norm, fade, the meeting point, the bands, preamp, volume, limiter, out
+    // source, norm, fade, the meeting point, the bands, preamp, balance,
+    // mono, volume, limiter, out
     expect(kinds).toEqual([
       'source', 'gain', 'gain', 'gain',
       ...EQ_BANDS.map(() => 'filter'),
-      'gain', 'gain', 'limiter', 'destination',
+      'gain', 'panner', 'gain', 'gain', 'limiter', 'destination',
     ])
     expect(nodes.slice(4, 14).map((f) => f.frequency.value)).toEqual(EQ_BANDS)
     expect(nodes[4].type).toBe('lowshelf')
@@ -127,7 +133,7 @@ describe('the sound path', () => {
       const { engine, ctx } = made({ eq: false })
       const kinds = () => chain(ctx.sources[0]).map((n) => n.kind)
       expect(engine.eqInPath).toBe(false)
-      expect(kinds()).toEqual(['source', 'gain', 'gain', 'gain', 'gain', 'gain', 'limiter', 'destination'])
+      expect(kinds()).toEqual(['source', 'gain', 'gain', 'gain', 'gain', 'panner', 'gain', 'gain', 'limiter', 'destination'])
       engine.setEq(true, EQ_PRESETS.vocal)
       expect(kinds()).toContain('filter')
       // Off: flat at once, out of the path once it has settled there.
@@ -169,6 +175,35 @@ describe('the sound path', () => {
     }
   })
 
+  it('balances left and right, and mixes to one channel for mono', () => {
+    const { engine, nodes } = made()
+    const panner = nodes.find((n) => n.kind === 'panner')
+    const mono = nodes[nodes.indexOf(panner) + 1]
+    engine.setBalance(-0.4)
+    expect(panner.pan.value).toBeCloseTo(-0.4)
+    engine.setBalance(5)
+    expect(panner.pan.value).toBe(1)
+    expect(mono.channelCount).toBe(2)
+    engine.setMono(true)
+    expect(mono.channelCount).toBe(1)
+    expect(mono.channelInterpretation).toBe('speakers')
+    engine.setMono(false)
+    expect(mono.channelCount).toBe(2)
+  })
+
+  it('draws the equalizer from the filters themselves, flat when it is off', () => {
+    const { engine, ctx } = made({ eq: false })
+    expect([...engine.eqResponse([100, 1000])]).toEqual([0, 0])
+    engine.setEq(true, EQ_PRESETS.bass)
+    // The fake filters answer +2 dB each at every frequency.
+    for (const n of chain(ctx.sources[0]).filter((x) => x.kind === 'filter')) {
+      n.getFrequencyResponse = (f, mag) => mag.fill(Math.pow(10, 2 / 20))
+    }
+    const curve = engine.eqResponse([100, 1000])
+    const preamp = -3 // half the +6 dB boost taken back
+    expect(curve[0]).toBeCloseTo(EQ_BANDS.length * 2 + preamp, 1)
+  })
+
   it('two decks meet at the same point before the equalizer', () => {
     const { ctx, engine, nodes } = made()
     engine.attach({ volume: 1 })
@@ -197,10 +232,12 @@ describe('the sound path', () => {
 
   it('sets the listener volume after the equalizer, and a deck level and fade on the deck', async () => {
     const { engine, deck, nodes } = made()
+    // The gain just before the limiter.
+    const volume = nodes[nodes.findIndex((n) => n.kind === 'limiter') - 1]
     engine.setVolume(0.4)
-    expect(nodes[15].gain.value).toBe(0.4)
+    expect(volume.gain.value).toBe(0.4)
     engine.setVolume(3)
-    expect(nodes[15].gain.value).toBe(1)
+    expect(volume.gain.value).toBe(1)
     deck.setNorm(0.5)
     expect(nodes[1].gain.value).toBe(0.5)
     deck.setFade(0)
@@ -209,7 +246,7 @@ describe('the sound path', () => {
   })
 
   it('a limiter that catches peaks: high ratio, fast attack, just under full scale', () => {
-    const limiter = made().nodes[16]
+    const limiter = made().nodes.find((n) => n.kind === 'limiter')
     expect(limiter.ratio.value).toBeGreaterThanOrEqual(12)
     expect(limiter.threshold.value).toBeLessThan(0)
     expect(limiter.attack.value).toBeLessThan(0.01)

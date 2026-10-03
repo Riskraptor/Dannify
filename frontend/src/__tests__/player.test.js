@@ -601,3 +601,25 @@ describe('the sleep timer (4.3)', () => {
     }
   })
 })
+
+describe('the volume level for evened-out songs (4.5)', () => {
+  it('quiet, normal and loud move the target, and are kept', async () => {
+    start(1)
+    expect(P.volumeLevel.value).toBe('normal')
+    P.setVolumeLevel('quiet')
+    expect(P.volumeLevel.value).toBe('quiet')
+    expect(store.get('dannify-level')).toBe('quiet')
+    P.setVolumeLevel('nonsense')
+    expect(P.volumeLevel.value).toBe('quiet')
+  })
+
+  it('keeps balance in range and remembers mono', () => {
+    P.setBalance(-3)
+    expect(P.balance.value).toBe(-1)
+    P.setBalance(0.256)
+    expect(P.balance.value).toBe(0.26)
+    P.setMono(true)
+    expect(P.mono.value).toBe(true)
+    expect(store.get('dannify-mono')).toBe('1')
+  })
+})

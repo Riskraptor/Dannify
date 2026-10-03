@@ -82,7 +82,7 @@
          pointer moves when it opens. -->
     <div v-if="panel" class="mini-panel" data-no-drag>
       <template v-if="panel === 'lyrics'">
-        <LyricsPanel v-if="cur" class="mini-lyrics" />
+        <LyricsPanel v-if="cur" class="mini-lyrics" compact />
         <div v-else class="mini-empty">
           <Icon icon="ph:microphone-stage" class="mb-2 h-8 w-8 opacity-40" />
           <p>{{ t('panel.lyricsIdle') }}</p>

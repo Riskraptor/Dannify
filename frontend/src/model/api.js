@@ -222,9 +222,12 @@ function getArtist(name) {
 function reportClientError(payload) {
   return API.post('/api/client-error', payload)
 }
-// The logs and details in one file, to send when something is wrong.
-function makeProblemReport() {
-  return API.post('/api/support/report')
+// Problem reports, sent from inside the app (see report.py).
+function getReportStatus() {
+  return API.get('/api/support/report/status')
+}
+function sendReport(payload) {
+  return API.post('/api/support/report/send', payload, { timeout: 90000 })
 }
 
 // Playlists made in the app (kept on this PC).
@@ -323,6 +326,13 @@ function discardUpdate() {
 // --- Online explorer (Spotify-style discovery) ---
 function exploreSearch(q, limit = 20) {
   return API.get('/api/explore/search', { params: { q, limit } })
+}
+// Moods and genres (Search before anything is typed).
+function getMoods() {
+  return API.get('/api/explore/moods')
+}
+function getMoodPlaylists(params) {
+  return API.get('/api/explore/moods/playlists', { params: { params } })
 }
 function exploreArtist(id) {
   return API.get('/api/explore/artist', { params: { id } })
@@ -448,7 +458,8 @@ export default {
   getArtists,
   getArtist,
   reportClientError,
-  makeProblemReport,
+  getReportStatus,
+  sendReport,
   getPlaylists,
   getPlaylist,
   createPlaylist,
@@ -463,6 +474,8 @@ export default {
   refreshArtists,
   exploreSearch,
   exploreArtist,
+  getMoods,
+  getMoodPlaylists,
   exploreAlbum,
   explorePlaylist,
   // account + personalization

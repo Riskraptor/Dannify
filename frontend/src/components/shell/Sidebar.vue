@@ -17,121 +17,165 @@
       />
     </div>
 
-    <div class="sb-divider" />
-
-    <div class="sb-group">
-      <div v-if="!rail" class="sb-heading">
-        <span>{{ t('nav.yourLibrary') }}</span>
+    <!-- Your Library, the way a music app has it: one list of what is yours
+         (your songs, liked songs, playlists, artists) with chips to narrow
+         it, rather than three headed lists and a column of links. -->
+    <div class="sb-lib">
+      <div class="sb-lib-head" :class="{ 'is-rail': rail }">
         <button
-          v-if="!ui.forceRail.value && !ui.isCompact.value"
-          class="icon-btn h-7 w-7"
-          :title="t('nav.collapseSidebar') + ' (Ctrl+B)'"
+          class="sb-lib-title"
+          :title="(rail ? t('nav.expandSidebar') : t('nav.collapseSidebar')) + ' (Ctrl+B)'"
+          :disabled="ui.forceRail.value || ui.isCompact.value"
           @click="ui.toggleSidebar()"
         >
-          <Icon icon="ph:sidebar-simple" class="h-4 w-4" />
+          <Icon :icon="rail ? 'ph:books-fill' : 'ph:books'" class="h-5 w-5 shrink-0" />
+          <span v-if="!rail">{{ t('nav.yourLibrary') }}</span>
         </button>
-      </div>
-      <SideLink :to="{ name: 'Library' }" icon="ph:music-notes" active-icon="ph:music-notes-fill" :label="t('nav.songs')" :rail="rail" :active="route.name === 'Library'" :count="lib.tracks.value.length || null" />
-      <SideLink :to="{ name: 'Artists' }" icon="ph:users-three" active-icon="ph:users-three-fill" :label="t('nav.artists')" :rail="rail" :active="route.name === 'Artists' || route.name === 'Artist'" />
-      <SideLink v-if="account.signedIn.value" :to="{ name: 'Liked' }" icon="ph:heart" active-icon="ph:heart-fill" :label="t('account.likedSongs')" :rail="rail" :active="route.name === 'Liked'" :count="account.liked.value.length || null" />
-      <SideLink :to="{ name: 'Downloads' }" icon="ph:download-simple" active-icon="ph:download-simple-bold" :label="t('nav.downloads')" :rail="rail" :active="route.name === 'Downloads'" :badge="dl.active || null" />
-    </div>
-
-    <!-- Your artists: a quick-access list, like a streaming app's library -->
-    <div v-overlay-scroll class="sb-scroll">
-      <!-- Playlists made here. Songs dragged out of any list can be dropped
-           on one to add them. -->
-      <div v-if="!rail" class="sb-subrow">
-        <p class="sb-subheading">{{ t('playlists.title') }}</p>
-        <button class="icon-btn h-7 w-7" :title="t('playlists.new')" @click="playlists.createPlaylist()">
+        <button
+          v-if="!rail"
+          class="sb-plus"
+          :title="t('playlists.new')"
+          @click="playlists.createPlaylist()"
+        >
           <Icon icon="ph:plus" class="h-4 w-4" />
         </button>
       </div>
-      <button v-else class="sb-artist sb-new" :title="t('playlists.new')" @click="playlists.createPlaylist()">
-        <span class="sb-avatar sb-new-mark"><Icon icon="ph:plus" class="h-4 w-4" /></span>
-      </button>
-      <router-link
-        v-for="p in playlists.recent.value"
-        :key="p.id"
-        :to="{ name: 'Playlist', params: { id: p.id } }"
-        class="sb-artist"
-        :class="{
-          'is-active': route.name === 'Playlist' && route.params.id === p.id,
-          'is-drop': dropOn === p.id,
-        }"
-        :title="rail ? p.name : ''"
-        @contextmenu="onPlaylistMenu($event, p)"
-        @dragenter="onDragOver($event, p)"
-        @dragover="onDragOver($event, p)"
-        @dragleave="onDragLeave($event, p)"
-        @drop="onDrop($event, p)"
-      >
-        <PlaylistArt :covers="p.covers" :size="36" radius="sm" class="sb-plart" />
-        <span v-if="!rail" class="min-w-0 flex-1">
-          <span class="block truncate text-[13px] font-medium">{{ p.name }}</span>
-          <span class="block truncate text-[11px] text-fg/50">
-            {{ t('playlists.songsCount', { count: p.count }) }}
-          </span>
-        </span>
-      </router-link>
-      <p
-        v-if="!rail && playlists.loaded.value && !playlists.list.value.length"
-        class="sb-note"
-      >
-        {{ t('playlists.none') }}
-      </p>
+      <div v-if="!rail" class="sb-chips" role="tablist" :aria-label="t('nav.yourLibrary')">
+        <button
+          v-if="filter"
+          class="sb-chip sb-chip-clear"
+          :title="t('nav.showEverything')"
+          @click="setFilter('')"
+        >
+          <Icon icon="ph:x" class="h-3.5 w-3.5" />
+        </button>
+        <button
+          v-for="f in filters"
+          v-show="!filter || filter === f.id"
+          :key="f.id"
+          class="sb-chip"
+          role="tab"
+          :aria-selected="filter === f.id"
+          :class="{ 'is-on': filter === f.id }"
+          @click="setFilter(filter === f.id ? '' : f.id)"
+        >
+          {{ t(f.label) }}
+        </button>
+      </div>
+    </div>
 
-      <!-- The signed-in account's own playlists on YouTube Music. -->
-      <template v-if="account.signedIn.value && ytPlaylists.length">
-        <p v-if="!rail" class="sb-subheading">{{ t('playlists.fromYouTube') }}</p>
+    <div v-overlay-scroll class="sb-scroll">
+      <!-- Pinned: the collections that are always there. -->
+      <template v-if="!filter || filter === 'playlists'">
+        <router-link
+          v-for="pin in pins"
+          :key="pin.id"
+          :to="pin.to"
+          class="sb-row"
+          :class="{ 'is-active': pin.active }"
+          :title="rail ? pin.label : ''"
+        >
+          <span class="sb-tile" :class="pin.tile">
+            <Icon :icon="pin.icon" class="h-[19px] w-[19px]" />
+            <span v-if="rail && pin.badge" class="sb-tile-badge">{{ pin.badge }}</span>
+          </span>
+          <span v-if="!rail" class="sb-row-text">
+            <span class="sb-row-title">{{ pin.label }}</span>
+            <span class="sb-row-sub">
+              <Icon v-if="pin.pinned" icon="ph:push-pin-fill" class="sb-pin" />
+              {{ pin.sub }}
+            </span>
+          </span>
+          <span v-if="!rail && pin.badge" class="badge sb-badge">{{ pin.badge }}</span>
+        </router-link>
+      </template>
+
+      <!-- Playlists made here. Songs dragged out of any list can be dropped
+           on one to add them. -->
+      <template v-if="!filter || filter === 'playlists'">
+        <router-link
+          v-for="p in playlists.recent.value"
+          :key="p.id"
+          :to="{ name: 'Playlist', params: { id: p.id } }"
+          class="sb-row"
+          :class="{
+            'is-active': route.name === 'Playlist' && route.params.id === p.id,
+            'is-drop': dropOn === p.id,
+          }"
+          :title="rail ? p.name : ''"
+          @contextmenu="onPlaylistMenu($event, p)"
+          @dragenter="onDragOver($event, p)"
+          @dragover="onDragOver($event, p)"
+          @dragleave="onDragLeave($event, p)"
+          @drop="onDrop($event, p)"
+        >
+          <PlaylistArt :covers="p.covers" :size="44" radius="sm" class="sb-art" />
+          <span v-if="!rail" class="sb-row-text">
+            <span class="sb-row-title">{{ p.name }}</span>
+            <span class="sb-row-sub">
+              {{ t('playlists.playlist') }} · {{ t('playlists.songsCount', { count: p.count }) }}
+            </span>
+          </span>
+        </router-link>
+        <button
+          v-if="!rail && playlists.loaded.value && !playlists.list.value.length"
+          class="sb-row sb-row-new"
+          @click="playlists.createPlaylist()"
+        >
+          <span class="sb-tile is-new"><Icon icon="ph:plus" class="h-[18px] w-[18px]" /></span>
+          <span class="sb-row-text">
+            <span class="sb-row-title">{{ t('playlists.new') }}</span>
+            <span class="sb-row-sub">{{ t('playlists.noneShort') }}</span>
+          </span>
+        </button>
+
+        <!-- The signed-in account's own playlists on YouTube Music. -->
         <router-link
           v-for="p in ytPlaylists"
           :key="p.browse_id"
           :to="{ name: 'ExplorePlaylist', params: { id: p.browse_id } }"
-          class="sb-artist"
+          class="sb-row"
           :class="{ 'is-active': route.name === 'ExplorePlaylist' && route.params.id === p.browse_id }"
           :title="rail ? p.name : ''"
         >
-          <CoverImage class="sb-plart" :src="p.cover_url" kind="playlist" radius="sm" :size="36" />
-          <span v-if="!rail" class="min-w-0 flex-1">
-            <span class="block truncate text-[13px] font-medium">{{ p.name }}</span>
-            <span class="block truncate text-[11px] text-fg/50">{{ p.author || t('explore.playlist') }}</span>
+          <CoverImage class="sb-art" :src="p.cover_url" kind="playlist" radius="sm" :size="44" />
+          <span v-if="!rail" class="sb-row-text">
+            <span class="sb-row-title">{{ p.name }}</span>
+            <span class="sb-row-sub">
+              <Icon icon="ph:youtube-logo-fill" class="sb-pin" />
+              {{ t('explore.playlist') }}{{ p.author ? ` · ${p.author}` : '' }}
+            </span>
           </span>
         </router-link>
       </template>
 
-      <template v-if="topArtists.length">
-        <p v-if="!rail" class="sb-subheading">{{ t('nav.yourArtists') }}</p>
+      <template v-if="!filter || filter === 'artists'">
         <router-link
           v-for="a in topArtists"
           :key="a.name"
           :to="{ name: 'Artist', params: { name: a.name } }"
-          class="sb-artist"
+          class="sb-row"
           :class="{ 'is-active': route.name === 'Artist' && route.params.name === a.name }"
           :title="rail ? a.name : ''"
           @contextmenu="onArtistMenu($event, a)"
         >
           <!-- CoverImage, not a bare <img>: a picture that failed is tried
-               again when its file changes or the library is read again. The
-               bare one remembered the failure by artist name for as long as
-               the app ran, so an artist first seen mid-download kept a grey
-               circle until a restart. -->
+               again when its file changes or the library is read again. -->
           <CoverImage
-            class="sb-avatar"
+            class="sb-art is-round"
             :src="artistLinks.artistPhoto(a.name, 96)"
             :fallback="a.cover ? API.coverFileURL(a.cover, a.cover_v) : ''"
             kind="artist"
             round
           />
-          <span v-if="!rail" class="min-w-0 flex-1">
-            <span class="block truncate text-[13px] font-medium">{{ a.name }}</span>
-            <span class="block truncate text-[11px] text-fg/50">
-              {{ t('nav.artistSongs', { count: a.count }) }}
-            </span>
+          <span v-if="!rail" class="sb-row-text">
+            <span class="sb-row-title">{{ a.name }}</span>
+            <span class="sb-row-sub">{{ t('explore.artist') }} · {{ t('nav.artistSongs', { count: a.count }) }}</span>
           </span>
         </router-link>
       </template>
-      <div v-else-if="lib.loaded.value && !rail" class="sb-empty">
+
+      <div v-if="lib.loaded.value && !rail && !lib.tracks.value.length && !filter" class="sb-empty">
         <p class="text-[13px] font-semibold">{{ t('nav.emptyLibraryTitle') }}</p>
         <p class="mt-1 text-xs text-fg/55">{{ t('nav.emptyLibraryHint') }}</p>
         <button class="btn btn-pill mt-3 h-7 text-xs" @click="ui.focusSearch()">
@@ -141,14 +185,6 @@
     </div>
 
     <div class="sb-group sb-foot">
-      <button
-        v-if="rail && !ui.forceRail.value && !ui.isCompact.value"
-        class="sb-link"
-        :title="t('nav.expandSidebar') + ' (Ctrl+B)'"
-        @click="ui.toggleSidebar()"
-      >
-        <Icon icon="ph:sidebar-simple" class="sb-icon" />
-      </button>
       <div class="sb-foot-row" :class="{ 'is-rail': rail }">
         <SideLink :to="{ name: 'Settings' }" icon="ph:gear-six" active-icon="ph:gear-six-fill" :label="t('nav.settings')" :rail="rail" :active="route.name === 'Settings'" />
         <!-- Supporting the app: always here, never in the way. -->
@@ -226,6 +262,78 @@ function onArtistMenu(e, a) {
 
 const support = useSupport()
 
+// ----- your library ----------------------------------------------------------
+const FILTER_KEY = 'dn.libFilter'
+const filters = [
+  { id: 'playlists', label: 'nav.filterPlaylists' },
+  { id: 'artists', label: 'nav.filterArtists' },
+]
+function readFilter() {
+  try {
+    const v = localStorage.getItem(FILTER_KEY) || ''
+    return filters.some((f) => f.id === v) ? v : ''
+  } catch {
+    return ''
+  }
+}
+const filter = ref(readFilter())
+function setFilter(v) {
+  filter.value = v
+  try {
+    if (v) localStorage.setItem(FILTER_KEY, v)
+    else localStorage.removeItem(FILTER_KEY)
+  } catch {
+    // remembered for this run only
+  }
+}
+
+// What is always at the top: the collections the app keeps for you.
+const pins = computed(() => {
+  const n = lib.tracks.value.length
+  return [
+    {
+      id: 'songs',
+      to: { name: 'Library' },
+      label: t('nav.yourSongs'),
+      sub: t('nav.artistSongs', { count: n }),
+      icon: 'ph:music-notes-fill',
+      tile: 'tile-songs',
+      pinned: true,
+      active: route.name === 'Library',
+    },
+    account.signedIn.value && {
+      id: 'liked',
+      to: { name: 'Liked' },
+      label: t('account.likedSongs'),
+      sub: `${t('playlists.playlist')} · ${t('nav.artistSongs', { count: account.liked.value.length })}`,
+      icon: 'ph:heart-fill',
+      tile: 'tile-liked',
+      pinned: true,
+      active: route.name === 'Liked',
+    },
+    {
+      id: 'artists',
+      to: { name: 'Artists' },
+      label: t('nav.artists'),
+      sub: t('nav.artistCount', { count: lib.artists.value.length }),
+      icon: 'ph:users-three-fill',
+      tile: 'tile-artists',
+      pinned: true,
+      active: route.name === 'Artists',
+    },
+    {
+      id: 'downloads',
+      to: { name: 'Downloads' },
+      label: t('nav.downloads'),
+      sub: dl.value.active ? t('nav.downloadingNow', { count: dl.value.active }) : t('nav.downloadsSub'),
+      icon: 'ph:download-simple-bold',
+      tile: 'tile-downloads',
+      badge: dl.value.active || null,
+      active: route.name === 'Downloads',
+    },
+  ].filter(Boolean)
+})
+
 // What the account has on YouTube Music, minus the two it fills itself
 // (Liked Music is Liked Songs here; Episodes for Later is podcasts).
 const ytPlaylists = computed(() =>
@@ -236,7 +344,10 @@ const ytPlaylists = computed(() =>
 watch(
   () => account.signedIn.value,
   (on) => {
-    if (on && !(account.playlists.value || []).length) account.loadPlaylists()
+    if (!on) return
+    if (!(account.playlists.value || []).length) account.loadPlaylists()
+    // For the count under Liked Songs.
+    account.loadLiked()
   },
   { immediate: true }
 )
@@ -328,6 +439,190 @@ const SideLink = {
 </script>
 
 <style scoped>
+
+/* --- Your Library ---------------------------------------------------------- */
+.sb-lib {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 4px 6px;
+  border-top: 1px solid rgb(var(--c-tint) / 0.07);
+  margin-top: 6px;
+}
+.sb-lib-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sb-lib-head.is-rail {
+  justify-content: center;
+}
+.sb-lib-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: rgb(var(--c-fg) / 0.72);
+  transition: color 0.12s ease;
+}
+.sb-lib-title:hover:not(:disabled) {
+  color: rgb(var(--c-fg));
+}
+.sb-lib-title:disabled {
+  cursor: default;
+}
+.sb-plus {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  color: rgb(var(--c-fg) / 0.7);
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    transform 0.12s ease;
+}
+.sb-plus:hover {
+  color: rgb(var(--c-fg));
+  background: rgb(var(--c-tint) / 0.1);
+  transform: scale(1.04);
+}
+.sb-chips {
+  display: flex;
+  gap: 8px;
+  padding: 0 4px;
+}
+.sb-chip {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgb(var(--c-tint) / 0.07);
+  color: rgb(var(--c-fg) / 0.9);
+  transition: background-color 0.12s ease;
+}
+.sb-chip:hover {
+  background: rgb(var(--c-tint) / 0.12);
+}
+.sb-chip.is-on {
+  background: rgb(var(--c-fg));
+  color: rgb(var(--c-panel));
+}
+.sb-chip-clear {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  padding: 0;
+}
+.sb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: left;
+  transition: background-color 0.1s ease;
+}
+.sb-row:hover {
+  background: rgb(var(--c-tint) / 0.06);
+}
+.sb-row.is-active {
+  background: rgb(var(--c-tint) / 0.1);
+}
+.sb-row.is-active .sb-row-title {
+  color: rgb(var(--c-accent));
+}
+.sb-row.is-drop {
+  background: rgb(var(--c-accent) / 0.18);
+  box-shadow: inset 0 0 0 1px rgb(var(--c-accent));
+}
+.sb-art,
+.sb-tile {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+.sb-art.is-round {
+  border-radius: 999px;
+  overflow: hidden;
+}
+.sb-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+/* The pinned collections, each with a colour of its own. */
+.sb-tile.is-new {
+  background: rgb(var(--c-tint) / 0.08);
+  color: rgb(var(--c-fg) / 0.75);
+}
+.sb-tile-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  background: rgb(var(--c-accent));
+  color: #000;
+}
+.sb-row-text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.sb-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: rgb(var(--c-fg));
+}
+.sb-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: rgb(var(--c-fg) / 0.55);
+}
+.sb-pin {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: rgb(var(--c-accent));
+}
+.sb-badge {
+  flex-shrink: 0;
+}
+.sidebar.is-rail .sb-row {
+  justify-content: center;
+  padding: 6px 0;
+}
+.sidebar.is-rail .sb-lib {
+  padding-left: 0;
+  padding-right: 0;
+}
 .sidebar {
   display: flex;
   flex-direction: column;

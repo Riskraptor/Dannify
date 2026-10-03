@@ -69,6 +69,16 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
     return f
   })
   const preamp = ctx.createGain()
+  // Left and right, and both in one: for one earbud, or one ear.
+  const balance = typeof ctx.createStereoPanner === 'function' ? ctx.createStereoPanner() : null
+  const mono = ctx.createGain()
+  try {
+    mono.channelCountMode = 'explicit'
+    mono.channelInterpretation = 'speakers'
+    mono.channelCount = 2
+  } catch {
+    // a context that cannot: stereo it stays
+  }
   const volume = ctx.createGain()
   const limiter = ctx.createDynamicsCompressor()
   limiter.threshold.value = -1
@@ -82,7 +92,13 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
   for (let i = 0; i < bands.length - 1; i++) bands[i].connect(bands[i + 1])
   bands[bands.length - 1].connect(preamp)
   input.connect(preamp)
-  preamp.connect(volume)
+  if (balance) {
+    preamp.connect(balance)
+    balance.connect(mono)
+  } else {
+    preamp.connect(mono)
+  }
+  mono.connect(volume)
   volume.connect(limiter)
   limiter.connect(ctx.destination)
   let throughEq = false
@@ -182,6 +198,38 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
       // Half the biggest boost taken back up front; the limiter catches the rest.
       setParam(preamp.gain, on ? dbToGain(-top / 2) : 1, 0.03)
       if (!on && throughEq && !unroute) unroute = setTimeout(() => route(false), 250)
+    },
+    /** -1 (left only) to 1 (right only); 0 is the middle. */
+    setBalance(v) {
+      if (!balance) return
+      setParam(balance.pan, Math.max(-1, Math.min(1, Number(v) || 0)), 0.03)
+    },
+    /** Both channels mixed into one, heard in both ears. */
+    setMono(on) {
+      try {
+        mono.channelCount = on ? 1 : 2
+      } catch {
+        // not supported here
+      }
+    },
+    /**
+     * The equalizer's effect at each of `freqs` (Hz), in dB: the bands and
+     * the preamp together, as the filters themselves compute it.
+     */
+    eqResponse(freqs) {
+      const out = new Float32Array(freqs.length)
+      if (!throughEq) return out
+      const f = Float32Array.from(freqs)
+      const mag = new Float32Array(freqs.length)
+      const phase = new Float32Array(freqs.length)
+      for (const band of bands) {
+        if (typeof band.getFrequencyResponse !== 'function') return out
+        band.getFrequencyResponse(f, mag, phase)
+        for (let i = 0; i < out.length; i++) out[i] += 20 * Math.log10(Math.max(1e-6, mag[i]))
+      }
+      const pre = 20 * Math.log10(Math.max(1e-6, preamp.gain.value))
+      for (let i = 0; i < out.length; i++) out[i] += pre
+      return out
     },
     /** Whether the equalizer's bands are in the path (for tests). */
     get eqInPath() {

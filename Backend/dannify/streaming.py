@@ -984,6 +984,11 @@ def open_stream(video_id: str, start_seconds: float = 0.0) -> tuple[str, Iterato
         '-probesize', '128k',
         '-fflags', '+nobuffer',
         '-flush_packets', '1',
+        # The server's certificate is checked, against Windows' own store.
+        # FFmpeg does not by default: anyone on the same network could have
+        # stood in for Google and fed the player whatever they liked.
+        '-tls_verify',
+        '1',
         # Resilient googlevideo fetch.
         '-reconnect',
         '1',

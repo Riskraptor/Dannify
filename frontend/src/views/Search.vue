@@ -78,8 +78,33 @@
           </span>
         </div>
       </section>
+      <!-- Browse all: YouTube Music's moods and genres, as a music app's
+           search page opens on. -->
+      <section v-if="moods.sections.value.length" class="view-pad browse">
+        <h2 class="browse-head">{{ t('search.browseAll') }}</h2>
+        <template v-for="sec in moods.sections.value" :key="sec.title">
+          <h3 class="browse-title">{{ sec.title }}</h3>
+          <div class="browse-grid">
+            <button
+              v-for="m in sec.items"
+              :key="m.params"
+              class="browse-tile press"
+              :style="{ background: moodColour(m.title) }"
+              @click="openMood(m)"
+            >
+              <span class="browse-name">{{ m.title }}</span>
+              <Icon :icon="moodGlyph(m.title)" class="browse-glyph" />
+            </button>
+          </div>
+        </template>
+      </section>
+      <div v-else-if="!moods.loaded.value" class="view-pad browse">
+        <div class="browse-grid">
+          <div v-for="n in 12" :key="n" class="skeleton browse-tile" />
+        </div>
+      </div>
       <EmptyState
-        v-else
+        v-else-if="!recent.searches.value.length"
         icon="ph:magnifying-glass"
         :title="t('search.emptyTitle')"
         :text="t('search.emptyHintLong')"
@@ -262,6 +287,7 @@ import ViewHeader from '/src/components/ui/ViewHeader.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import { useDeferred } from '/src/model/deferred'
+import { useMoods, moodColour, moodGlyph } from '/src/model/moods'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -271,6 +297,11 @@ const state = useSearchState()
 const libraryIndex = useLibraryIndex()
 const sm = useSearchManager()
 const recent = useRecent()
+const moods = useMoods()
+moods.load()
+function openMood(m) {
+  router.push({ name: 'Mood', params: { params: m.params }, query: { title: m.title } })
+}
 const ui = useUi()
 const scroller = inject('viewScroller', ref(null))
 
@@ -702,5 +733,62 @@ onRefresh(() => {
 }
 .recent-chip-x:hover {
   color: rgb(var(--c-fg));
+}
+.browse {
+  padding-top: 8px;
+}
+.browse-head {
+  margin: 8px 0 4px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.browse-title {
+  margin: 18px 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: rgb(var(--c-fg) / 0.8);
+}
+.browse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+.browse-tile {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  min-height: 96px;
+  border-radius: 8px;
+  text-align: left;
+  color: #fff;
+  transition:
+    transform 0.15s var(--ease-out),
+    filter 0.15s ease;
+}
+.browse-tile:hover {
+  filter: brightness(1.08);
+}
+.browse-name {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  right: 40%;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.2);
+}
+/* The picture, turned and tucked in the corner. */
+.browse-glyph {
+  position: absolute;
+  right: -10px;
+  bottom: -8px;
+  width: 78px;
+  height: 78px;
+  opacity: 0.85;
+  transform: rotate(25deg);
+  filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.3));
 }
 </style>

@@ -136,6 +136,15 @@
       </button>
       <button
         class="icon-btn is-round"
+        :class="{ 'is-active-dot': ui.panel.value === 'about' && !onNowPlaying && cur }"
+        :disabled="!cur"
+        :title="t('panel.aboutButton')"
+        @click="ui.setPanel('about')"
+      >
+        <Icon icon="ph:vinyl-record" class="h-[18px] w-[18px]" />
+      </button>
+      <button
+        class="icon-btn is-round"
         :class="{ 'is-active-dot': ui.panel.value === 'lyrics' && !onNowPlaying && cur }"
         :disabled="!cur"
         :title="`${t('lyrics.title')} (Ctrl+L)`"
@@ -152,6 +161,16 @@
       >
         <Icon icon="ph:queue" class="h-[18px] w-[18px]" />
       </button>
+      <button
+        ref="soundBtn"
+        class="icon-btn is-round"
+        :class="{ 'is-active-dot': soundOpen || player.eq.value.on }"
+        :title="t('sound.title')"
+        @click="soundOpen = !soundOpen"
+      >
+        <Icon icon="ph:sliders-horizontal" class="h-[18px] w-[18px]" />
+      </button>
+      <SoundPanel :open="soundOpen" :anchor="soundBtn" @close="soundOpen = false" />
       <div class="pb-volume">
         <button
           class="icon-btn is-round"
@@ -205,6 +224,7 @@ import { useI18n } from '/src/i18n'
 import CoverImage from '../ui/CoverImage.vue'
 import ArtistLinks from '../ui/ArtistLinks.vue'
 import RangeSlider from '../ui/RangeSlider.vue'
+import SoundPanel from './SoundPanel.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -219,6 +239,9 @@ const cur = computed(() => player.currentTrack.value)
 // --- Sleep timer ---
 // A clock for the minutes left, ticking only while a timer is set.
 const now = ref(Date.now())
+// The sound panel (SoundPanel.vue), from its button beside the volume.
+const soundOpen = ref(false)
+const soundBtn = ref(null)
 let sleepTick = 0
 watch(
   () => player.sleepMode.value,

@@ -151,7 +151,7 @@ function onMenu(e) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
 }
 .mcard-sub {
@@ -160,7 +160,7 @@ function onMenu(e) {
   -webkit-box-orient: vertical;
   overflow: hidden;
   margin-top: 2px;
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.35;
   color: rgb(var(--c-fg) / 0.58);
 }

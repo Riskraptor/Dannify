@@ -89,14 +89,14 @@ onBeforeUnmount(() => {
   padding: 0 10px;
 }
 .shelf-title {
-  font-size: 21px;
+  font-size: 24px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 .shelf-more {
   flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
   color: rgb(var(--c-fg) / 0.55);
 }
 .shelf-more:hover {

@@ -22,7 +22,7 @@
         @play="playAll"
       >
         <template #cover>
-          <div class="liked-cover">
+          <div class="liked-cover tile-liked">
             <Icon icon="ph:heart-fill" class="h-1/2 w-1/2" />
           </div>
         </template>
@@ -162,6 +162,5 @@ onRefresh(reload)
   height: 100%;
   border-radius: 6px;
   color: #fff;
-  background: linear-gradient(135deg, rgb(var(--c-accent)), rgb(var(--c-accent) / 0.45));
 }
 </style>

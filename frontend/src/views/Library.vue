@@ -1,6 +1,10 @@
 <template>
   <div class="pb-12">
-    <ViewHeader :title="t('library.title')" :eyebrow="t('nav.yourLibrary')">
+    <ViewHeader
+      :title="t('library.title')"
+      :eyebrow="t('nav.yourLibrary')"
+      :tile="{ icon: 'ph:music-notes-fill', kind: 'tile-songs' }"
+    >
       <template #meta>
         <template v-if="lib.tracks.value.length">
           {{ t('library.summary', { count: lib.tracks.value.length, duration: totalDuration }) }}

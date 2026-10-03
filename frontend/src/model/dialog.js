@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { rememberFocus } from '/src/model/focusTrap'
+import { ensureFullWindow } from '/src/desktop/fullWindow'
 
 // In-app modal dialogs. Replaces window.confirm()/alert(), which in the
 // desktop shell pop a browser-style "127.0.0.1 says…" box.
@@ -8,6 +9,8 @@ const queue = ref([])
 let giveBack = null
 
 function open(kind, opts) {
+  // A question is never asked inside the mini player: it would not fit.
+  ensureFullWindow()
   if (!queue.value.length) giveBack = rememberFocus()
   return new Promise((resolve) => {
     queue.value = [

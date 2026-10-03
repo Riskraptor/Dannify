@@ -166,7 +166,6 @@ const accountClearSession = () => call('account_clear_session')
 
 // --- Shell integration ------------------------------------------------------
 const revealInFolder = (file) => call('shell_reveal', String(file || ''))
-const revealReport = (path) => call('shell_reveal_report', String(path || ''))
 const openLibraryFolder = () => call('shell_open_library')
 const openExternal = (url) => {
   if (!isDesktop) {
@@ -330,7 +329,6 @@ export const desktop = {
   accountSignIn,
   accountClearSession,
   revealInFolder,
-  revealReport,
   openLibraryFolder,
   openExternal,
   setTheme,
