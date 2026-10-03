@@ -4,6 +4,7 @@
       <div v-if="ui.shortcutsOpen.value" class="sc-layer" @mousedown.self="close">
         <div
           ref="box"
+          v-overlay-scroll
           class="sc menu-surface"
           role="dialog"
           aria-modal="true"

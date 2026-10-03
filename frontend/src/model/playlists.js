@@ -213,6 +213,7 @@ async function addRows(pid, rows) {
     else text = t('playlists.addedMany', { count: fresh.length, name })
     toast(text, {
       icon: 'ph:playlist',
+      key: `playlist:${pid}`,
       action: {
         label: t('playlists.open'),
         run: () => router.push({ name: 'Playlist', params: { id: pid } }),

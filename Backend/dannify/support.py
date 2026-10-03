@@ -35,13 +35,15 @@ def config_paths(data_dir: Path, name: str) -> list[Path]:
 
     import sys
 
-    paths: list[Path] = []
+    # A shipped copy reads none: what it updates from and where it sends
+    # people is built in, not a file anyone can edit to point it somewhere
+    # else. The files are for development and packaging tests.
     if getattr(sys, 'frozen', False):
-        paths.append(Path(sys.executable).parent / 'config' / name)
-    else:
-        paths.append(Path(__file__).resolve().parents[2] / 'packaging' / 'config' / name)
-    paths.append(Path(data_dir) / name)
-    return paths
+        return []
+    return [
+        Path(__file__).resolve().parents[2] / 'packaging' / 'config' / name,
+        Path(data_dir) / name,
+    ]
 
 
 def init(data_dir: Path) -> None:
@@ -56,11 +58,14 @@ def init(data_dir: Path) -> None:
         except Exception:
             logger.opt(exception=True).debug('Could not read {}', path)
 
-    link = os.getenv('DANNIFY_SUPPORT_LINK', '').strip()
-    if link:
-        config['link'] = link
-    if os.getenv('DANNIFY_SUPPORT_DISABLED', '').strip().lower() in ('1', 'true', 'yes'):
-        config['enabled'] = False
+    import sys
+
+    if not getattr(sys, 'frozen', False):
+        link = os.getenv('DANNIFY_SUPPORT_LINK', '').strip()
+        if link:
+            config['link'] = link
+        if os.getenv('DANNIFY_SUPPORT_DISABLED', '').strip().lower() in ('1', 'true', 'yes'):
+            config['enabled'] = False
 
     _config.clear()
     _config.update(config)

@@ -38,7 +38,7 @@
     </div>
 
     <!-- Your artists: a quick-access list, like a streaming app's library -->
-    <div class="sb-scroll">
+    <div v-overlay-scroll class="sb-scroll">
       <!-- Playlists made here. Songs dragged out of any list can be dropped
            on one to add them. -->
       <div v-if="!rail" class="sb-subrow">
@@ -80,6 +80,25 @@
       >
         {{ t('playlists.none') }}
       </p>
+
+      <!-- The signed-in account's own playlists on YouTube Music. -->
+      <template v-if="account.signedIn.value && ytPlaylists.length">
+        <p v-if="!rail" class="sb-subheading">{{ t('playlists.fromYouTube') }}</p>
+        <router-link
+          v-for="p in ytPlaylists"
+          :key="p.browse_id"
+          :to="{ name: 'ExplorePlaylist', params: { id: p.browse_id } }"
+          class="sb-artist"
+          :class="{ 'is-active': route.name === 'ExplorePlaylist' && route.params.id === p.browse_id }"
+          :title="rail ? p.name : ''"
+        >
+          <CoverImage class="sb-plart" :src="p.cover_url" kind="playlist" radius="sm" :size="36" />
+          <span v-if="!rail" class="min-w-0 flex-1">
+            <span class="block truncate text-[13px] font-medium">{{ p.name }}</span>
+            <span class="block truncate text-[11px] text-fg/50">{{ p.author || t('explore.playlist') }}</span>
+          </span>
+        </router-link>
+      </template>
 
       <template v-if="topArtists.length">
         <p v-if="!rail" class="sb-subheading">{{ t('nav.yourArtists') }}</p>
@@ -130,13 +149,24 @@
       >
         <Icon icon="ph:sidebar-simple" class="sb-icon" />
       </button>
-      <SideLink :to="{ name: 'Settings' }" icon="ph:gear-six" active-icon="ph:gear-six-fill" :label="t('nav.settings')" :rail="rail" :active="route.name === 'Settings'" />
+      <div class="sb-foot-row" :class="{ 'is-rail': rail }">
+        <SideLink :to="{ name: 'Settings' }" icon="ph:gear-six" active-icon="ph:gear-six-fill" :label="t('nav.settings')" :rail="rail" :active="route.name === 'Settings'" />
+        <!-- Supporting the app: always here, never in the way. -->
+        <button
+          v-if="support.config.configured"
+          class="sb-give"
+          :title="t('support.sidebar')"
+          @click="support.openSupport()"
+        >
+          <Icon icon="ph:coffee" class="h-[18px] w-[18px]" />
+        </button>
+      </div>
     </div>
   </nav>
 </template>
 
 <script setup>
-import { computed, h, ref } from 'vue'
+import { computed, h, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
@@ -151,6 +181,7 @@ import CoverImage from '/src/components/ui/CoverImage.vue'
 import PlaylistArt from '/src/components/ui/PlaylistArt.vue'
 import { useArtistLinks } from '/src/model/artistLinks'
 import { usePlaylists, entryRow } from '/src/model/playlists'
+import { useSupport } from '/src/model/support'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -192,6 +223,23 @@ function onArtistMenu(e, a) {
     },
   ])
 }
+
+const support = useSupport()
+
+// What the account has on YouTube Music, minus the two it fills itself
+// (Liked Music is Liked Songs here; Episodes for Later is podcasts).
+const ytPlaylists = computed(() =>
+  (account.playlists.value || []).filter(
+    (p) => p && p.browse_id && !['LM', 'SE', 'VLLM', 'VLSE'].includes(p.browse_id)
+  )
+)
+watch(
+  () => account.signedIn.value,
+  (on) => {
+    if (on && !(account.playlists.value || []).length) account.loadPlaylists()
+  },
+  { immediate: true }
+)
 
 // ----- playlists -------------------------------------------------------------
 const playlists = usePlaylists()
@@ -447,6 +495,39 @@ const SideLink = {
   padding: 14px;
   border-radius: 8px;
   background: rgb(var(--c-tint) / 0.05);
+}
+.sb-foot-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.sb-foot-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.sb-foot-row.is-rail {
+  flex-direction: column;
+  align-items: stretch;
+}
+.sb-give {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  color: rgb(var(--c-fg) / 0.5);
+  transition:
+    color 0.12s ease,
+    background-color 0.12s ease;
+}
+.sb-give:hover {
+  color: rgb(var(--c-accent));
+  background: rgb(var(--c-accent) / 0.1);
+}
+.sb-foot-row.is-rail .sb-give {
+  width: auto;
+  height: 40px;
 }
 .sb-foot {
   padding-top: 6px;

@@ -77,15 +77,33 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
   limiter.attack.value = 0.003
   limiter.release.value = 0.25
 
-  let node = input
-  for (const f of bands) {
-    node.connect(f)
-    node = f
-  }
-  node.connect(preamp)
+  // The bands are only in the path while the equalizer is on. Ten filters
+  // at 0 dB sound exactly like none, and still worked on every sample.
+  for (let i = 0; i < bands.length - 1; i++) bands[i].connect(bands[i + 1])
+  bands[bands.length - 1].connect(preamp)
+  input.connect(preamp)
   preamp.connect(volume)
   volume.connect(limiter)
   limiter.connect(ctx.destination)
+  let throughEq = false
+  let unroute = null
+
+  function route(on) {
+    clearTimeout(unroute)
+    unroute = null
+    if (on === throughEq) return
+    throughEq = on
+    try {
+      input.disconnect()
+    } catch {
+      // not connected
+    }
+    input.connect(on ? bands[0] : preamp)
+  }
+
+  // Paused for a while: the audio thread stops altogether until the next
+  // play, rather than running silence through the graph all evening.
+  let idleTimer = null
 
   const now = () => ctx.currentTime
 
@@ -156,12 +174,30 @@ export function createEngine(Ctx = typeof window !== 'undefined' && (window.Audi
     /** Band gains in dB; *on* false is flat. A preamp makes room for boosts. */
     setEq(on, gains) {
       const g = on ? gains : EQ_PRESETS.flat
+      // Into the path first and then off flat, so the sound glides from one
+      // to the other; out of it only once it has glided back to flat.
+      if (on) route(true)
       bands.forEach((f, i) => setParam(f.gain, Math.max(EQ_MIN, Math.min(EQ_MAX, Number(g[i]) || 0)), 0.03))
       const top = Math.max(0, ...g.map((x) => Number(x) || 0))
       // Half the biggest boost taken back up front; the limiter catches the rest.
       setParam(preamp.gain, on ? dbToGain(-top / 2) : 1, 0.03)
+      if (!on && throughEq && !unroute) unroute = setTimeout(() => route(false), 250)
+    },
+    /** Whether the equalizer's bands are in the path (for tests). */
+    get eqInPath() {
+      return throughEq
+    },
+    /** Paused: let the audio thread rest after a while. */
+    idleSoon(ms = 15000) {
+      clearTimeout(idleTimer)
+      idleTimer = setTimeout(() => {
+        idleTimer = null
+        if (ctx.state === 'running' && typeof ctx.suspend === 'function') ctx.suspend().catch(() => {})
+      }, ms)
     },
     resume() {
+      clearTimeout(idleTimer)
+      idleTimer = null
       if (ctx.state !== 'running') return ctx.resume().catch(() => {})
       return Promise.resolve()
     },

@@ -27,6 +27,7 @@
     <div class="shell-center">
       <main
         ref="scroller"
+        v-overlay-scroll
         class="shell-main"
         :class="{ 'is-immersive': isNowPlaying }"
         tabindex="-1"

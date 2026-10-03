@@ -12,6 +12,7 @@ import { installShortcuts } from './desktop/shortcuts'
 import { installDesktopIntegration } from './desktop/integration'
 import { startArtAccent } from './model/artAccent'
 import { installErrorReporting } from './model/problems'
+import { vOverlayScroll } from './model/overlayScroll'
 
 import './index.css'
 
@@ -20,6 +21,7 @@ addCollection(icons)
 
 const app = createApp(App)
 installErrorReporting(app)
+app.directive('overlay-scroll', vOverlayScroll)
 app.use(router)
 installShortcuts()
 installDesktopIntegration()

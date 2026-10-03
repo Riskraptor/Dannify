@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createEngine, fadeCurve, EQ_BANDS, EQ_PRESETS } from '../model/audioEngine'
 
 // A Web Audio stand-in that records how nodes are wired and what they are set to.
@@ -38,6 +38,9 @@ class Node {
     this.out.push(n)
     return n
   }
+  disconnect(n) {
+    this.out = n ? this.out.filter((x) => x !== n) : []
+  }
 }
 class FakeContext {
   constructor() {
@@ -65,6 +68,10 @@ class FakeContext {
     this.state = 'running'
     return Promise.resolve()
   }
+  suspend() {
+    this.state = 'suspended'
+    return Promise.resolve()
+  }
 }
 
 // Every node from a source to the speakers, following the first connection.
@@ -74,13 +81,16 @@ function chain(from) {
   return out
 }
 
-function made() {
+// With the equalizer on unless asked otherwise: its bands are only in the
+// path then.
+function made({ eq = true } = {}) {
   const ctx = new FakeContext()
   const engine = createEngine(function () {
     return ctx
   })
   const el = { volume: 0.3 }
   const deck = engine.attach(el)
+  if (eq) engine.setEq(true, EQ_PRESETS.flat)
   const nodes = chain(ctx.sources[0])
   return { ctx, engine, el, deck, nodes }
 }
@@ -109,6 +119,54 @@ describe('the sound path', () => {
     expect(nodes[13].type).toBe('highshelf')
     // The element plays at full level: every level is set in the graph.
     expect(el.volume).toBe(1)
+  })
+
+  it('leaves the equalizer out of the path while it is off, and puts it back', () => {
+    vi.useFakeTimers()
+    try {
+      const { engine, ctx } = made({ eq: false })
+      const kinds = () => chain(ctx.sources[0]).map((n) => n.kind)
+      expect(engine.eqInPath).toBe(false)
+      expect(kinds()).toEqual(['source', 'gain', 'gain', 'gain', 'gain', 'gain', 'limiter', 'destination'])
+      engine.setEq(true, EQ_PRESETS.vocal)
+      expect(kinds()).toContain('filter')
+      // Off: flat at once, out of the path once it has settled there.
+      engine.setEq(false, EQ_PRESETS.vocal)
+      expect(engine.eqInPath).toBe(true)
+      vi.advanceTimersByTime(300)
+      expect(engine.eqInPath).toBe(false)
+      expect(kinds()).not.toContain('filter')
+      // Back on before it left: it stays.
+      engine.setEq(true, EQ_PRESETS.vocal)
+      engine.setEq(false, EQ_PRESETS.vocal)
+      engine.setEq(true, EQ_PRESETS.vocal)
+      vi.advanceTimersByTime(300)
+      expect(engine.eqInPath).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('rests the audio thread after a long pause and wakes it to play', async () => {
+    vi.useFakeTimers()
+    try {
+      const { engine, ctx } = made()
+      engine.idleSoon(15000)
+      vi.advanceTimersByTime(14000)
+      expect(ctx.state).toBe('running')
+      vi.advanceTimersByTime(2000)
+      expect(ctx.state).toBe('suspended')
+      await engine.resume()
+      expect(ctx.state).toBe('running')
+      // Played again before the time was up: never suspended.
+      engine.idleSoon(15000)
+      vi.advanceTimersByTime(5000)
+      await engine.resume()
+      vi.advanceTimersByTime(20000)
+      expect(ctx.state).toBe('running')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('two decks meet at the same point before the equalizer', () => {

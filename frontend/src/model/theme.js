@@ -122,6 +122,8 @@ export function useTheme() {
     preference,
     currentMode,
     currentTheme,
+    darkTheme,
+    lightTheme,
     themes: THEMES,
     setPreference,
     setTheme,

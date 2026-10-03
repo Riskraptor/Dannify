@@ -862,10 +862,10 @@ def open_proxy(
         'Content-Type': mime,
         # CRITICAL: this is what makes the browser do native seeking.
         'Accept-Ranges': 'bytes',
-        # Brief cache lets the browser re-use cached bytes when the user
-        # scrubs around: without it, every range request is a fresh
-        # network round-trip.
-        'Cache-Control': 'public, max-age=3600',
+        # Not written to the window's cache: a song streamed once would sit
+        # there as a plain audio file anyone could copy. What has been played
+        # stays in the player's own memory for scrubbing back.
+        'Cache-Control': 'no-store',
     }
     # Pass through Content-Length / Content-Range: these tell the
     # browser the exact duration and the byte range it just got back.

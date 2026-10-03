@@ -177,3 +177,20 @@ describe('holding while the pointer is on a toast', () => {
     expect(shown()).toHaveLength(0)
   })
 })
+
+describe('a toast with a key changes in place', () => {
+  it('replaces the one with the same key instead of stacking', async () => {
+    const { toast, useToasts } = await import('/src/model/toast.js')
+    const { toasts } = useToasts()
+    toasts.value = []
+    const a = toast('Added "One" to the queue', { key: 'queue:add' })
+    const b = toast('Added 2 songs to the queue', { key: 'queue:add' })
+    const c = toast('Added 3 songs to the queue', { key: 'queue:add' })
+    expect(a).toBe(b)
+    expect(b).toBe(c)
+    expect(toasts.value).toHaveLength(1)
+    expect(toasts.value[0].message).toBe('Added 3 songs to the queue')
+    toast('Something else')
+    expect(toasts.value).toHaveLength(2)
+  })
+})

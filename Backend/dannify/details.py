@@ -98,7 +98,9 @@ def refresh(root: Path, path: Path, lyrics_providers: Optional[list[str]] = None
     ext = str(head.get('ext') or '.m4a')
     # The same bench a download uses, so a crash leaves nothing behind that
     # the startup sweep does not clear.
-    bench = Path(tempfile.mkdtemp(prefix='dnf-dl-'))
+    from . import bench as _bench_mod  # noqa: PLC0415
+
+    bench = _bench_mod.make('dnf-dl-')
     try:
         plain = bench / f'song{ext}'
         with open(plain, 'wb') as out:

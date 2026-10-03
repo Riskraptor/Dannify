@@ -36,6 +36,7 @@ from mutagen.oggvorbis import OggVorbis
 
 from . import lyrics as lyrics_mod
 from .itunes import fetch_genre as _fetch_itunes_genre
+from . import bench as _bench_mod
 from .m3u import sanitize_playlist_name
 from .providers import enrich_from_match, find_match, find_match_for_video
 
@@ -104,7 +105,7 @@ class DownloadStopped(Exception):
 # yet, which was gone a moment later), the song showed twice with no album,
 # and the picture never came back until the app was restarted. Now nothing
 # reaches the music folder until it is a finished, sealed track.
-_BENCH_PREFIXES = ('dnf-dl-', 'dnf-repair-')
+_BENCH_PREFIXES = _bench_mod.PREFIXES
 # The encoder's name for a format where it differs from the file's. "ogg" is
 # a container: the encoder only knows the codec inside it, and every download
 # with OGG chosen in Settings failed on the unknown name.
@@ -114,33 +115,13 @@ _AUDIO_SUFFIXES = frozenset({'.mp3', '.m4a', '.flac', '.ogg', '.opus', '.aac', '
 
 
 def _bench() -> Path:
-    return Path(tempfile.mkdtemp(prefix=_BENCH_PREFIXES[0]))
+    return _bench_mod.make('dnf-dl-')
 
 
 def sweep_benches(max_age: float = 6 * 3600) -> int:
-    """Remove benches a crash or a power cut left behind.
+    """Remove work folders a crash left behind (see bench.py)."""
 
-    Only old ones: a second copy of the app may be using a fresh one right now.
-    """
-
-    removed = 0
-    root = Path(tempfile.gettempdir())
-    cutoff = time.time() - max_age
-    try:
-        entries = list(root.iterdir())
-    except OSError:
-        return 0
-    for entry in entries:
-        if not entry.name.startswith(_BENCH_PREFIXES):
-            continue
-        try:
-            if not entry.is_dir() or entry.stat().st_mtime > cutoff:
-                continue
-        except OSError:
-            continue
-        shutil.rmtree(entry, ignore_errors=True)
-        removed += 1
-    return removed
+    return _bench_mod.sweep(max_age)
 
 
 def _move_beside(source: Path, target: Path) -> None:

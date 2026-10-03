@@ -1,5 +1,5 @@
 <template>
-  <div ref="root" class="vl" :class="{ 'vl-self': !scroller }">
+  <div ref="root" v-overlay-scroll="!scroller" class="vl" :class="{ 'vl-self': !scroller }">
     <div class="vl-inner" :style="{ height: `${items.length * itemHeight}px` }">
       <div
         v-for="i in indices"

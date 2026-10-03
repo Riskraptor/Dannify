@@ -266,8 +266,12 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
 .plain-scroll {
   height: 100%;
   overflow-y: auto;
+  /* Never sideways: the line being sung is drawn a touch larger, and each
+     line's hover reaches past the text, and together they let the pane be
+     dragged left and right. The padding keeps both inside it. */
+  overflow-x: hidden;
   scrollbar-width: none;
-  padding: 0 0.25rem;
+  padding: 0 0.75rem 0 0.6rem;
   /* WebView2 keeps the scroll anchored to a growing element otherwise, which
      fights our own scrollTo during playback. */
   overflow-anchor: none;
@@ -343,6 +347,7 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
   color: rgb(var(--c-fg) / 0.55);
   cursor: pointer;
   transform-origin: left center;
+  overflow-wrap: anywhere;
   /* The graded part: one step away is almost sharp, four steps is scenery. */
   opacity: calc(1 - var(--d) * 0.17);
   filter: blur(calc(var(--d) * 0.5px));

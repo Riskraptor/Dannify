@@ -79,6 +79,13 @@ def init(data_dir: Path) -> None:
 
 
 def repo() -> str:
+    # A shipped copy updates from where it was built to, and nowhere else: a
+    # variable or a file pointing it at another repository would have it
+    # install whatever that one offered.
+    import sys
+
+    if getattr(sys, 'frozen', False):
+        return DEFAULT_REPO
     return (
         os.getenv('DANNIFY_UPDATE_REPO') or _settings['repo'] or DEFAULT_REPO
     ).strip('/ ')
@@ -303,13 +310,46 @@ def download(
         name = 'Dannify-Setup.exe'
     target = dest_dir / name
     partial = target.with_suffix(target.suffix + '.part')
+    # Which file the partial copy is of, as the server named it. A dropped
+    # connection used to throw the whole download away and start again;
+    # it carries on from where it stopped now, and only if the file on the
+    # server is still the same one ("If-Range"), so two never get spliced.
+    tag_file = partial.with_suffix(partial.suffix + '.tag')
     bar = Progress(progress_cb)
     bar.stage('downloading', 0.0, 0.98)
-    request = urllib.request.Request(url, headers={'User-Agent': _USER_AGENT})
+
+    have = partial.stat().st_size if partial.is_file() else 0
+    tag = ''
+    if have:
+        try:
+            tag = tag_file.read_text(encoding='utf-8').strip()
+        except OSError:
+            tag = ''
+        if not tag:
+            have = 0
+    headers = {'User-Agent': _USER_AGENT}
+    if have:
+        headers['Range'] = f'bytes={have}-'
+        headers['If-Range'] = tag
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
-        total = int(response.headers.get('Content-Length') or 0)
-        done = 0
-        with open(partial, 'wb') as handle:
+        resumed = have > 0 and response.status == 206 and str(
+            response.headers.get('Content-Range') or ''
+        ).startswith(f'bytes {have}-')
+        if not resumed:
+            have = 0
+        length = int(response.headers.get('Content-Length') or 0)
+        total = have + length if length else 0
+        etag = response.headers.get('ETag') or response.headers.get('Last-Modified') or ''
+        try:
+            if etag:
+                tag_file.write_text(etag, encoding='utf-8')
+            else:
+                tag_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+        done = have
+        with open(partial, 'ab' if resumed else 'wb') as handle:
             while True:
                 chunk = response.read(256 * 1024)
                 if not chunk:
@@ -319,14 +359,14 @@ def download(
                 if total:
                     bar(done / total, done, total)
     # A connection that closes early ends the loop just like a finished one
-    # does. A setup that is short is no use to anyone, so say so here rather
-    # than hand it over as ready.
+    # does. A setup that is short is no use to anyone: it stays as a partial
+    # copy for the next try to finish, and is not handed over as ready.
     if total and done != total:
-        partial.unlink(missing_ok=True)
         raise RuntimeError(f'download stopped early ({done} of {total} bytes)')
     partial.replace(target)
+    tag_file.unlink(missing_ok=True)
     bar.done()
-    logger.info('Update downloaded to {}', target)
+    logger.info('Update downloaded to {}{}', target, ' (resumed)' if resumed else '')
     return target
 
 
@@ -459,7 +499,7 @@ def discard_staged() -> None:
         shutil.rmtree(folder, ignore_errors=True)
 
 
-_DOWNLOADED = re.compile(r'^(?:delta-|Dannify-Setup-)(\d+(?:\.\d+)*)(?:\.exe)?(?:\.part)?$')
+_DOWNLOADED = re.compile(r'^(?:delta-|Dannify-Setup-)(\d+(?:\.\d+)*)(?:\.exe)?(?:\.part(?:\.tag)?)?$')
 
 
 def prune_downloads(dest_dir: Path, current: str) -> list[str]:

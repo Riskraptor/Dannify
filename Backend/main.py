@@ -741,6 +741,10 @@ def build_app() -> FastAPI:
     from dannify import playlists as _playlists
 
     _playlists.init(DATABASE_DIR)
+    from dannify import bench as _bench
+
+    # Songs are put together in here before they are sealed (see bench.py).
+    _bench.set_root(DATABASE_DIR / 'work')
     # Donations and the GitHub updater are config-only: see
     # dannify/support.py and dannify/updates.py.
     from dannify import support as _support
@@ -1087,14 +1091,15 @@ def build_app() -> FastAPI:
             status = 206
 
         length = max(0, end - start + 1)
-        # Both parts are known without decrypting anything, and both change
-        # whenever the file does. Without them every backward seek was a fresh
-        # read and a fresh decrypt of everything before the point seeked to.
+        # Never kept by the window. "no-cache" still let the browser store
+        # the decrypted audio in its cache folder on disk, where it could be
+        # copied out as a plain file: the one thing a sealed song must never
+        # be. Seeking does not need it either: any range is decrypted on its
+        # own (vault.open_range), as fast as reading it.
         headers = {
             'Accept-Ranges': 'bytes',
             'Content-Length': str(length),
-            'Cache-Control': 'private, no-cache',
-            'ETag': f'"{int(stat.st_mtime)}-{total}"',
+            'Cache-Control': 'no-store',
             'Content-Type': media,
         }
         if status == 206:
