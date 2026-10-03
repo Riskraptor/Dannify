@@ -1,8 +1,7 @@
+import { reactive, ref } from 'vue'
 import API from '/src/model/api'
 import router from '/src/router'
-import { toast } from '/src/model/toast'
-import { desktop } from '/src/desktop/bridge'
-import { t } from '/src/i18n'
+import { ensureFullWindow } from '/src/desktop/fullWindow'
 
 // Errors nobody caught, in the page: written to the app's log, where a
 // problem report picks them up. They used to go to a console nobody can open
@@ -67,23 +66,43 @@ export function installErrorReporting(app) {
 }
 
 // --- the report ------------------------------------------------------------
+// Written in the app and sent from it (Backend/dannify/report.py). Closed,
+// and shown as coming soon, until the report server exists.
 
-const busy = { value: false }
+const status = reactive({ loaded: false, enabled: false, pending: 0 })
+const dialogOpen = ref(false)
+let loading = null
 
-/** Save the logs and details in one file and show it. Resolves to its path. */
-export async function saveProblemReport() {
-  if (busy.value) return ''
-  busy.value = true
-  try {
-    const res = await API.makeProblemReport()
-    const path = res.data && res.data.path
-    if (desktop.isDesktop && path) desktop.revealReport(path)
-    toast(t('problems.saved', { name: res.data.name }), { icon: 'ph:file-zip', timeout: 9000 })
-    return path || ''
-  } catch {
-    toast(t('problems.failed'), { tone: 'error', icon: 'ph:warning' })
-    return ''
-  } finally {
-    busy.value = false
+function loadStatus() {
+  if (!loading) {
+    loading = API.getReportStatus()
+      .then((res) => {
+        Object.assign(status, res.data || {}, { loaded: true })
+      })
+      .catch(() => {})
+      .finally(() => {
+        loading = null
+      })
   }
+  return loading
+}
+
+async function openReport() {
+  await loadStatus()
+  if (!status.enabled) return false
+  await ensureFullWindow()
+  dialogOpen.value = true
+  return true
+}
+
+/** Send one. Resolves to {id, status: 'sent' | 'queued'}; rejects on failure. */
+async function send(payload) {
+  const res = await API.sendReport(payload)
+  if (res.data && res.data.status === 'queued') status.pending += 1
+  return res.data
+}
+
+export function useReporting() {
+  if (!status.loaded) loadStatus()
+  return { status, dialogOpen, loadStatus, openReport, send }
 }

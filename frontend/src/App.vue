@@ -58,11 +58,13 @@
   <DialogHost />
   <ToastHost />
   <ShortcutsDialog />
+  <ReportDialog />
   <LyricsSubmit :open="submitOpen" @close="submitOpen = false" />
   <Onboarding />
 </template>
 
 <script setup>
+import { ensureFullWindow } from '/src/desktop/fullWindow'
 import { ref, computed, provide, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TitleBar from './components/shell/TitleBar.vue'
@@ -75,6 +77,7 @@ import ResizeHandles from './components/shell/ResizeHandles.vue'
 import ContextMenuHost from './components/ui/ContextMenuHost.vue'
 import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
+import ReportDialog from '/src/components/ui/ReportDialog.vue'
 import ShortcutsDialog from './components/ui/ShortcutsDialog.vue'
 import LyricsSubmit from './components/LyricsSubmit.vue'
 import Onboarding from './components/Onboarding.vue'
@@ -166,7 +169,9 @@ const removeAfter = router.afterEach((to, from) => {
 
 // --- Lyrics contribution modal (opened from several places) ---------------
 const submitOpen = ref(false)
-function openSubmit() {
+async function openSubmit() {
+  // Never inside the mini player: the editor needs the room.
+  await ensureFullWindow()
   submitOpen.value = true
 }
 

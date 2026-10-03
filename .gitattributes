@@ -12,3 +12,6 @@
 *.jpg binary
 *.exe binary
 *.db binary
+
+# Shell scripts run inside Linux containers.
+*.sh text eol=lf

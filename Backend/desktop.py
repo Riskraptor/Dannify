@@ -2329,24 +2329,6 @@ class DesktopApi:
             return False
         return _reveal_in_explorer(target)
 
-    def shell_reveal_report(self, path: str) -> bool:
-        """Show a problem report the app just saved, selected in Explorer.
-
-        Only a report: a file named like one, in a folder called reports.
-        """
-        try:
-            target = Path(str(path or '')).resolve()
-        except (OSError, ValueError):
-            return False
-        if (
-            target.parent.name != 'reports'
-            or not target.name.startswith('Dannify-report-')
-            or target.suffix.lower() != '.zip'
-            or not target.is_file()
-        ):
-            return False
-        return _reveal_in_explorer(target)
-
     def shell_open_library(self) -> bool:
         base = _library_path('')
         if base is None:

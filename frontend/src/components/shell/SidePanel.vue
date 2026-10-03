@@ -3,7 +3,7 @@
     class="spanel"
     :class="{ 'is-floating': ui.panelFloating.value }"
     :style="{ width: `${ui.panelWidth.value}px` }"
-    :aria-label="tab === 'lyrics' ? t('lyrics.title') : t('player.queue')"
+    :aria-label="tab === 'lyrics' ? t('lyrics.title') : tab === 'about' ? t('panel.about') : t('player.queue')"
   >
     <div
       v-if="!ui.panelFloating.value"
@@ -30,6 +30,14 @@
         >
           <Icon icon="ph:queue" class="h-4 w-4" />
           {{ t('player.queue') }}
+        </button>
+        <button
+          class="seg-item"
+          :class="{ 'is-active': tab === 'about' }"
+          @click="ui.openPanel('about')"
+        >
+          <Icon icon="ph:vinyl-record" class="h-4 w-4" />
+          {{ t('panel.about') }}
         </button>
       </div>
       <button
@@ -70,6 +78,7 @@
       </div>
       <LyricsControls v-if="cur" bar class="sp-tools" />
     </template>
+    <NowPlayingAbout v-else-if="tab === 'about'" />
     <QueueList v-else class="min-h-0 flex-1" />
   </aside>
 </template>
@@ -86,6 +95,7 @@ import CoverImage from '../ui/CoverImage.vue'
 import LyricsPanel from '../LyricsPanel.vue'
 import LyricsControls from '../LyricsControls.vue'
 import QueueList from './QueueList.vue'
+import NowPlayingAbout from './NowPlayingAbout.vue'
 
 const { t } = useI18n()
 const ui = useUi()

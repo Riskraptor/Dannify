@@ -72,10 +72,16 @@ const trackGain = ref(1)
 // A setting ("Even out loudness"): on unless it has been turned off.
 const NORMALIZE_KEY = 'dannify-normalize'
 const normalizeLoudness = ref(readStored(NORMALIZE_KEY) !== '0')
+// How loud the evened-out level is: quiet for a library or late at night,
+// loud for a noisy room. The same three Spotify offers. Loud leans on the
+// limiter for the peaks it would otherwise clip.
+const LEVEL_KEY = 'dannify-level'
+export const VOLUME_LEVELS = { quiet: -5, normal: 0, loud: 3 }
+const volumeLevel = ref(VOLUME_LEVELS[readStored(LEVEL_KEY)] !== undefined ? readStored(LEVEL_KEY) : 'normal')
 
 function gainFor(loudnessDb) {
   if (typeof loudnessDb !== 'number' || !Number.isFinite(loudnessDb)) return 1
-  const db = TARGET_LUFS - (loudnessDb - 14)
+  const db = TARGET_LUFS + (VOLUME_LEVELS[volumeLevel.value] || 0) - (loudnessDb - 14)
   if (Math.abs(db) < 0.05) return 1
   if (db > 0) return engine ? Math.pow(10, Math.min(db, MAX_BOOST_DB) / 20) : 1
   return Math.pow(10, Math.max(db, MAX_ATTENUATION_DB) / 20)
@@ -190,6 +196,39 @@ function setGapless(on) {
   gapless.value = !!on
   storeSetting(GAPLESS_KEY, on ? '1' : '0')
   cancelTransition()
+}
+
+function setVolumeLevel(level) {
+  if (VOLUME_LEVELS[level] === undefined) return
+  volumeLevel.value = level
+  storeSetting(LEVEL_KEY, level)
+  // The playing song moves to the new level now, gently.
+  const track = currentTrack.value
+  if (track) {
+    track.gain = gainOfTrack(track)
+    trackGain.value = track.gain
+  }
+  applyVolume()
+}
+
+// Balance and mono (the sound engine's; see audioEngine.js).
+const BALANCE_KEY = 'dannify-balance'
+const MONO_KEY = 'dannify-mono'
+const balance = ref(Math.max(-1, Math.min(1, Number(readStored(BALANCE_KEY)) || 0)))
+const mono = ref(readStored(MONO_KEY) === '1')
+function setBalance(v) {
+  balance.value = Math.max(-1, Math.min(1, Math.round((Number(v) || 0) * 100) / 100))
+  storeSetting(BALANCE_KEY, String(balance.value))
+  if (engine) engine.setBalance(balance.value)
+}
+function setMono(on) {
+  mono.value = !!on
+  storeSetting(MONO_KEY, on ? '1' : '0')
+  if (engine) engine.setMono(mono.value)
+}
+/** The equalizer's response at `freqs`, in dB, for drawing it. */
+function eqCurve(freqs) {
+  return engine && typeof engine.eqResponse === 'function' ? engine.eqResponse(freqs) : new Float32Array(freqs.length)
 }
 
 function setNormalizeLoudness(on) {
@@ -474,6 +513,8 @@ function ensureAudio() {
       deck = engine.attach(audio)
       decks.push(deck)
       applyEq()
+      engine.setBalance(balance.value)
+      engine.setMono(mono.value)
     } catch {
       // The element would not join the graph: play without the engine.
       engine = null
@@ -2233,6 +2274,13 @@ export function usePlayer() {
     autoplayRadio,
     setAutoplayRadio,
     normalizeLoudness,
+    volumeLevel,
+    setVolumeLevel,
+    balance,
+    setBalance,
+    mono,
+    setMono,
+    eqCurve,
     setNormalizeLoudness,
     startRadio,
     // the sound engine

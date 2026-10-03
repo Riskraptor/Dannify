@@ -1,6 +1,10 @@
 <template>
   <div class="pb-12">
-    <ViewHeader :title="t('downloads.title')" :subtitle="summary">
+    <ViewHeader
+      :title="t('downloads.title')"
+      :subtitle="summary"
+      :tile="{ icon: 'ph:download-simple-bold', kind: 'tile-downloads' }"
+    >
       <template #actions>
         <button
           v-if="desktop.isDesktop"

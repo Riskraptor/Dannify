@@ -45,6 +45,17 @@
       </div>
     </div>
 
+    <!-- No lyrics, in the mini player: a line, and a way to the full window,
+         where there is room to write them. -->
+    <div v-else-if="compact" class="lp-center px-6 text-center">
+      <Icon icon="ph:microphone-stage" class="h-8 w-8 text-fg/25" />
+      <p class="text-[13px] text-fg/60">{{ t('lyrics.none') }}</p>
+      <button class="lp-full-link" @click="onContribute">
+        {{ t('lyrics.addInFullWindow') }}
+        <Icon icon="ph:arrow-square-out" class="h-3.5 w-3.5" />
+      </button>
+    </div>
+
     <!-- No lyrics: the contribute path is the headline action here -->
     <div v-else class="lp-center px-6 text-center">
       <Icon icon="ph:microphone-stage" class="h-10 w-10 text-fg/25" />
@@ -118,6 +129,8 @@ const RESUME_MS = 3000
 defineProps({
   // Big, left-aligned typography for the full Now Playing view.
   large: { type: Boolean, default: false },
+  // The mini player: no big buttons; editing happens in the full window.
+  compact: { type: Boolean, default: false },
 })
 
 const { t } = useI18n()
@@ -556,5 +569,16 @@ onBeforeUnmount(() => clearTimeout(resumeTimer))
   .lyric-line {
     font-size: 1.2rem;
   }
+}
+.lp-full-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgb(var(--c-accent));
+}
+.lp-full-link:hover {
+  text-decoration: underline;
 }
 </style>

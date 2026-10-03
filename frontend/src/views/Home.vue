@@ -1,7 +1,8 @@
 <template>
-  <div class="pb-12">
-    <header class="view-pad flex items-end justify-between gap-4 pb-5 pt-7">
-      <h1 class="text-[30px] font-bold tracking-tight">{{ greeting }}</h1>
+  <div class="home pb-12">
+    <div class="home-band" aria-hidden="true" />
+    <header class="view-pad relative flex items-end justify-between gap-4 pb-5 pt-7">
+      <h1 class="text-[32px] font-bold tracking-tight">{{ greeting }}</h1>
       <button
         v-if="!account.signedIn.value && desktop.isDesktop"
         class="btn btn-pill shrink-0"
@@ -542,5 +543,17 @@ function submitWelcome() {
   display: flex;
   gap: 8px;
   margin-left: auto;
+}
+.home {
+  position: relative;
+  isolation: isolate;
+}
+.home-band {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: -1;
+  height: 300px;
+  background: linear-gradient(180deg, rgb(var(--c-accent) / 0.16) 0%, rgb(var(--c-accent) / 0.05) 55%, transparent 100%);
+  pointer-events: none;
 }
 </style>

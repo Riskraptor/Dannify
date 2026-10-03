@@ -5,6 +5,7 @@ import { openContextMenu } from '/src/model/contextMenu'
 import { copyText, readText } from '/src/model/clipboard'
 import { useOnboarding } from '/src/model/onboarding'
 import { t } from '/src/i18n'
+import { ensureFullWindow } from '/src/desktop/fullWindow'
 
 // App-wide keyboard shortcuts and right-click behaviour. Playback keys
 // (Space, arrows, M/N/P/S/R) live in model/player.js.
@@ -110,7 +111,9 @@ function onKeyDown(e) {
     desktop.setMini(!desktop.state.mini)
   } else if ((ctrl && key === '/') || key === 'F1') {
     e.preventDefault()
-    ui.shortcutsOpen.value = true
+    ensureFullWindow().then(() => {
+      ui.shortcutsOpen.value = true
+    })
   } else if (key === 'Escape' && !typing) {
     if (desktop.state.fullscreen) {
       e.preventDefault()

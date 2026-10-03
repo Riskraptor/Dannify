@@ -306,6 +306,22 @@ def open_with_app(path, port, timeout=45):
     return requests(new), [line for line in new.splitlines() if 'cannot open' in line and name in line]
 
 
+def changed_packed(old_manifest, new_manifest, package):
+    """(bytes, count): the packed size of the files that differ between two
+    releases' manifests, as stored in the new release's package."""
+    import zipfile
+
+    try:
+        old = json.loads(Path(old_manifest).read_text(encoding='utf-8'))['files']
+    except (OSError, ValueError, KeyError):
+        old = {}
+    new = json.loads(Path(new_manifest).read_text(encoding='utf-8'))['files']
+    changed = [k for k, v in new.items() if k not in old or old[k].get('sha256') != v.get('sha256')]
+    with zipfile.ZipFile(package) as z:
+        packed = {i.filename: i.compress_size for i in z.infolist()}
+    return sum(packed.get(k, 0) for k in changed), len(changed)
+
+
 def open_with_vault(data, songs):
     """What this build's vault (Backend/dannify/vault.py, the source it was
     built from) makes of *songs* with the keys in *data*: {name: (problem,
@@ -784,8 +800,14 @@ def stage_upgrade():
           f'{same}/{len(new)}, {count - 1} files')
     fetched = sum(n for p, n in SERVED if p.endswith('.zip'))
     size = (OUT / f'package-{VERSION}.zip').stat().st_size
-    check('only the changed files were downloaded', 0 < fetched < size * 0.5,
-          f'{fetched} of {size} bytes, {len(SERVED)} requests')
+    # What changed between the two releases, packed: about that, and not a
+    # file more. Half the package used to be the bar, which a release that
+    # mostly changes the program itself, in a package made small, can pass
+    # over while fetching exactly what it should.
+    want, count = changed_packed(OUT / f'package-{PREVIOUS}.json', OUT / f'package-{VERSION}.json',
+                                 OUT / f'package-{VERSION}.zip')
+    check('only the changed files were downloaded', 0 < fetched <= want * 1.05 + 512 * 1024 and fetched < size,
+          f'{fetched} bytes for {count} changed files of {want} packed; package {size}, {len(SERVED)} requests')
     check('the running copy was not touched', sha(ROOT / 'app' / 'Dannify.exe') == old_exe)
     check('quits', quit_app())
     music_before = add_own_file(lib)

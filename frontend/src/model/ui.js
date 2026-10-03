@@ -60,7 +60,7 @@ function toggleSidebar() {
 }
 
 // --- Right side panel (queue / lyrics) --------------------------------------
-const panel = ref(load('dn.panel', null)) // 'queue' | 'lyrics' | null
+const panel = ref(load('dn.panel', null)) // 'queue' | 'lyrics' | 'about' | null
 persist('dn.panel', panel)
 const panelWidth = ref(load('dn.panelWidth', 340))
 persist('dn.panelWidth', panelWidth)

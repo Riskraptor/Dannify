@@ -354,6 +354,25 @@
     background-color: var(--scroll-thumb-hover) !important;
   }
 
+  /* The collections the app keeps (your songs, liked songs, artists,
+     downloads): one colour each, the same in the side bar and on the page. */
+  .tile-songs {
+    --band: rgb(var(--c-accent) / 0.22);
+    background: linear-gradient(135deg, rgb(var(--c-accent)), rgb(var(--c-accent) / 0.45));
+  }
+  .tile-liked {
+    --band: rgb(90 60 210 / 0.32);
+    background: linear-gradient(135deg, #4a2fbd, #8fb6e6);
+  }
+  .tile-artists {
+    --band: rgb(200 105 55 / 0.28);
+    background: linear-gradient(135deg, #b5523b, #e8a33d);
+  }
+  .tile-downloads {
+    --band: rgb(40 130 150 / 0.3);
+    background: linear-gradient(135deg, #1e6f86, #46b5a6);
+  }
+
   /* Appearance changes (model/smoothChange.js): a palette or typeface
      cross-fades in; a new interface size dips out and back. */
   ::view-transition-old(root),

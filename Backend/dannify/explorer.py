@@ -192,6 +192,61 @@ def _playlist_card(r: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Moods and genres: what Search shows before anything is typed
+# ---------------------------------------------------------------------------
+
+_MOODS_TTL = 60 * 60 * 12
+_MOOD_PLAYLISTS = 40
+
+
+def moods() -> list[dict[str, Any]]:
+    """YouTube Music's moods and genres: ``[{title, items: [{title, params}]}]``."""
+
+    key = 'moods'
+    hit = _cache.get(key)
+    if hit and time.time() - hit[0] < _MOODS_TTL:
+        return hit[1]
+    raw = _ytm().get_mood_categories() or {}
+    sections = []
+    for title, items in raw.items():
+        cards = [
+            {'title': str(i.get('title') or ''), 'params': str(i.get('params') or '')}
+            for i in items or []
+            if isinstance(i, dict) and i.get('params') and i.get('title')
+        ]
+        if cards:
+            sections.append({'title': str(title), 'items': cards})
+    if sections:
+        _cache_put(key, sections)
+    return sections
+
+
+def mood_playlists(params: str) -> list[dict[str, Any]]:
+    """The playlists for one mood or genre, as playlist cards."""
+
+    key = f'mood::{params}'
+    hit = _cache.get(key)
+    if hit and time.time() - hit[0] < _MOODS_TTL:
+        return hit[1]
+    rows = _ytm().get_mood_playlists(params) or []
+    cards = []
+    for r in rows[:_MOOD_PLAYLISTS]:
+        pid = r.get('playlistId') if isinstance(r, dict) else None
+        if not pid or not r.get('title'):
+            continue
+        cards.append({
+            'type': 'playlist',
+            'browse_id': pid,
+            'name': r['title'],
+            'cover_url': _thumb(r),
+            'description': str(r.get('description') or ''),
+        })
+    if cards:
+        _cache_put(key, cards)
+    return cards
+
+
 class SearchUnavailable(ConnectionError):
     """No part of a search could reach YouTube Music."""
 
