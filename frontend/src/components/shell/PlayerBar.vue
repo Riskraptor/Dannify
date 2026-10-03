@@ -125,6 +125,16 @@
     <!-- RIGHT: panels, volume, window modes -->
     <div class="pb-right">
       <button
+        class="icon-btn is-round pb-sleep"
+        :class="{ 'is-on': player.sleepMode.value !== 'off' }"
+        :title="sleepTitle"
+        :aria-label="sleepTitle"
+        @click="onSleepMenu"
+      >
+        <Icon :icon="player.sleepMode.value !== 'off' ? 'ph:moon-fill' : 'ph:moon'" class="h-[18px] w-[18px]" />
+        <span v-if="sleepLeft" class="pb-sleep-left">{{ sleepLeft }}</span>
+      </button>
+      <button
         class="icon-btn is-round"
         :class="{ 'is-active-dot': ui.panel.value === 'lyrics' && !onNowPlaying && cur }"
         :disabled="!cur"
@@ -181,7 +191,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { usePlayer, formatTime } from '/src/model/player'
@@ -205,6 +215,54 @@ const account = useAccount()
 const libIndex = useLibraryIndex()
 
 const cur = computed(() => player.currentTrack.value)
+
+// --- Sleep timer ---
+// A clock for the minutes left, ticking only while a timer is set.
+const now = ref(Date.now())
+let sleepTick = 0
+watch(
+  () => player.sleepMode.value,
+  (mode) => {
+    clearInterval(sleepTick)
+    now.value = Date.now()
+    if (mode === 'time') sleepTick = setInterval(() => (now.value = Date.now()), 15000)
+  },
+  { immediate: true }
+)
+onBeforeUnmount(() => clearInterval(sleepTick))
+const sleepMinutes = computed(() =>
+  player.sleepMode.value === 'time' ? Math.max(1, Math.ceil((player.sleepEndsAt.value - now.value) / 60000)) : 0
+)
+const sleepLeft = computed(() => (sleepMinutes.value ? String(sleepMinutes.value) : ''))
+const sleepTitle = computed(() => {
+  if (player.sleepMode.value === 'time') return t('player.sleepStopsIn', { count: sleepMinutes.value })
+  if (player.sleepMode.value === 'track') return t('player.sleepAfterSong')
+  return t('player.sleep')
+})
+function onSleepMenu(e) {
+  const mode = player.sleepMode.value
+  openContextMenu(
+    e,
+    [
+      { header: mode === 'off' ? t('player.sleep') : sleepTitle.value },
+      ...[15, 30, 45, 60, 90].map((m) => ({
+        label: t('player.sleepMinutes', { count: m }),
+        icon: 'ph:timer',
+        action: () => player.setSleepTimer(m),
+      })),
+      {
+        label: t('player.sleepEndOfSong'),
+        icon: 'ph:music-note',
+        checked: mode === 'track',
+        disabled: !cur.value,
+        action: () => player.setSleepAfterTrack(),
+      },
+      { divider: true },
+      { label: t('player.sleepOff'), icon: 'ph:x', disabled: mode === 'off', action: () => player.cancelSleep() },
+    ],
+    { anchor: true }
+  )
+}
 const row = computed(() =>
   cur.value ? queueRow(cur.value, player.currentIndex.value) : null
 )
@@ -373,6 +431,26 @@ function onTrackMenu(e) {
   text-align: center;
   color: rgb(var(--c-fg) / 0.55);
   font-variant-numeric: tabular-nums;
+}
+.pb-sleep {
+  position: relative;
+}
+.pb-sleep.is-on {
+  color: rgb(var(--c-accent));
+}
+.pb-sleep-left {
+  position: absolute;
+  right: -2px;
+  bottom: -1px;
+  min-width: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: rgb(var(--c-accent));
+  color: rgb(var(--c-on-accent, 0 0 0));
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
 }
 .pb-right {
   display: flex;

@@ -12,6 +12,9 @@ import { rememberFocus } from '/src/model/focusTrap'
 const menu = ref(null)
 let seq = 0
 let giveBack = null
+// Where the last menu opened. A menu item that leads to a second menu
+// ("Add to playlist") opens it in the same place.
+let lastPoint = { x: 0, y: 0, alignRight: false }
 
 function normalize(items) {
   const out = []
@@ -56,7 +59,22 @@ export function openContextMenu(event, items, { anchor = false } = {}) {
     y = r.top + r.height / 2
   }
   if (!menu.value) giveBack = rememberFocus()
+  lastPoint = { x, y, alignRight: anchor }
   menu.value = { id: ++seq, x, y, items: list, alignRight: anchor }
+}
+
+export function lastMenuPoint() {
+  return { ...lastPoint }
+}
+
+/** Open a menu at a point: where an earlier one was (see lastMenuPoint). */
+export function openMenuAt(point, items) {
+  const list = normalize(items)
+  if (!list.length) return
+  const p = point || lastPoint
+  if (!menu.value) giveBack = rememberFocus()
+  lastPoint = { x: p.x, y: p.y, alignRight: !!p.alignRight }
+  menu.value = { id: ++seq, x: p.x, y: p.y, items: list, alignRight: !!p.alignRight }
 }
 
 export function closeContextMenu() {

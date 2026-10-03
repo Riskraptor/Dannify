@@ -105,8 +105,9 @@ import RangeSlider from '../ui/RangeSlider.vue'
 import LyricsPanel from '../LyricsPanel.vue'
 import QueueList from './QueueList.vue'
 
-// Matches MINI_H / MINI_MAX_H in Backend/desktop.py: the bar on its own,
-// and the bar with a panel under it.
+// The bar on its own (MINI_H in Backend/desktop.py), and the bar with a
+// panel under it. The shell allows up to MINI_MAX_H (560); 460 is what the
+// panel asks for, room for the queue or a few lines of lyrics.
 const BAR_H = 124
 const OPEN_H = 460
 const KEY = 'dn.miniPanel'

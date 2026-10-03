@@ -738,6 +738,9 @@ def build_app() -> FastAPI:
     from dannify import artist_links as _artist_links
 
     _artist_links.init(DATABASE_DIR)
+    from dannify import playlists as _playlists
+
+    _playlists.init(DATABASE_DIR)
     # Donations and the GitHub updater are config-only: see
     # dannify/support.py and dannify/updates.py.
     from dannify import support as _support
@@ -814,8 +817,8 @@ def build_app() -> FastAPI:
 
         logger.info('Worker pool ready ({} threads)', max_workers)
 
-        api.state.download_semaphore = asyncio.Semaphore(
-            max(1, int(api.state.settings.get('max_parallel_downloads', 3)))
+        api.state.download_semaphore = api.DownloadSlots(
+            int(api.state.settings.get('max_parallel_downloads', 3))
         )
         logger.log('SUCCESS', 'Dannify is ready: happy listening ♪')
 

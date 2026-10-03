@@ -10,12 +10,26 @@
       </div>
     </div>
 
+    <EmptyState v-else-if="!artist" icon="ph:warning-circle" :title="t('net.loadFailed')">
+      <div class="flex gap-2">
+        <button class="btn btn-pill" @click="load">{{ t('common.retry') }}</button>
+        <button class="btn btn-pill" @click="router.push({ name: 'Artists' })">{{ t('artist.back') }}</button>
+      </div>
+    </EmptyState>
+
+    <!-- Nothing of theirs saved, and nothing found online either. -->
     <EmptyState
-      v-else-if="!artist"
+      v-else-if="artist.gone && onlineState === 'missing'"
       icon="ph:user"
-      :title="t('artist.notFound')"
+      :title="t('artist.goneTitle', { name: artist.name })"
+      :text="t('artist.goneHint')"
     >
-      <button class="btn btn-pill" @click="router.push({ name: 'Artists' })">{{ t('artist.back') }}</button>
+      <div class="flex gap-2">
+        <button class="btn btn-pill" @click="router.push({ name: 'Search', params: { query: artist.name } })">
+          {{ t('artist.searchFor', { name: artist.name }) }}
+        </button>
+        <button class="btn btn-pill" @click="router.push({ name: 'Artists' })">{{ t('artist.back') }}</button>
+      </div>
     </EmptyState>
 
     <template v-else>
@@ -30,9 +44,12 @@
         @play="playAll"
       >
         <template #meta>
-          <span>{{ t('artists.trackCount', { count: artist.count }) }}</span>
-          <span class="opacity-50">•</span>
-          <span>{{ t('artist.albumCount', { count: artist.albums.length }) }}</span>
+          <span v-if="artist.gone">{{ t('artist.noneSaved') }}</span>
+          <template v-else>
+            <span>{{ t('artists.trackCount', { count: artist.count }) }}</span>
+            <span class="opacity-50">•</span>
+            <span>{{ t('artist.albumCount', { count: artist.albums.length }) }}</span>
+          </template>
           <template v-if="online && online.subscribers">
             <span class="opacity-50">•</span>
             <span>{{ online.subscribers }} {{ t('explore.subscribers') }}</span>
@@ -46,13 +63,19 @@
           </button>
         </template>
         <template #actions>
-          <button class="play-fab" :title="t('artists.playAll')" @click="playAll">
+          <button class="play-fab" :title="t('artists.playAll')" :disabled="!playableRows.length" @click="playAll">
             <Icon :icon="playingHere ? 'ph:pause-fill' : 'ph:play-fill'" class="h-5 w-5" />
           </button>
-          <button class="icon-btn is-round h-10 w-10" :title="t('artist.shuffle')" @click="shuffleRows(allRows)">
+          <button
+            class="icon-btn is-round h-10 w-10"
+            :title="t('artist.shuffle')"
+            :disabled="!playableRows.length"
+            @click="shuffleRows(playableRows)"
+          >
             <Icon icon="ph:shuffle" class="h-6 w-6" />
           </button>
           <button
+            v-if="!artist.gone"
             class="btn btn-pill"
             :title="t('details.artistHint')"
             :disabled="detailsRunning"
@@ -81,7 +104,14 @@
            album, which meant a library that is mostly singles turned into a
            column of headings with one track under each. The online artist
            page has always been a plain list; this is the same thing. -->
-      <section class="view-pad mb-10">
+      <!-- Every song of theirs deleted: the page stays, says so, and their
+           music carries on below. It used to turn into "Artist not found",
+           for an artist who was right there a moment before. -->
+      <p v-if="artist.gone" class="view-pad gone-note">
+        <Icon icon="ph:info" class="h-4 w-4 shrink-0" />
+        {{ t('artist.noneSavedNote', { name: artist.name }) }}
+      </p>
+      <section v-else class="view-pad mb-10">
         <h2 class="section-title">{{ t('artist.inLibrary') }}</h2>
         <TrackTable
           :rows="allRows"
@@ -246,20 +276,26 @@ const albums = computed(() =>
     : []
 )
 const allRows = computed(() => albums.value.flatMap((al) => al.rows))
+// What Play plays: their saved songs, or with none saved, their popular ones.
+const playableRows = computed(() => (allRows.value.length ? allRows.value : unsavedRows.value))
 
 // Whether what is playing belongs to this page, and separately whether it is
 // actually running. Both used to be one flag, so a paused collection looked
 // unplayed and the same button that paused it started it again from the top.
 const currentHere = computed(() => {
   const cur = player.currentTrack.value
-  return !!cur && allRows.value.some((r) => r.file && r.file === cur.file)
+  if (!cur) return false
+  if (allRows.value.length) return allRows.value.some((r) => r.file && r.file === cur.file)
+  const id = cur.video_id || ''
+  return !!id && unsavedRows.value.some((r) => r.raw && (r.raw.video_id || r.raw.song_id) === id)
 })
 const playingHere = computed(() => currentHere.value && player.isPlaying.value)
 
 function playAll() {
   if (currentHere.value) return player.toggle()
+  if (!playableRows.value.length) return
   player.setShuffle(false)
-  playRows(allRows.value, 0)
+  playRows(playableRows.value, 0)
 }
 
 // Each artist gets a page of its own (see viewKey in App.vue), so the name is
@@ -281,9 +317,13 @@ async function load() {
     artist.value = data && typeof data === 'object' && Array.isArray(data.albums) ? data : null
   } catch (err) {
     if (mine !== seq) return
-    // Gone (every song of theirs deleted) says so. Anything else, a hiccup,
-    // keeps what is on screen rather than blanking a page that was fine.
-    if (!artist.value || (err && err.response && err.response.status === 404)) {
+    if (err && err.response && err.response.status === 404) {
+      // None of their songs in the library (any more): still them. The page
+      // keeps their name, picture and music; only what was saved is gone.
+      const shown = (artist.value && artist.value.name) || name
+      artist.value = { name: shown, count: 0, albums: [], cover: '', cover_v: 0, gone: true }
+    } else if (!artist.value) {
+      // A hiccup on the first read: nothing to show, and a retry offered.
       artist.value = null
     }
   } finally {
@@ -431,6 +471,14 @@ onBeforeUnmount(() => clearTimeout(reloadTimer))
 }
 .bio-more:hover {
   color: rgb(var(--c-fg));
+}
+.gone-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  font-size: 13px;
+  color: rgb(var(--c-fg) / 0.65);
 }
 .more {
   padding-top: 6px;

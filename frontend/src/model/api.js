@@ -119,10 +119,6 @@ function search(query) {
   return API.get('/api/songs/search', { params: { query } })
 }
 
-function open(songURL) {
-  return API.get('/api/song/url', { params: { url: songURL } })
-}
-
 function download(songURL) {
   const url = typeof songURL === 'string' ? songURL : songURL.url
   const hints = typeof songURL === 'string' ? undefined : songURL
@@ -220,6 +216,35 @@ function getArtists() {
 
 function getArtist(name) {
   return API.get(`/api/artists/${encodeURIComponent(name)}`)
+}
+
+// Something went wrong in the window: into the app's log (see problems.js).
+function reportClientError(payload) {
+  return API.post('/api/client-error', payload)
+}
+// The logs and details in one file, to send when something is wrong.
+function makeProblemReport() {
+  return API.post('/api/support/report')
+}
+
+// Playlists made in the app (kept on this PC).
+function getPlaylists() {
+  return API.get('/api/playlists')
+}
+function getPlaylist(id) {
+  return API.get(`/api/playlists/${encodeURIComponent(id)}`)
+}
+function createPlaylist(name, tracks = []) {
+  return API.post('/api/playlists', { name, tracks })
+}
+function updatePlaylist(id, changes) {
+  return API.patch(`/api/playlists/${encodeURIComponent(id)}`, changes)
+}
+function addToPlaylist(id, tracks, position = null) {
+  return API.post(`/api/playlists/${encodeURIComponent(id)}/tracks`, { tracks, position })
+}
+function deletePlaylist(id) {
+  return API.delete(`/api/playlists/${encodeURIComponent(id)}`)
 }
 
 // Who the saved artists are online (page id and picture), and one artist's
@@ -354,10 +379,6 @@ function deleteDownload(file) {
   return API.delete('/delete', { params: { file } })
 }
 
-function writePlaylistM3u(payload) {
-  return API.post('/api/playlist/m3u', payload)
-}
-
 function getQueue() {
   return API.get('/api/queue')
 }
@@ -390,7 +411,6 @@ function ws_onerror(fn) {
 
 export default {
   search,
-  open,
   download,
   downloadBatch,
   health,
@@ -401,7 +421,6 @@ export default {
   coverFileURL,
   listDownloads,
   deleteDownload,
-  writePlaylistM3u,
   getQueue,
   removeQueueItem,
   clearQueue,
@@ -428,6 +447,14 @@ export default {
   searchLibrary,
   getArtists,
   getArtist,
+  reportClientError,
+  makeProblemReport,
+  getPlaylists,
+  getPlaylist,
+  createPlaylist,
+  updatePlaylist,
+  addToPlaylist,
+  deletePlaylist,
   getArtistLinks,
   getArtistOnline,
   getStorage,

@@ -11,6 +11,7 @@ import { copyText } from '/src/model/clipboard'
 import { repairFiles, repairStateOf } from '/src/model/repair'
 import { refreshDetailsFor } from '/src/model/details'
 import { t } from '/src/i18n'
+import { usePlaylists } from '/src/model/playlists'
 
 // ---------------------------------------------------------------------------
 // Rows: one normalized shape for every track list in the app (library,
@@ -181,8 +182,9 @@ export function offerRepair(row) {
 
 // A queue never gets a broken track in it. Each one would stop playback with
 // an error and skip on, and a few in a row stopped it altogether.
+// Nor a song from a playlist that has nothing left to play it by.
 function playable(rows) {
-  return rows.filter((r) => !needsRepair(r))
+  return rows.filter((r) => !needsRepair(r) && !r.gone)
 }
 
 /**
@@ -442,7 +444,8 @@ export function youtubeLink(row) {
 /**
  * Build the right-click menu for one or more rows.
  * ctx: { source: rows the selection came from (for "Play" semantics),
- *        queue: true when invoked from the queue panel }
+ *        queue: true when invoked from the queue panel,
+ *        playlist: { remove(rows) } on a playlist's own page }
  */
 export function trackMenu(rows, ctx = {}) {
   if (!rows || !rows.length) return []
@@ -502,6 +505,16 @@ export function trackMenu(rows, ctx = {}) {
       label: t('actions.addToQueue'),
       icon: 'ph:list-plus',
       action: () => addToQueue(rows),
+    },
+    rows.some((r) => !r.gone) && {
+      label: t('playlists.addTo'),
+      icon: 'ph:playlist',
+      action: () => usePlaylists().pickPlaylist(rows.filter((r) => !r.gone)),
+    },
+    ctx.playlist && {
+      label: t('playlists.removeFrom'),
+      icon: 'ph:minus-circle',
+      action: () => ctx.playlist.remove(rows),
     },
     ctx.queue &&
       single && {

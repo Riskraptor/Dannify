@@ -10,7 +10,7 @@
         <div
           ref="box"
           class="dlg menu-surface"
-          role="alertdialog"
+          :role="current.kind === 'prompt' ? 'dialog' : 'alertdialog'"
           aria-modal="true"
           :aria-label="current.title"
           @keydown="onKey"
@@ -36,11 +36,24 @@
               <p v-if="current.detail" class="mt-2 text-xs text-fg/45">
                 {{ current.detail }}
               </p>
+              <form v-if="current.kind === 'prompt'" class="mt-3" @submit.prevent="ok">
+                <label v-if="current.label" class="dlg-label" :for="inputId">{{ current.label }}</label>
+                <input
+                  :id="inputId"
+                  ref="field"
+                  v-model="text"
+                  class="dlg-input"
+                  type="text"
+                  spellcheck="false"
+                  autocomplete="off"
+                  :maxlength="current.maxLength"
+                />
+              </form>
             </div>
           </div>
           <div class="dlg-actions">
             <button
-              v-if="current.kind === 'confirm'"
+              v-if="current.kind === 'confirm' || current.kind === 'prompt'"
               ref="cancelBtn"
               class="btn min-w-[88px]"
               @click="cancel"
@@ -51,6 +64,7 @@
               ref="okBtn"
               class="min-w-[88px]"
               :class="current.danger ? 'btn-danger' : 'btn-accent'"
+              :disabled="current.kind === 'prompt' && !text.trim()"
               @click="ok"
             >
               {{ current.confirmText || t('common.ok') }}
@@ -73,9 +87,15 @@ const { queue, settleDialog } = useDialogs()
 const current = computed(() => queue.value[0] || null)
 const okBtn = ref(null)
 const cancelBtn = ref(null)
+const field = ref(null)
+const text = ref('')
+const inputId = 'dlg-input'
 
 function ok() {
-  settleDialog(true)
+  if (current.value && current.value.kind === 'prompt') {
+    if (!text.value.trim()) return
+    settleDialog(text.value)
+  } else settleDialog(true)
 }
 function cancel() {
   settleDialog(false)
@@ -86,18 +106,33 @@ function onKey(e) {
   if (e.key === 'Escape') {
     e.preventDefault()
     cancel()
+  } else if (e.key === 'Enter' && e.target === field.value && !e.isComposing) {
+    // Here rather than left to the form, which some keyboards and input
+    // methods never submit.
+    e.preventDefault()
+    ok()
   } else if (e.key === 'Tab') {
     // Keep focus inside the dialog.
     e.preventDefault()
-    const target =
-      document.activeElement === okBtn.value ? cancelBtn.value : okBtn.value
-    ;(target || okBtn.value)?.focus()
+    const stops = [field.value, cancelBtn.value, okBtn.value].filter(
+      (el) => el && !el.disabled
+    )
+    if (!stops.length) return
+    const at = stops.indexOf(document.activeElement)
+    const next = (at + (e.shiftKey ? -1 : 1) + stops.length) % stops.length
+    stops[next].focus()
   }
 }
 
 watch(current, async (d) => {
   if (!d) return
+  text.value = d.kind === 'prompt' ? d.value : ''
   await nextTick()
+  if (d.kind === 'prompt' && field.value) {
+    field.value.focus()
+    field.value.select()
+    return
+  }
   // Destructive actions default to Cancel so Enter can't delete by accident.
   const target = d.danger && cancelBtn.value ? cancelBtn.value : okBtn.value
   target?.focus()
@@ -131,6 +166,28 @@ watch(current, async (d) => {
 .dlg-icon.is-danger {
   background: rgb(var(--c-danger) / 0.14);
   color: rgb(var(--c-danger));
+}
+.dlg-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--c-fg) / 0.6);
+}
+.dlg-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--c-tint) / 0.14);
+  background: rgb(var(--c-tint) / 0.05);
+  color: rgb(var(--c-fg));
+  font-size: 14px;
+  outline: none;
+}
+.dlg-input:focus {
+  border-color: rgb(var(--c-accent));
+  box-shadow: 0 0 0 1px rgb(var(--c-accent));
 }
 .dlg-actions {
   display: flex;

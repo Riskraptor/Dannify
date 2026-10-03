@@ -11,6 +11,7 @@
     @keydown="onKey"
     @focusin="focused = true"
     @focusout="onFocusOut"
+    @dragleave="onTableDragLeave"
   >
     <div v-if="header" class="tt-head" role="row">
       <div v-if="selectable" class="tt-cell tt-c-check">
@@ -80,7 +81,16 @@
             'is-current': isRowCurrent(row),
             'is-cursor': focused && cursor === index,
             'is-broken': !!row.problem,
+            'is-gone': !!row.gone,
+            'is-drop-before': dropAt && dropAt.index === index && !dropAt.after,
+            'is-drop-after': dropAt && dropAt.index === index && dropAt.after,
           }"
+          :title="row.gone ? t('playlists.gone') : undefined"
+          draggable="true"
+          @dragstart="onDragStart($event, index)"
+          @dragover="onDragOver($event, index)"
+          @drop="onDrop($event)"
+          @dragend="onDragEnd"
           @mousedown="onRowDown($event, index)"
           @click="onRowClick($event, index)"
           @dblclick="onRowDblClick($event, index)"
@@ -262,6 +272,14 @@
           <Icon icon="ph:list-plus" class="h-4 w-4" />
           <span>{{ t('actions.addToQueue') }}</span>
         </button>
+        <button class="selbar-btn" @click="playlists.pickPlaylist(selectedRows.filter((r) => !r.gone), $event)">
+          <Icon icon="ph:playlist" class="h-4 w-4" />
+          <span>{{ t('playlists.addTo') }}</span>
+        </button>
+        <button v-if="onRemove" class="selbar-btn" @click="removeSelected">
+          <Icon icon="ph:minus-circle" class="h-4 w-4" />
+          <span>{{ t('playlists.remove') }}</span>
+        </button>
         <button
           v-if="selectedLocals.length"
           class="selbar-btn"
@@ -319,6 +337,7 @@ import {
 } from '/src/model/tracks'
 import { repairItemOf, reasonText } from '/src/model/repair'
 import { detailsRunning, detailsDone, detailsTotal } from '/src/model/details'
+import { usePlaylists } from '/src/model/playlists'
 import { useI18n, currentLocale } from '/src/i18n'
 
 const props = defineProps({
@@ -339,15 +358,21 @@ const props = defineProps({
   stickyOffset: { type: Number, default: 0 },
   // Custom play handler(index). Defaults to "replace the queue with rows".
   onPlay: { type: Function, default: null },
+  // Takes rows out of the list without touching the files (a playlist's
+  // own page): the Delete key and the selection bar use it.
+  onRemove: { type: Function, default: null },
+  // Rows can be dragged to a new place (emits `reorder`).
+  reorderable: { type: Boolean, default: false },
   menuContext: { type: Object, default: () => ({}) },
 })
-const emit = defineEmits(['sort', 'selection-change'])
+const emit = defineEmits(['sort', 'selection-change', 'reorder'])
 
 const { t } = useI18n()
 const player = usePlayer()
 const account = useAccount()
 const libIndex = useLibraryIndex()
 const tracker = useProgressTracker()
+const playlists = usePlaylists()
 const scroller = inject('viewScroller', ref(null))
 
 const root = ref(null)
@@ -394,6 +419,11 @@ const selectedLocals = computed(() => selectedRows.value.filter((r) => r.kind ==
 
 async function deleteSelected() {
   if (await deleteRows(selectedLocals.value)) clearSelection()
+}
+async function removeSelected() {
+  const rows = selectedRows.value
+  clearSelection()
+  await props.onRemove(rows)
 }
 const allSelected = computed(
   () => shown.value.length > 0 && selected.value.size === shown.value.length
@@ -500,20 +530,93 @@ function onRowDown(e, i) {
     return
   }
   if (e.button !== 0) return
+  collapseTo = -1
   if (e.shiftKey) {
     e.preventDefault()
     selectRange(i)
   } else if (e.ctrlKey || e.metaKey) {
     toggleOne(i)
-  } else if (!selected.value.has(shown.value[i].key) || selected.value.size > 1) {
+  } else if (!selected.value.has(shown.value[i].key)) {
     selectOnly(i)
+  } else if (selected.value.size > 1) {
+    // One of several: they may be about to be dragged together. A plain
+    // click (no drag) still ends up on this row alone, when it is released.
+    collapseTo = i
+    cursor.value = i
   } else {
     cursor.value = i
     anchor = i
   }
 }
 
+// ----- dragging ---------------------------------------------------------------
+// Rows can always be dragged out: onto a playlist in the side bar, to add
+// them. Where the table is `reorderable`, also to a new place in it.
+let collapseTo = -1
+let dragRows = null
+const dropAt = ref(null) // { index, after } under the pointer while reordering
+
+function dragLabel(rows) {
+  const el = document.createElement('div')
+  el.textContent =
+    rows.length === 1 ? rows[0].title : t('playlists.songsCount', { count: rows.length })
+  el.style.cssText =
+    'position:fixed;top:-200px;left:0;max-width:320px;overflow:hidden;text-overflow:ellipsis;' +
+    'white-space:nowrap;padding:6px 14px;border-radius:999px;background:rgb(var(--c-accent));' +
+    'color:#fff;font:600 12.5px/1.4 system-ui,sans-serif;'
+  document.body.appendChild(el)
+  setTimeout(() => el.remove(), 0)
+  return el
+}
+
+function onDragStart(e, i) {
+  collapseTo = -1
+  const row = shown.value[i]
+  const together = selected.value.has(row.key) && selected.value.size > 1
+  const rows = together ? selectedRows.value : [row]
+  dragRows = rows
+  playlists.dragging.value = rows.filter((r) => !r.gone)
+  e.dataTransfer.effectAllowed = props.reorderable ? 'copyMove' : 'copy'
+  e.dataTransfer.setData('text/plain', rows.map((r) => `${r.artistText} - ${r.title}`).join('\n'))
+  try {
+    e.dataTransfer.setDragImage(dragLabel(rows), -12, -12)
+  } catch {
+    // the browser's own picture of the row will do
+  }
+}
+
+function onDragOver(e, i) {
+  if (!props.reorderable || !dragRows) return
+  e.preventDefault()
+  e.dataTransfer.dropEffect = 'move'
+  const r = e.currentTarget.getBoundingClientRect()
+  const after = e.clientY > r.top + r.height / 2
+  if (!dropAt.value || dropAt.value.index !== i || dropAt.value.after !== after) {
+    dropAt.value = { index: i, after }
+  }
+}
+
+function onDrop(e) {
+  if (!props.reorderable || !dragRows || !dropAt.value) return
+  e.preventDefault()
+  const to = dropAt.value.index + (dropAt.value.after ? 1 : 0)
+  emit('reorder', { rows: dragRows, to })
+  dropAt.value = null
+}
+
+function onDragEnd() {
+  dragRows = null
+  dropAt.value = null
+  playlists.dragging.value = null
+}
+
+function onTableDragLeave(e) {
+  if (dropAt.value && root.value && !root.value.contains(e.relatedTarget)) dropAt.value = null
+}
+
 function onRowClick(e, i) {
+  if (collapseTo === i && !e.shiftKey && !e.ctrlKey && !e.metaKey) selectOnly(i)
+  collapseTo = -1
   // Touch screens (phones on the LAN) have no double-click: tap plays.
   if (e.pointerType === 'touch' && !isInteractive(e.target)) play(i)
 }
@@ -608,7 +711,10 @@ function onKey(e) {
       }
       break
     case 'Delete':
-      if (props.deletable && selected.value.size) {
+      if (props.onRemove && selected.value.size) {
+        e.preventDefault()
+        removeSelected()
+      } else if (props.deletable && selected.value.size) {
         e.preventDefault()
         deleteRows(selectedRows.value)
       }
@@ -866,6 +972,16 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
 }
 .tt-row.is-cursor {
   box-shadow: inset 0 0 0 1px rgb(var(--c-tint) / 0.25);
+}
+.tt-row.is-gone {
+  opacity: 0.45;
+}
+/* Where dragged rows will land. */
+.tt-row.is-drop-before {
+  box-shadow: inset 0 2px 0 rgb(var(--c-accent));
+}
+.tt-row.is-drop-after {
+  box-shadow: inset 0 -2px 0 rgb(var(--c-accent));
 }
 .tt-cell {
   display: flex;

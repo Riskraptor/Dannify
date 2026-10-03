@@ -51,6 +51,9 @@ const state = reactive({
   nativeFrame: false,
   nativeFramePref: false, // saved preference (applies on next launch)
   closeToTray: false,
+  globalHotkeys: false,
+  hotkeysTaken: [],
+  autostart: { available: false, on: false },
   // Windows takes the mouse over the maximize button so it can offer the
   // snap layouts, which means the button never gets :hover. It tells us
   // instead; see bindMaxButton below.
@@ -142,6 +145,9 @@ const setNativeFrame = (on) => call('win_set_native_frame', !!on)
 const showSystemMenu = () => call('win_system_menu')
 const setMaxButton = (rect) => call('win_set_max_button', rect || null)
 const setTray = (options) => call('tray_set', options)
+const setGlobalHotkeys = (on) => call('app_set_global_hotkeys', !!on)
+const setAutostart = (on) => call('app_set_autostart', !!on)
+const openSoundSettings = () => call('shell_open_sound_settings')
 const setTrayLabels = (labels) => call('tray_labels', labels)
 const quit = () => call('app_quit')
 const restart = () => call('app_restart')
@@ -160,6 +166,7 @@ const accountClearSession = () => call('account_clear_session')
 
 // --- Shell integration ------------------------------------------------------
 const revealInFolder = (file) => call('shell_reveal', String(file || ''))
+const revealReport = (path) => call('shell_reveal_report', String(path || ''))
 const openLibraryFolder = () => call('shell_open_library')
 const openExternal = (url) => {
   if (!isDesktop) {
@@ -312,6 +319,9 @@ export const desktop = {
   setMaxButton,
   setTray,
   setTrayLabels,
+  setGlobalHotkeys,
+  setAutostart,
+  openSoundSettings,
   quit,
   restart,
   installUpdate,
@@ -320,6 +330,7 @@ export const desktop = {
   accountSignIn,
   accountClearSession,
   revealInFolder,
+  revealReport,
   openLibraryFolder,
   openExternal,
   setTheme,

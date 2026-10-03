@@ -59,6 +59,10 @@ namespace Dannify.Setup.Core
 
         public string ClassesKey(string sub) => IsSandbox ? SandboxKey + @"Classes\" + sub : @"Software\Classes\" + sub;
 
+        /// <summary>Where "start with Windows" (a setting in the app) is kept.</summary>
+        public string RunKey => IsSandbox ? SandboxKey + "Run" : @"Software\Microsoft\Windows\CurrentVersion\Run";
+        public string RunValueName => "Dannify" + Instance;
+
         public static string LocalAppData => Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         public static string DefaultRoot => Path.Combine(LocalAppData, "Programs", "Dannify");
         public static string DefaultData => Path.Combine(LocalAppData, "Dannify");

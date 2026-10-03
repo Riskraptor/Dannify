@@ -257,6 +257,40 @@ describe('Up next and Clear follow the play order (item 3)', () => {
   })
 })
 
+describe('dragging a song in Up next (4.3)', () => {
+  it('moves it in the list when shuffle is off, and that is the order played', () => {
+    start(6, { at: 1 })
+    // Up next: 2 3 4 5. Song 2 dragged to the end, then Song 5 to the top.
+    P.moveUpcoming(0, 3)
+    expect(P.upcoming.value.map(titleAt)).toEqual(['Song 3', 'Song 4', 'Song 5', 'Song 2'])
+    P.moveUpcoming(2, 0)
+    const shown = P.upcoming.value.map(titleAt)
+    expect(shown).toEqual(['Song 5', 'Song 3', 'Song 4', 'Song 2'])
+    expect(currentTitle()).toBe('Song 1')
+    expect(playThrough(shown.length)).toEqual(shown)
+  })
+
+  it('moves it in the play order under shuffle, leaving the list alone', () => {
+    start(7, { shuffle: true, at: 2 })
+    const listed = P.playlist.value.map((t) => t.title)
+    const before = P.upcoming.value.map(titleAt)
+    P.moveUpcoming(0, before.length - 1)
+    const shown = P.upcoming.value.map(titleAt)
+    expect(shown).toEqual([...before.slice(1), before[0]])
+    expect(P.playlist.value.map((t) => t.title)).toEqual(listed)
+    expect(playThrough(shown.length)).toEqual(shown)
+  })
+
+  it('ignores a drop where it started, or out of range', () => {
+    start(4, { at: 0 })
+    const before = P.upcoming.value.map(titleAt)
+    P.moveUpcoming(1, 1)
+    P.moveUpcoming(0, 9)
+    P.moveUpcoming(-1, 0)
+    expect(P.upcoming.value.map(titleAt)).toEqual(before)
+  })
+})
+
 describe('queue edits keep the shuffle order (item 4)', () => {
   it('"Play next" under shuffle is actually next', () => {
     start(8, { shuffle: true, at: 0 })
@@ -334,10 +368,12 @@ describe('removing the playing track (item 5)', () => {
     expect(P.isPlaying.value).toBe(false)
   })
 
-  it('keeps a playing player playing, on the next track', () => {
+  it('keeps a playing player playing, on the next track', async () => {
     start(4, { at: 1 })
+    await flush()
     const calls = audio.playCalls
     P.removeFromQueue(1)
+    await flush() // the next song's level is looked up before it starts
     expect(currentTitle()).toBe('Song 2')
     expect(audio.playCalls).toBe(calls + 1)
     expect(P.isPlaying.value).toBe(true)
@@ -405,8 +441,9 @@ describe('the global Space shortcut (item 7)', () => {
     return e
   }
 
-  it('leaves Space to a focused button, link, checkbox or slider', () => {
+  it('leaves Space to a focused button, link, checkbox or slider', async () => {
     start(2)
+    await flush()
     for (const target of [
       el('BUTTON'),
       el('A'),
@@ -422,8 +459,9 @@ describe('the global Space shortcut (item 7)', () => {
     }
   })
 
-  it('still toggles playback when nothing in particular has focus', () => {
+  it('still toggles playback when nothing in particular has focus', async () => {
     start(2)
+    await flush()
     const e = press(el('BODY'))
     expect(e.preventDefault).toHaveBeenCalled()
     expect(P.isPlaying.value).toBe(false)
@@ -461,5 +499,105 @@ describe('switching lyric versions (item 8)', () => {
     expect(api.getLyricVersions).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Song 1' })
     )
+  })
+})
+
+
+describe('each song starts at its own level (4.3)', () => {
+  it('waits for the song measurement before the first note, briefly', async () => {
+    let answer
+    api.getStreamInfo = vi.fn(() => new Promise((r) => (answer = r)))
+    P.setPlaylist(tracks(2), { startIndex: 0 })
+    audio = FakeAudio.last
+    expect(audio.playCalls).toBe(0) // not at full level first
+    answer({ data: { loudness_db: 20 } }) // 6 dB over: turned down
+    await flush()
+    expect(audio.playCalls).toBe(1)
+    expect(audio.volume).toBeLessThan(P.volume.value)
+  })
+
+  it('does not hold a song back for long when the network is slow', async () => {
+    vi.useFakeTimers()
+    try {
+      api.getStreamInfo = vi.fn(() => new Promise(() => {}))
+      P.setPlaylist(tracks(1), { startIndex: 0 })
+      audio = FakeAudio.last
+      expect(audio.playCalls).toBe(0)
+      await vi.advanceTimersByTimeAsync(750)
+      expect(audio.playCalls).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('starts at once when the level is already known', async () => {
+    api.getStreamInfo = vi.fn(() => Promise.resolve({ data: { loudness_db: 20 } }))
+    P.setPlaylist(tracks(2), { startIndex: 0 })
+    await flush()
+    P.next()
+    P.prev()
+    // Song 0 was measured when it first played: known now, no wait.
+    expect(FakeAudio.last.playCalls).toBeGreaterThan(0)
+    expect(currentTitle()).toBe('Song 0')
+  })
+
+  it('only turns songs down without the sound engine (no limiter to catch a boost)', async () => {
+    api.getStreamInfo = vi.fn(() => Promise.resolve({ data: { loudness_db: 2 } })) // quiet
+    P.setPlaylist(tracks(1), { startIndex: 0 })
+    audio = FakeAudio.last
+    await flush()
+    expect(audio.volume).toBeCloseTo(P.volume.value, 5)
+  })
+})
+
+describe('the sleep timer (4.3)', () => {
+  it('stops after this song instead of going on to the next', async () => {
+    start(3)
+    await flush()
+    P.setSleepAfterTrack()
+    expect(P.sleepMode.value).toBe('track')
+    audio.paused = true
+    audio.emit('ended')
+    expect(currentTitle()).toBe('Song 0')
+    expect(P.isPlaying.value).toBe(false)
+    expect(P.sleepMode.value).toBe('off')
+  })
+
+  it('fades out and pauses when the time is up', async () => {
+    vi.useFakeTimers()
+    try {
+      api.getStreamInfo = vi.fn(() => Promise.resolve({ data: {} }))
+      start(2)
+      await vi.advanceTimersByTimeAsync(10)
+      expect(P.isPlaying.value).toBe(true)
+      P.setSleepTimer(1)
+      await vi.advanceTimersByTimeAsync(55000)
+      expect(P.isPlaying.value).toBe(true) // still going, fading from 50 s
+      await vi.advanceTimersByTimeAsync(6000)
+      expect(P.isPlaying.value).toBe(false)
+      expect(P.sleepMode.value).toBe('off')
+      // The level comes back for the next time someone presses play.
+      expect(audio.volume).toBeGreaterThan(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('pressing play while it fades out cancels it', async () => {
+    vi.useFakeTimers()
+    try {
+      api.getStreamInfo = vi.fn(() => Promise.resolve({ data: {} }))
+      start(2)
+      await vi.advanceTimersByTimeAsync(10)
+      P.setSleepTimer(1)
+      await vi.advanceTimersByTimeAsync(52000)
+      P.pause()
+      P.play()
+      expect(P.sleepMode.value).toBe('off')
+      await vi.advanceTimersByTimeAsync(20000)
+      expect(P.isPlaying.value).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -269,44 +269,6 @@ function _applyJob(item, job) {
 _hydrateFromServer()
 
 export function useDownloadManager() {
-  const loading = ref(false)
-  function fromURL(url) {
-    const isPlaylistURL = (url || '').includes('://open.spotify.com/playlist/')
-    loading.value = true
-    return API.open(url)
-      .then((res) => {
-        console.log('Received Response:', res)
-        if (res.status !== 200) {
-          console.log('Error:', res)
-          return
-        }
-        const songs = res.data
-        if (Array.isArray(songs)) {
-          for (const song of songs) {
-            if (!progressTracker.getBySong(song)) {
-              progressTracker.appendSong(song)
-            }
-          }
-          return API.downloadBatch({
-            songs,
-            playlist_url: isPlaylistURL ? url : '',
-          }).catch((err) => {
-            console.log('Batch submit failed:', err.message)
-            markFailed(songs)
-          })
-        } else {
-          console.log('Opened Song:', songs)
-          queue(songs)
-        }
-      })
-      .catch((err) => {
-        console.log('Other Error:', err.message)
-      })
-      .finally(() => {
-        loading.value = false
-      })
-  }
-
   // The batch never reached the backend. Those songs used to sit on "In
   // Queue" for ever, waiting for news of a job nobody had started; marked
   // failed, each gets the retry button every failed download has.
@@ -432,13 +394,11 @@ export function useDownloadManager() {
   }
 
   return {
-    fromURL,
     downloadSongs,
     download,
     queue,
     retryWithAudio,
     remove,
     clearAll,
-    loading,
   }
 }

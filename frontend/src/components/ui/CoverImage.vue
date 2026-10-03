@@ -31,7 +31,7 @@ const props = defineProps({
   fallback: { type: String, default: '' },
   kind: { type: String, default: 'track' }, // track | album | artist | playlist
   round: { type: Boolean, default: false },
-  radius: { type: String, default: 'md' }, // sm | md | lg
+  radius: { type: String, default: 'md' }, // none | sm | md | lg
   eager: { type: Boolean, default: false },
   // CSS px this cover renders at. Google's CDN resizes on demand, so asking
   // for the size we actually draw turns a 544px JPEG into a 40px one: the
@@ -106,7 +106,7 @@ const srcset = computed(() => {
 })
 
 const radiusClass = computed(
-  () => ({ sm: 'rounded', md: 'rounded-md', lg: 'rounded-lg' })[props.radius] || 'rounded-md'
+  () => ({ none: 'rounded-none', sm: 'rounded', md: 'rounded-md', lg: 'rounded-lg' })[props.radius] || 'rounded-md'
 )
 const fallbackIcon = computed(
   () =>
