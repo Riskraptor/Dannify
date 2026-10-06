@@ -56,7 +56,7 @@ cat > "$STAGE/DEBIAN/postinst" <<'EOF'
 set -e
 # Create isolated venv once (network required first run); never fail install if offline.
 if [ ! -x /opt/dannify/venv/bin/python3 ]; then
-  if python3 -m venv /opt/dannify/venv 2>/dev/null; then
+  if python3 -m venv --system-site-packages /opt/dannify/venv 2>/dev/null; then
     /opt/dannify/venv/bin/pip install --upgrade pip 2>/dev/null || true
     /opt/dannify/venv/bin/pip install -r /opt/dannify/requirements-linux.txt 2>/dev/null || echo "Dannify: pip install skipped (offline). Run: sudo /opt/dannify/venv/bin/pip install -r /opt/dannify/requirements-linux.txt"
   else
