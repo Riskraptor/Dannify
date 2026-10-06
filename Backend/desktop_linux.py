@@ -4,22 +4,23 @@ Native GTK/WebKit window (pywebview) wrapping the same FastAPI backend +
 built Vue frontend as the Windows build. No Windows APIs, no WebView2,
 no .NET installer, no .exe redistributables.
 
-Design notes (mirrors desktop.py where portable):
-* XDG data dir: $DANNIFY_DATA_DIR or $XDG_DATA_HOME/Dannify or
-  ~/.local/share/Dannify. WebView profile, logs, port.json live here.
-* Single instance via POSIX file lock (fcntl.flock) on <data>/dannify.lock.
-  A second launch exits 0 after asking the running copy to present itself
-  via instance.json (pid + port). DANNIFY_INSTANCE suffixes the lock so
-  developers can run a second copy side by side.
-* Port: try 42810 first, else OS-assigned ephemeral (bind 0). Persisted
-  per-install in port.json so localStorage origin stays stable.
-* Loopback only unless DANNIFY_LAN=1. Auth token per launch (?key=...),
-  same _require_key middleware as Windows.
-* Instant splash (inline HTML, zero network) swapped for the real UI once
-  /api/health (or /) answers. Falls back to system browser if pywebview
-  or WebKit2GTK is unavailable.
-* Media: system ffmpeg/ffprobe (Debian Depends). JS engine: prefer
-  deno/bun/node/qjs on PATH (see dannify/jsruntime.py); no bundled .exe.
+Protocol (must match Backend/main.py _Gateway + frontend/src/desktop/bridge.js):
+* App URL carries ``?shell=desktop&k=<token>`` (NOT ``?key=``). The server
+  trades ``k`` for a ``dnf_session`` HttpOnly cookie; later assets, audio
+  range requests and websockets ride the cookie.
+* ``window.pywebview.api.win_state`` MUST exist or the frontend's
+  ``whenReady()`` never resolves and the app spins on loading forever.
+  All other js_api methods degrade to no-ops in the frontend, but Linux
+  implements the common window commands for real via the pywebview Window.
+* Readiness probe presents the key (``/?k=``) since even ``/`` refuses
+  without it (answered 404 as if nothing listens).
+
+Data: $DANNIFY_DATA_DIR or $XDG_DATA_HOME/Dannify or ~/.local/share/Dannify.
+Exported as DANNIFY_DATA_DIR BEFORE importing main so DATABASE_DIR and
+DOWNLOAD_DIR (= DATA_DIR/Music) stay user-writable, never /opt/dannify/*.
+Single instance via POSIX fcntl lock; DANNIFY_INSTANCE suffixes for devs.
+Port 42810 preferred, else persisted ephemeral. Loopback unless DANNIFY_LAN=1.
+Media: system ffmpeg/ffprobe. JS: deno/bun/node/qjs on PATH (jsruntime.py).
 """
 
 from __future__ import annotations
@@ -167,13 +168,18 @@ def _start_server(port: int, token: str):
     return server
 
 
-def _wait_for_server(port: int, timeout: float = 30.0) -> bool:
-    url = f"http://{BIND_HOST if BIND_HOST != '0.0.0.0' else '127.0.0.1'}:{port}/"
+def _wait_for_server(port: int, token: str, timeout: float = 30.0) -> bool:
+    """Poll with the session key: even / refuses (404) without it."""
+    host = BIND_HOST if BIND_HOST != "0.0.0.0" else "127.0.0.1"
+    url = f"http://{host}:{port}/?k={token}"
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=2) as r:
-                if r.status < 500:
+            req = urllib.request.Request(
+                url, headers={"x-dannify-key": token}
+            )
+            with urllib.request.urlopen(req, timeout=2) as r:
+                if r.status == 200:
                     return True
         except Exception:
             time.sleep(0.15)
@@ -207,6 +213,88 @@ def _read_theme() -> str:
     return "dark"
 
 
+class LinuxApi:
+    """js_api for the Linux shell. win_state gates frontend whenReady()."""
+
+    def __init__(self) -> None:
+        self._window = None
+        self._maximized = False
+        self._fullscreen = False
+        self._mini = False
+        self._on_top = False
+
+    def _attach(self, window) -> None:  # noqa: ANN001
+        self._window = window
+
+    def win_state(self) -> dict:
+        return {
+            "maximized": self._maximized,
+            "minimized": False,
+            "fullscreen": self._fullscreen,
+            "focused": True,
+            "mini": self._mini,
+            "onTop": self._on_top,
+            "nativeFrame": True,
+            "nativeFramePref": False,
+            "closeToTray": False,
+            "globalHotkeys": False,
+            "hotkeysTaken": [],
+            "autostart": {"available": False, "on": False},
+            "ready": True,
+        }
+
+    def win_minimize(self):
+        try:
+            if self._window is not None:
+                self._window.minimize()
+        except Exception:
+            pass
+
+    def win_toggle_maximize(self):
+        try:
+            if self._window is not None:
+                if self._maximized:
+                    self._window.restore()
+                else:
+                    self._window.maximize()
+                self._maximized = not self._maximized
+        except Exception:
+            pass
+
+    def win_close(self):
+        try:
+            if self._window is not None:
+                self._window.destroy()
+        except Exception:
+            pass
+
+    def win_toggle_fullscreen(self):
+        try:
+            if self._window is not None:
+                self._window.toggle_fullscreen()
+                self._fullscreen = not self._fullscreen
+        except Exception:
+            pass
+
+    def win_set_mini(self, on=False):  # noqa: ANN001
+        self._mini = bool(on)
+
+    def win_set_mini_size(self, height=0):  # noqa: ANN001
+        return None
+
+    def win_set_on_top(self, on=False):  # noqa: ANN001
+        self._on_top = bool(on)
+
+    def win_set_zoom(self, factor=1):  # noqa: ANN001
+        return None
+
+    def win_set_native_frame(self, on=False):  # noqa: ANN001
+        return None
+
+    def tray_labels(self, labels=None):  # noqa: ANN001
+        return None
+
+
 def main() -> None:
     if "--quit" in sys.argv[1:]:
         sys.exit(0)
@@ -227,14 +315,15 @@ def main() -> None:
     _write_instance_file(port)
 
     host = "127.0.0.1" if BIND_HOST == "0.0.0.0" else BIND_HOST
-    app_url = f"http://{host}:{port}/?key={token}"
+    # shell=desktop lets bridge.js detect the shell; k= trades for dnf_session.
+    app_url = f"http://{host}:{port}/?shell=desktop&k={token}"
 
     try:
         import webview  # noqa: PLC0415
     except Exception as e:
         print(f"pywebview unavailable ({e}); opening system browser at {app_url}")
-        _wait_for_server(port, timeout=30.0)
-        webbrowser.open(app_url)
+        if _wait_for_server(port, token, timeout=30.0):
+            webbrowser.open(app_url)
         try:
             while True:
                 time.sleep(3600)
@@ -247,10 +336,12 @@ def main() -> None:
                 pass
         return
 
+    api = LinuxApi()
     theme = _read_theme()
     window = webview.create_window(
         APP_TITLE,
         html=_splash_html(theme),
+        js_api=api,
         width=1280,
         height=800,
         min_size=(1024, 640),
@@ -258,8 +349,11 @@ def main() -> None:
         zoomable=False,
     )
 
+    def _before_show(window):  # noqa: ANN001 (UI thread)
+        api._attach(window)
+
     def _swap_to_app():
-        if _wait_for_server(port, timeout=30.0):
+        if _wait_for_server(port, token, timeout=30.0):
             try:
                 window.load_url(app_url)
             except Exception:
@@ -279,6 +373,10 @@ def main() -> None:
             pass
 
     try:
+        window.events.before_show += _before_show
+    except Exception:
+        pass
+    try:
         window.events.closed += _on_closed
     except Exception:
         pass
@@ -287,8 +385,8 @@ def main() -> None:
         webview.start(debug=False, private_mode=False)
     except Exception as e:
         print(f"WebView failed ({e}); opening system browser at {app_url}")
-        _wait_for_server(port, timeout=15.0)
-        webbrowser.open(app_url)
+        if _wait_for_server(port, token, timeout=15.0):
+            webbrowser.open(app_url)
         try:
             while True:
                 time.sleep(3600)
