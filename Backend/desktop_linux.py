@@ -59,6 +59,11 @@ INSTANCE_FILE = DATA_DIR / "instance.json"
 LOCK_NAME = f"dannify{os.environ.get('DANNIFY_INSTANCE', '')}.lock"
 LOCK_FILE = DATA_DIR / LOCK_NAME
 os.environ.setdefault("DANNIFY_LOG_FILE", str(DATA_DIR / "dannify.log"))
+# Backend (main.py) defaults DATABASE_DIR to <project>/data (root-owned under
+# /opt/dannify). Export user-writable XDG dir BEFORE importing main so both
+# database and downloads (DATA_DIR/Music) stay in the home directory.
+os.environ["DANNIFY_DATA_DIR"] = str(DATA_DIR)
+os.environ.setdefault("DATABASE_DIR", str(DATA_DIR))
 
 
 def _port_is_free(port: int, host: str = BIND_HOST) -> bool:
