@@ -1,7 +1,7 @@
 # Third-party notices
 
-Dannify is proprietary software (see [LICENSE](LICENSE)). It is built with, and
-ships, the components below. Each remains under its own licence, and nothing
+Dannify is licensed under the MIT License (see [LICENSE](LICENSE)). It is
+built with, and ships, the components below. Each remains under its own licence, and nothing
 in Dannify's licence limits the rights those licences give you.
 
 ## Code Dannify grew from

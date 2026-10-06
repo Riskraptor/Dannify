@@ -138,9 +138,8 @@ repository; installed copies update from its latest release.
 
 ## Licence
 
-Proprietary. All rights reserved: see [LICENSE](LICENSE). Components made by
-others keep their own licences, listed in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+MIT: see [LICENSE](LICENSE). Components made by others keep their own
+licences, listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ---
 
