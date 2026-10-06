@@ -130,7 +130,9 @@ release on the downloads repo.
 
 ## Licence
 
-[LICENSE](Backend/LICENSE).
+Proprietary. All rights reserved: see [LICENSE](LICENSE). Components made by
+others keep their own licences, listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ---
 

@@ -342,9 +342,7 @@ def test_migrate_only_seals_what_this_app_downloaded(tmp_path):
     somebody's own collection. Only files carrying the app's download tag are
     converted."""
 
-    from mutagen.id3 import ID3, TIT2
-
-    from dannify import downloader
+    from tests import _id3
 
     data, music = tmp_path / 'data', tmp_path / 'Music'
     start(data, music)
@@ -352,20 +350,15 @@ def test_migrate_only_seals_what_this_app_downloaded(tmp_path):
     # A file from some other program, with ordinary tags and no video id.
     theirs = music / 'iTunes' / 'Adele' / '01 Rolling in the Deep.mp3'
     theirs.parent.mkdir(parents=True)
-    theirs.write_bytes(MP3)
-    tags = ID3()
-    tags.add(TIT2(encoding=3, text='Rolling in the Deep'))
-    tags.save(theirs)
+    theirs.write_bytes(_id3.tag(_id3.text('TIT2', 'Rolling in the Deep')) + MP3)
     playlist = music / 'mine.m3u'
     playlist.write_text('iTunes/Adele/01 Rolling in the Deep.mp3\n', encoding='utf-8')
 
     # One of ours, from before containers existed.
     ours = music / 'Sauti Sol' / 'Sauti Sol - Suzanna.mp3'
     ours.parent.mkdir(parents=True)
-    # Real MPEG frames (MPEG-1 layer III, 128 kbps, 44.1 kHz: 417 bytes each),
-    # so the tag writer accepts it as an MP3.
-    ours.write_bytes((bytes.fromhex('fffb9064') + bytes(413)) * 20)
-    downloader.embed_video_id(ours, 'KNEd-OkExKY')
+    # Tagged the way those versions tagged their downloads.
+    ours.write_bytes(_id3.mp3(_id3.txxx('DANNIFY_VIDEO_ID', 'KNEd-OkExKY')))
     assert library._read_video_id_tag(ours) == 'KNEd-OkExKY'
 
     done = vault.migrate(music)

@@ -15,26 +15,9 @@ from typing import Any, Callable, Optional
 import requests
 import yt_dlp
 from loguru import logger
-from mutagen.flac import FLAC, Picture
-from mutagen.id3 import (
-    APIC,
-    ID3,
-    TALB,
-    TCON,
-    TDRC,
-    TIT2,
-    TPE1,
-    TPE2,
-    TRCK,
-    TXXX,
-    USLT,
-)
-from mutagen.mp3 import MP3
-from mutagen.mp4 import MP4, MP4Cover
-from mutagen.oggopus import OggOpus
-from mutagen.oggvorbis import OggVorbis
 
 from . import lyrics as lyrics_mod
+from . import tags as _tags
 from .itunes import fetch_genre as _fetch_itunes_genre
 from . import bench as _bench_mod
 from .m3u import sanitize_playlist_name
@@ -275,7 +258,7 @@ def _yt_po_tokens() -> list[str]:
 
 
 class Downloader:
-    """Wraps ``yt-dlp`` plus ``mutagen`` tagging."""
+    """Wraps ``yt-dlp`` plus tagging (see :mod:`dannify.tags`)."""
 
     def __init__(
         self,
@@ -768,6 +751,7 @@ class Downloader:
             ]
             if ids:
                 meta['artist_ids'] = ids
+            header_details(final_path, song, meta)
             target = target_dir / f'{basename}{vault.SUFFIX}'
             sealed = vault.seal(final_path, target, meta)
         except Exception as exc:
@@ -908,303 +892,79 @@ def embed_metadata(path: Path, song: dict[str, Any]) -> None:
         recording_date,
     )
 
-    suffix = path.suffix.lower().lstrip('.')
-
-    if suffix == 'mp3':
-        _tag_mp3(
-            path,
-            title,
-            artists,
-            album,
-            recording_date,
-            genre,
-            cover_bytes,
-            track_number,
-            album_track_total,
-        )
-    elif suffix in {'m4a', 'mp4', 'aac'}:
-        _tag_mp4(
-            path,
-            title,
-            artists,
-            album,
-            recording_date,
-            genre,
-            cover_bytes,
-            track_number,
-            album_track_total,
-        )
-    elif suffix == 'flac':
-        _tag_flac(
-            path,
-            title,
-            artists,
-            album,
-            recording_date,
-            genre,
-            cover_bytes,
-            track_number,
-            album_track_total,
-        )
-    elif suffix in {'ogg', 'oga'}:
-        _tag_ogg_vorbis(
-            path,
-            title,
-            artists,
-            album,
-            recording_date,
-            genre,
-            track_number,
-            album_track_total,
-        )
-    elif suffix == 'opus':
-        _tag_opus(
-            path,
-            title,
-            artists,
-            album,
-            recording_date,
-            genre,
-            track_number,
-            album_track_total,
-        )
-
-
-def _tag_mp3(
-    path: Path,
-    title: str,
-    artists: list[str],
-    album: str,
-    year: str,
-    genre: str,
-    cover_bytes: Optional[bytes],
-    track_number: Optional[int],
-    album_track_total: Optional[int],
-) -> None:
-    audio = MP3(str(path), ID3=ID3)
-    if audio.tags is None:
-        audio.add_tags()
-    audio.tags.delall('APIC')
-    audio.tags.add(TIT2(encoding=3, text=title))
-    if artists:
-        audio.tags.add(TPE1(encoding=3, text='/'.join(artists)))
-        audio.tags.add(TPE2(encoding=3, text=artists[0]))
-    if album:
-        audio.tags.add(TALB(encoding=3, text=album))
+    if not _tags.writable(path):
+        # Every download is MP4 by the time it is tagged. Anything else keeps
+        # its details in the sealed header instead, which is what the library
+        # reads for a saved song anyway.
+        logger.debug('Tag embed: {} is not MP4; its details go in the header', path.name)
+        return
+    extra: dict[str, Any] = {}
     if track_number is not None:
-        trck = (
-            f'{track_number}/{album_track_total}'
-            if album_track_total is not None
-            else str(track_number)
-        )
-        audio.tags.add(TRCK(encoding=3, text=trck))
-    if year:
-        audio.tags.add(TDRC(encoding=3, text=year))
-    if genre:
-        audio.tags.add(TCON(encoding=3, text=genre))
+        extra['track'] = (track_number, album_track_total or 0)
     if cover_bytes:
-        audio.tags.add(
-            APIC(
-                encoding=3,
-                mime='image/jpeg',
-                type=3,
-                desc='Cover',
-                data=cover_bytes,
-            )
-        )
-    audio.save(v2_version=3)
-
-
-def _tag_mp4(
-    path: Path,
-    title: str,
-    artists: list[str],
-    album: str,
-    year: str,
-    genre: str,
-    cover_bytes: Optional[bytes],
-    track_number: Optional[int],
-    album_track_total: Optional[int],
-) -> None:
-    audio = MP4(str(path))
-    audio['\xa9nam'] = title
-    if artists:
-        audio['\xa9ART'] = artists
-        audio['aART'] = [artists[0]]
-    if album:
-        audio['\xa9alb'] = album
-    if track_number is not None:
-        total = album_track_total if album_track_total is not None else 0
-        audio['trkn'] = [(track_number, total)]
-    if year:
-        audio['\xa9day'] = year
-    if genre:
-        audio['\xa9gen'] = genre
-    if cover_bytes:
-        audio['covr'] = [
-            MP4Cover(cover_bytes, imageformat=MP4Cover.FORMAT_JPEG)
-        ]
-    audio.save()
-
-
-def _tag_flac(
-    path: Path,
-    title: str,
-    artists: list[str],
-    album: str,
-    year: str,
-    genre: str,
-    cover_bytes: Optional[bytes],
-    track_number: Optional[int],
-    album_track_total: Optional[int],
-) -> None:
-    audio = FLAC(str(path))
-    audio['title'] = title
-    if artists:
-        audio['artist'] = artists
-        audio['albumartist'] = artists[0]
-    if album:
-        audio['album'] = album
-    if track_number is not None:
-        audio['tracknumber'] = str(track_number)
-        if album_track_total is not None:
-            audio['tracktotal'] = str(album_track_total)
-    if year:
-        audio['date'] = year
-    if genre:
-        audio['genre'] = genre
-    if cover_bytes:
-        picture = Picture()
-        picture.data = cover_bytes
-        picture.type = 3
-        picture.mime = 'image/jpeg'
-        audio.clear_pictures()
-        audio.add_picture(picture)
-    audio.save()
-
-
-def _tag_ogg_vorbis(
-    path: Path,
-    title: str,
-    artists: list[str],
-    album: str,
-    year: str,
-    genre: str,
-    track_number: Optional[int],
-    album_track_total: Optional[int],
-) -> None:
-    audio = OggVorbis(str(path))
-    _apply_vorbis_comments(
-        audio,
-        title,
-        artists,
-        album,
-        year,
-        genre,
-        track_number,
-        album_track_total,
+        png = cover_bytes[:8] == b'\x89PNG\r\n\x1a\n'
+        extra['cover'] = (cover_bytes, 'image/png' if png else 'image/jpeg')
+    _tags.write_mp4(
+        path,
+        title=title or None,
+        artists=list(artists) or None,
+        album=album or None,
+        date=recording_date or None,
+        genre=genre or None,
+        **extra,
     )
-    audio.save()
 
 
-def _tag_opus(
-    path: Path,
-    title: str,
-    artists: list[str],
-    album: str,
-    year: str,
-    genre: str,
-    track_number: Optional[int],
-    album_track_total: Optional[int],
-) -> None:
-    audio = OggOpus(str(path))
-    _apply_vorbis_comments(
-        audio,
-        title,
-        artists,
-        album,
-        year,
-        genre,
-        track_number,
-        album_track_total,
-    )
-    audio.save()
+def header_details(path: Path, song: dict[str, Any], meta: dict[str, Any]) -> None:
+    """Put *song*'s details into *meta*, a sealed header, when *path* could
+    not carry them itself.
 
+    Only MP4 files are tagged. A song kept in any other form (a stream
+    YouTube had in no other format, or an older song whose details are being
+    refreshed) has its title, artists, album, genre, track and artwork
+    written into the header, which is what the library reads for it.
+    """
 
-def _apply_vorbis_comments(
-    audio,
-    title,
-    artists,
-    album,
-    year,
-    genre,
-    track_number: Optional[int],
-    album_track_total: Optional[int],
-):
-    audio['title'] = title
+    if _tags.writable(path):
+        return
+    if song.get('name'):
+        meta['title'] = str(song['name'])
+    artists = [str(a) for a in (song.get('artists') or []) if a]
     if artists:
-        audio['artist'] = artists
-        audio['albumartist'] = artists[0]
-    if album:
-        audio['album'] = album
-    if track_number is not None:
-        audio['TRACKNUMBER'] = str(track_number)
-        if album_track_total is not None:
-            audio['TRACKTOTAL'] = str(album_track_total)
-    if year:
-        audio['date'] = year
+        meta['artist'] = artists[0]
+    if song.get('album_name'):
+        meta['album'] = str(song['album_name'])
+    genre = (song.get('genre') or '').strip()
     if genre:
-        audio['genre'] = genre
+        meta['genre'] = genre
+    number, _total = _album_track_index_for_tags(song)
+    if number:
+        meta['track_number'] = number
+    art = _download_cover(song.get('cover_url', ''))
+    if art:
+        import base64  # noqa: PLC0415
+
+        meta['cover'] = base64.b64encode(art).decode('ascii')
+        meta['cover_mime'] = 'image/png' if art[:8] == b'\x89PNG\r\n\x1a\n' else 'image/jpeg'
+        meta.pop('cover_at', None)
+        meta.pop('cover_len', None)
 
 
 def embed_video_id(path: Path, video_id: str) -> None:
-    """Persist the YouTube videoId into *path*'s metadata.
+    """Keep the YouTube id the song came from inside the file.
 
-    Uses a format-appropriate frame keyed under ``DANNIFY_VIDEO_ID``:
-      * MP3 → ID3 ``TXXX:DANNIFY_VIDEO_ID``
-      * MP4/M4A/AAC → custom freeform atom ``----:com.dannify:VIDEO_ID``
-      * FLAC/OGG/Opus → Vorbis comment ``DANNIFY_VIDEO_ID``
-
-    Cheap to write (mutagen's in-place save) and lets :mod:`library`
-    surface ``video_id`` so the player can locate the local copy of any
-    streamed song instantly.
+    Stored as ``----:com.dannify:VIDEO_ID``, so :mod:`library` finds the
+    saved copy of a streamed song however the file has been renamed. Only
+    MP4 is written; a sealed song of any other kind keeps the id in its
+    header.
     """
 
     if not path.exists() or not video_id or not isinstance(video_id, str):
         return
-    suffix = path.suffix.lower().lstrip('.')
+    if not _tags.writable(path):
+        return
     try:
-        if suffix == 'mp3':
-            audio = MP3(str(path), ID3=ID3)
-            if audio.tags is None:
-                audio.add_tags()
-            # Replace any existing instance of the same description.
-            existing = [
-                f for f in audio.tags.getall('TXXX')
-                if getattr(f, 'desc', '') == 'DANNIFY_VIDEO_ID'
-            ]
-            for f in existing:
-                audio.tags.delall(f.HashKey if hasattr(f, 'HashKey') else 'TXXX:DANNIFY_VIDEO_ID')
-            audio.tags.add(
-                TXXX(encoding=3, desc='DANNIFY_VIDEO_ID', text=video_id)
-            )
-            audio.save(v2_version=3)
-        elif suffix in {'m4a', 'mp4', 'aac'}:
-            audio = MP4(str(path))
-            audio['----:com.dannify:VIDEO_ID'] = [video_id.encode('utf-8')]
-            audio.save()
-        elif suffix == 'flac':
-            audio = FLAC(str(path))
-            audio['DANNIFY_VIDEO_ID'] = video_id
-            audio.save()
-        elif suffix in {'ogg'}:
-            audio = OggVorbis(str(path))
-            audio['DANNIFY_VIDEO_ID'] = video_id
-            audio.save()
-        elif suffix == 'opus':
-            audio = OggOpus(str(path))
-            audio['DANNIFY_VIDEO_ID'] = video_id
-            audio.save()
+        _tags.write_mp4(path, video_id=video_id)
     except Exception:
         logger.opt(exception=True).debug(
             'embed_video_id failed for {}', path
@@ -1236,33 +996,9 @@ def embed_lyrics(
             )
 
     text = lyrics.plain or _strip_lrc_timestamps(lyrics.synced or '')
-    if not text:
+    if not text or not _tags.writable(path):
         return
-
-    suffix = path.suffix.lower().lstrip('.')
-    if suffix == 'mp3':
-        audio = MP3(str(path), ID3=ID3)
-        if audio.tags is None:
-            audio.add_tags()
-        audio.tags.delall('USLT')
-        audio.tags.add(USLT(encoding=3, lang='eng', desc='', text=text))
-        audio.save(v2_version=3)
-    elif suffix in {'m4a', 'mp4', 'aac'}:
-        audio = MP4(str(path))
-        audio['\xa9lyr'] = text
-        audio.save()
-    elif suffix == 'flac':
-        audio = FLAC(str(path))
-        audio['lyrics'] = text
-        audio.save()
-    elif suffix in {'ogg', 'oga'}:
-        audio = OggVorbis(str(path))
-        audio['lyrics'] = text
-        audio.save()
-    elif suffix == 'opus':
-        audio = OggOpus(str(path))
-        audio['lyrics'] = text
-        audio.save()
+    _tags.write_mp4(path, lyrics=text)
 
 
 def _strip_lrc_timestamps(synced: str) -> str:

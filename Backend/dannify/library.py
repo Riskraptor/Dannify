@@ -1,6 +1,6 @@
 """Offline library indexing: artists, albums, tracks, and fuzzy search.
 
-Reads embedded tags from the downloaded audio files (via mutagen) and
+Reads embedded tags from the downloaded audio files (via dannify.tags) and
 builds a cached, grouped view of the library. The cache is invalidated
 whenever the download directory's listing changes (file count or latest
 mtime), so newly downloaded tracks show up without a restart.
@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from loguru import logger
-from mutagen import File as MutagenFile
+
+from . import tags as _tags
 
 # .dnf is a sealed container holding one of the others. Everything that walks
 # the music folder has to count it as a track, or a sealed library looks empty.
@@ -128,7 +129,7 @@ def _clean_ids(raw: Any) -> list[dict[str, str]]:
 def _read_tags(path: Path) -> dict[str, Any]:
     """Best-effort tag read; falls back to the ``Artist - Title`` filename."""
 
-    # A sealed container keeps its own header. mutagen would see noise.
+    # A sealed container keeps its own header. A tag reader would see noise.
     if path.suffix.lower() == '.dnf':
         from . import vault
 
@@ -191,26 +192,16 @@ def _read_tags(path: Path) -> dict[str, Any]:
     track_number = 0
     video_id = ''
     try:
-        audio = MutagenFile(str(path), easy=True)
-        if audio is not None:
-            tags = audio.tags or {}
-            title = _first(tags.get('title'))
-            album_artist = _first(tags.get('albumartist'))
-            artist_raw = _first(tags.get('artist'))
-            all_artists = _split_artists(artist_raw)
-            album = _first(tags.get('album'))
-            genre = _first(tags.get('genre'))
-            tn = _first(tags.get('tracknumber'))
-            if tn:
-                try:
-                    track_number = int(str(tn).split('/')[0])
-                except ValueError:
-                    track_number = 0
-            if audio.info is not None:
-                duration = int(getattr(audio.info, 'length', 0) or 0)
-        # Pull DANNIFY_VIDEO_ID using the raw (non-easy) reader so the
-        # mutagen ``easy`` interface's whitelist doesn't drop it.
-        video_id = _read_video_id_tag(path) or ''
+        found = _tags.details(path)
+        if found:
+            title = found['title']
+            album_artist = found['albumartist']
+            all_artists = _split_artists(found['artist'])
+            album = found['album']
+            genre = found['genre']
+            track_number = int(found['track'] or 0)
+            duration = int(found['duration'] or 0)
+            video_id = found['video_id']
     except Exception:
         logger.opt(exception=True).debug('Tag read failed for {}', path)
 
@@ -256,42 +247,12 @@ def _read_video_id_tag(path: Path) -> str:
     """Return the stored YouTube videoId for *path*, or ''.
 
     Looks at the format-specific frame written by
-    :func:`dannify.downloader.embed_video_id`. Cheap on a cache miss
-    (a single mutagen file read shared with :func:`_read_tags`'s call).
+    :func:`dannify.downloader.embed_video_id` (and by earlier versions, for
+    MP3, FLAC and Ogg files saved before songs were sealed).
     """
 
     try:
-        from mutagen import File as _MF
-
-        audio = _MF(str(path))
-        if audio is None or audio.tags is None:
-            return ''
-        suffix = path.suffix.lower().lstrip('.')
-        candidate = ''
-        if suffix == 'mp3':
-            for frame in audio.tags.getall('TXXX'):
-                if getattr(frame, 'desc', '') == 'DANNIFY_VIDEO_ID':
-                    txt = frame.text
-                    candidate = (txt[0] if isinstance(txt, list) else str(txt)).strip()
-                    break
-        elif suffix in {'m4a', 'mp4', 'aac'}:
-            raw = audio.tags.get('----:com.dannify:VIDEO_ID')
-            if raw:
-                first = raw[0]
-                candidate = (
-                    first.decode('utf-8', 'ignore')
-                    if isinstance(first, (bytes, bytearray))
-                    else str(first)
-                ).strip()
-        else:  # flac, ogg, opus → vorbis comments behave like a dict
-            raw = audio.tags.get('DANNIFY_VIDEO_ID') or audio.tags.get(
-                'dannify_video_id'
-            )
-            if raw:
-                candidate = (
-                    raw[0] if isinstance(raw, (list, tuple)) else str(raw)
-                ).strip()
-        return candidate if _VIDEO_ID_RE.match(candidate) else ''
+        return _tags.video_id(path)
     except Exception:
         return ''
 

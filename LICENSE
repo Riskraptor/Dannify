@@ -1,0 +1,61 @@
+Dannify
+Copyright (c) 2026 Daniel Mwendwa. All rights reserved.
+
+Dannify, including its source code, its user interface, its installer, its
+update packages, its artwork and the format of the song files it saves (the
+"Software"), is the property of Daniel Mwendwa and is protected by copyright
+law and international treaties. It is licensed, not sold.
+
+1. Permitted use
+
+   You may download the official installer of the Software from its releases
+   page, install it, and use it on devices you own or control, for your own
+   personal use.
+
+2. Restrictions
+
+   Except as expressly permitted above, or as the law allows despite this
+   restriction, you may not, in whole or in part:
+
+   a. copy, modify, adapt, translate or create derivative works of the
+      Software;
+   b. distribute, publish, sell, rent, lease, lend, sublicense or otherwise
+      make the Software available to anyone else, other than by directing
+      them to its official releases page;
+   c. reverse engineer, decompile or disassemble the Software, or attempt to
+      derive its source code;
+   d. remove, disable or work around any of its protections, including the
+      protection of the songs it saves, or extract songs from it in any other
+      form;
+   e. remove or alter any copyright notice, trademark or this licence.
+
+   Having access to the source code repository does not grant any right to
+   use, copy, modify or distribute the source code.
+
+3. Third-party components
+
+   The Software includes components made by others. Each is licensed by its
+   own authors under its own terms, which are listed in
+   THIRD-PARTY-NOTICES.md. Nothing in this licence limits any right those
+   terms give you over those components.
+
+4. No warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+
+5. Limitation of liability
+
+   IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+6. Termination
+
+   This licence ends automatically if you break any of its terms. When it
+   ends, you must stop using the Software and delete every copy you have.
+
+For any use not permitted here, ask the author for written permission
+through https://github.com/DANIELMWENDWA9451.

@@ -1426,26 +1426,12 @@ def _lyrics_from_file(
             if txt:
                 return {'synced': [], 'plain': txt, 'has': True}
 
-    # Fall back to embedded plain lyrics via mutagen.
+    # Fall back to plain lyrics kept in the file itself.
     plain = None
     try:
-        from mutagen import File as MutagenFile  # local import
+        from . import tags as _tags  # noqa: PLC0415
 
-        audio = MutagenFile(str(full))
-        if audio is not None and audio.tags is not None:
-            for key in ('USLT::eng', 'USLT::XXX', '\xa9lyr', 'lyrics'):
-                val = audio.tags.get(key)
-                if val:
-                    plain = str(
-                        getattr(val, 'text', None)
-                        or (val[0] if isinstance(val, list) else val)
-                    )
-                    break
-            if plain is None:
-                for k in audio.tags.keys():
-                    if 'USLT' in str(k):
-                        plain = str(audio.tags[k].text)
-                        break
+        plain = _tags.lyrics(full) or None
     except Exception:
         logger.opt(exception=True).debug('Embedded lyrics read failed')
 

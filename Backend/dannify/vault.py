@@ -659,35 +659,12 @@ def _xor(key: bytes, nonce: bytes, data: bytes, offset: int) -> bytes:
 def _cover_of(path: Path) -> Optional[tuple[bytes, str]]:
     """The embedded artwork of a still-plain file, if it has any."""
 
-    try:
-        from mutagen import File as MutagenFile
-        from mutagen.flac import FLAC
-        from mutagen.id3 import ID3
-        from mutagen.mp4 import MP4
+    from . import tags  # noqa: PLC0415
 
-        suffix = path.suffix.lower()
-        if suffix in ('.mp3', '.wav', '.aac'):
-            for frame in ID3(path).getall('APIC'):
-                return frame.data, frame.mime or 'image/jpeg'
-        elif suffix == '.m4a':
-            art = MP4(path).tags.get('covr') if MP4(path).tags else None
-            if art:
-                first = art[0]
-                fmt = getattr(first, 'imageformat', None)
-                mime = 'image/png' if fmt == 14 else 'image/jpeg'  # MP4Cover.FORMAT_PNG
-                return bytes(first), mime
-        elif suffix == '.flac':
-            pics = FLAC(path).pictures
-            if pics:
-                return pics[0].data, pics[0].mime or 'image/jpeg'
-        else:
-            audio = MutagenFile(path)
-            pics = getattr(audio, 'pictures', None) if audio else None
-            if pics:
-                return pics[0].data, pics[0].mime or 'image/jpeg'
+    try:
+        return tags.cover(path)
     except Exception:
         return None
-    return None
 
 
 def _find_in_file(path: Path, needle: bytes) -> int:
@@ -724,7 +701,7 @@ def cover(path: Path) -> Optional[tuple[bytes, str]]:
     Normally this is a range of the payload: the artwork is part of the file
     we sealed, so the header says where it is rather than carrying a second
     copy. Decrypting it costs the few blocks it spans. Older containers, and
-    the rare file whose artwork mutagen reports in a form that does not appear
+    the rare file whose artwork the tag reader reports in a form that does not appear
     verbatim on disk, keep the copy, so both are read here.
     """
 
@@ -789,7 +766,7 @@ def seal(source: Path, target: Path, meta: dict[str, Any]) -> Path:
                 head['cover_len'] = len(art[0])
                 head['cover_mime'] = art[1]
             else:
-                # mutagen handed back bytes that are not on disk verbatim
+                # The reader handed back bytes that are not on disk verbatim
                 # (a re-encoded or reconstructed picture). Rare, and a copy is
                 # better than no artwork.
                 import base64

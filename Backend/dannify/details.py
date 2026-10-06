@@ -146,6 +146,10 @@ def refresh(root: Path, path: Path, lyrics_providers: Optional[list[str]] = None
         if ids:
             meta['artist_ids'] = ids
 
+        # A song kept as something other than MP4 could not be retagged: its
+        # fresh details and artwork go straight into the header instead.
+        dl.header_details(plain, fresh, meta)
+
         rebuilt = path.with_suffix(path.suffix + '.rebuilt')
         vault.seal(plain, rebuilt, meta)  # seal() removes the plain copy
         _swap(rebuilt, path)
