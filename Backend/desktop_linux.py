@@ -294,6 +294,119 @@ class LinuxApi:
     def tray_labels(self, labels=None):  # noqa: ANN001
         return None
 
+    def account_clear_session(self) -> bool:
+        return True
+
+    def account_sign_in(self) -> dict:
+        """Linux Google sign-in: browser + verified cookie paste."""
+        import shutil  # noqa: PLC0415
+        import webbrowser  # noqa: PLC0415
+
+        try:
+            from dannify import account as _account  # noqa: PLC0415
+        except Exception as exc:
+            return {"signed_in": False, "error": str(exc)}
+
+        login_url = (
+            "https://accounts.google.com/ServiceLogin"
+            "?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F"
+        )
+        try:
+            webbrowser.open(login_url)
+        except Exception:
+            pass
+
+        result: dict = {}
+        done = threading.Event()
+
+        def submit(header):  # noqa: ANN001
+            try:
+                cookies: dict[str, str] = {}
+                for part in str(header or "").split(";"):
+                    name, _, value = part.strip().partition("=")
+                    name, value = name.strip(), value.strip().strip('"')
+                    if name and value:
+                        cookies[name] = value
+                try:
+                    status = _account.sign_in(cookies)
+                    result.update(status)
+                except Exception as exc:
+                    result.update({"signed_in": False, "error": str(exc)})
+            finally:
+                done.set()
+            return dict(result)
+
+        def cancel() -> dict:
+            result.update({"signed_in": False, "error": "closed"})
+            done.set()
+            return {"signed_in": False, "error": "closed"}
+
+        class _PasteApi:
+            def submit_cookies(self, header=""):  # noqa: ANN001
+                return submit(header)
+
+            def cancel_login(self):
+                return cancel()
+
+        html = (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<style>body{font-family:system-ui,sans-serif;background:#101418;"
+            "color:#e8eaed;margin:0;padding:24px}ol{line-height:1.7}"
+            "textarea{width:100%;height:110px;background:#1a1f26;color:#e8eaed;"
+            "border:1px solid #333;border-radius:8px;padding:8px}"
+            "button{background:#7aa2ff;border:0;border-radius:8px;color:#0b0e13;"
+            "padding:10px 18px;font-size:15px;margin:10px 8px 0 0;cursor:pointer}"
+            ".ghost{background:transparent;color:#9aa3b2;border:1px solid #333}"
+            "code{background:#1a1f26;padding:2px 6px;border-radius:4px}</style>"
+            "</head><body><h2>Sign in with Google</h2>"
+            "<ol><li>A Google tab opened in your browser. Sign in there and open "
+            "<code>music.youtube.com</code>.</li>"
+            "<li>Press <code>Ctrl+Shift+I</code> → Network tab → reload the page → "
+            "click any request → copy the <code>Cookie:</code> request header.</li>"
+            "<li>Paste it below and press Verify.</li></ol>"
+            "<textarea id='c' placeholder='SAPISID=...; SID=...'></textarea><br>"
+            "<button onclick='submit()'>Verify &amp; sign in</button>"
+            "<button class='ghost' onclick='cancel()'>Cancel</button>"
+            "<p id='m'></p>"
+            "<script>async function submit(){const v=document.getElementById('c').value;"
+            "document.getElementById('m').textContent='Verifying…';"
+            "const r=await window.pywebview.api.submit_cookies(v);"
+            "document.getElementById('m').textContent=r.signed_in?'Signed in! You can close this window.':('Failed: '+(r.error||'unknown'));} "
+            "async function cancel(){await window.pywebview.api.cancel_login();}</script>"
+            "</body></html>"
+        )
+
+        login_win = None
+        try:
+            import webview as _wv  # noqa: PLC0415
+
+            login_win = _wv.create_window(
+                "Sign in with Google",
+                html=html,
+                js_api=_PasteApi(),
+                width=560,
+                height=640,
+            )
+
+            def _wait_close():
+                done.wait(15 * 60)
+                try:
+                    login_win.destroy()
+                except Exception:
+                    pass
+
+            threading.Thread(target=_wait_close, name="dannify-login", daemon=True).start()
+            _wv.start(debug=False)
+        except Exception as exc:
+            return {"signed_in": False, "error": str(exc)}
+        finally:
+            done.set()
+        if result.get("signed_in"):
+            return {"signed_in": True, "profile": result.get("profile", {})}
+        if result:
+            return {"signed_in": False, "error": result.get("error", "")}
+        return {"signed_in": False, "error": "closed"}
+
 
 def main() -> None:
     if "--quit" in sys.argv[1:]:
