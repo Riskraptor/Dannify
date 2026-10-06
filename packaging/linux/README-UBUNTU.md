@@ -24,7 +24,8 @@ frontend (`frontend/`) behind a Linux launcher instead of WebView2.
 ```bash
 sudo apt update
 sudo apt install ./dannify_4.6.2_all.deb
-# first run needs network once for venv pip install; then:
+# apt auto-installs: python3-venv, python3-gi, ffmpeg, webkit2gtk, nodejs.
+# First launch creates /opt/dannify/venv (network once), then:
 dannify
 ```
 
