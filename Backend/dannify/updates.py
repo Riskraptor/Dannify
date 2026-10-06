@@ -34,13 +34,12 @@ from loguru import logger
 
 from . import layout
 
-# Releases live in their own public repository. The source repository is
-# private, and a private one's releases need a token: shipping a token in
-# the app would hand every copy read access to the source, which is worse
-# than publishing it.
-DEFAULT_REPO = 'DANIELMWENDWA9451/dannify-releases'
+# Releases live on Dannify's own repository, which is public. Up to 4.6.1
+# they came from a separate one, dannify-releases, while the source was
+# private; 4.6.2 was published on both so every copy could find its way here.
+DEFAULT_REPO = 'DANIELMWENDWA9451/Dannify'
 # Where About sends people: the page the builds are on.
-SITE_URL = 'https://github.com/DANIELMWENDWA9451/dannify-releases/releases'
+SITE_URL = 'https://github.com/DANIELMWENDWA9451/Dannify/releases'
 CHECK_TTL = 60 * 60 * 6  # re-check at most every 6 hours
 _USER_AGENT = 'Dannify-Updater'
 

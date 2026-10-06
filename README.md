@@ -8,6 +8,14 @@ be an app, or a downloader with no player attached. This is one program: a
 native window, a tray icon, media keys, and a backend on loopback that nothing
 outside the app can reach.
 
+![Dannify: Home, with the song playing and its lyrics beside it](docs/screenshots/home.png)
+
+| | |
+| --- | --- |
+| ![Now Playing, with synced lyrics](docs/screenshots/now-playing.png) | ![The Sound panel on the play bar: equalizer over the live spectrum](docs/screenshots/sound.png) |
+| ![An artist page](docs/screenshots/artist.png) | ![Search](docs/screenshots/search.png) |
+| ![Your songs](docs/screenshots/library.png) | ![Home in the light theme](docs/screenshots/home-light.png) |
+
 ## What it does
 
 Search the YouTube Music catalogue and play anything in about a third of a
@@ -31,7 +39,7 @@ quitting.
 ## Install
 
 Installers are on the [downloads
-page](https://github.com/DANIELMWENDWA9451/dannify-releases/releases).
+page](https://github.com/DANIELMWENDWA9451/Dannify/releases).
 
 ## Building it
 
@@ -125,8 +133,8 @@ everywhere else. Bump it, build, then publish:
 pwsh packaging\publish.ps1 -Notes "what changed"
 ```
 
-That uploads the installer and the update package and leaves only the new
-release on the downloads repo.
+That uploads the installer and the update package as a new release on this
+repository; installed copies update from its latest release.
 
 ## Licence
 

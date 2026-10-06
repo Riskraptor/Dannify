@@ -91,8 +91,8 @@ class Release:
         return {
             'version': self.manifest['version'],
             'notes': 'Faster starts.\nA new look.',
-            'package_manifest_url': 'https://github.com/DANIELMWENDWA9451/dannify-releases/releases/download/v4.1.0/package-4.1.0.json',
-            'package_url': 'https://github.com/DANIELMWENDWA9451/dannify-releases/releases/download/v4.1.0/package-4.1.0.zip',
+            'package_manifest_url': 'https://github.com/DANIELMWENDWA9451/Dannify/releases/download/v4.1.0/package-4.1.0.json',
+            'package_url': 'https://github.com/DANIELMWENDWA9451/Dannify/releases/download/v4.1.0/package-4.1.0.zip',
         }
 
 
