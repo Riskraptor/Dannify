@@ -808,16 +808,42 @@ def _remember(root: Path, sealed: Path, song: dict, video_id: str) -> None:
     })
 
 
+def _is_image(data: bytes) -> bool:
+    """JPEG, PNG or WebP, by the bytes they start with."""
+
+    return (
+        data[:3] == b'\xff\xd8\xff'
+        or data[:8] == b'\x89PNG\r\n\x1a\n'
+        or (data[:4] == b'RIFF' and data[8:12] == b'WEBP')
+    )
+
+
 def _download_cover(url: str) -> Optional[bytes]:
+    """The artwork at *url*, or None.
+
+    Tried three times: it used to be one attempt, and a single dropped
+    request while several songs were saving left a song with no picture for
+    good. Only image data counts; an error page served with a 200 is not
+    artwork.
+    """
+
     if not url:
         return None
-    try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-    except Exception:
-        logger.opt(exception=True).warning('Failed to fetch cover art {}', url)
-        return None
-    return response.content
+    for attempt in range(3):
+        if attempt:
+            time.sleep(0.6 * attempt)
+        try:
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+            data = response.content
+        except Exception:
+            logger.opt(exception=True).debug('cover fetch {} failed: {}', attempt + 1, url)
+            continue
+        if _is_image(data):
+            return data
+        logger.debug('cover fetch {} was not an image: {}', attempt + 1, url)
+    logger.warning('Failed to fetch cover art {}', url)
+    return None
 
 
 def _album_track_index_for_tags(

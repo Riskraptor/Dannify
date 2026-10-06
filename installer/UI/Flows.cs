@@ -125,7 +125,7 @@ namespace Dannify.Setup.UI
             return Directory.Exists(fallback) ? fallback : null;
         }
 
-        public const string DownloadPage = "https://github.com/DANIELMWENDWA9451/dannify-releases/releases";
+        public const string DownloadPage = "https://github.com/DANIELMWENDWA9451/Dannify/releases";
 
         public static void OpenDownloadPage()
         {
