@@ -110,15 +110,11 @@ def test_every_name_on_a_song_leads_somewhere(monkeypatch):
 
 
 def test_tracks_know_their_page(tmp_path):
-    from mutagen.id3 import ID3, TPE1, TIT2
+    from tests import _id3
 
     for i, who in enumerate(['Bensoul', 'BENSOUL']):
         f = tmp_path / f'{who} - s{i}.mp3'
-        f.write_bytes((bytes.fromhex('fffb9064') + bytes(413)) * 20)
-        tags = ID3()
-        tags.add(TPE1(encoding=3, text=who))
-        tags.add(TIT2(encoding=3, text=f's{i}'))
-        tags.save(f)
+        f.write_bytes(_id3.mp3(_id3.text('TPE1', who), _id3.text('TIT2', f's{i}')))
     library.invalidate_cache()
     data = library.library(tmp_path)
     assert {t['group'] for t in data['tracks']} == {'BENSOUL'} or {t['group'] for t in data['tracks']} == {'Bensoul'}

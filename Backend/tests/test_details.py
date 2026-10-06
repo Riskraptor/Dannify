@@ -20,8 +20,10 @@ def sealed_song(tmp_path, monkeypatch):
     music = tmp_path / 'Music' / 'Sauti Sol'
     music.mkdir(parents=True)
     plain = music / 'Sauti Sol - Suzanna.mp3'
-    plain.write_bytes(FRAMES)
-    downloader.embed_video_id(plain, 'KNEd-OkExKY')
+    from tests import _id3
+
+    # A song saved as MP3, tagged the way those versions tagged them.
+    plain.write_bytes(_id3.tag(_id3.txxx('DANNIFY_VIDEO_ID', 'KNEd-OkExKY')) + FRAMES)
     sealed = vault.seal(plain, music / 'Sauti Sol - Suzanna.dnf', {
         'title': 'Suzanna', 'artist': 'Sauti Sol', 'artists': ['Sauti Sol'],
         'album': '', 'video_id': 'KNEd-OkExKY',

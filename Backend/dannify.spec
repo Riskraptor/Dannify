@@ -52,8 +52,8 @@ def build_resources() -> str:
 datas = [
     # Interface and data files, in one packed file.
     (build_resources(), '.'),
-    # Bundled media encoder (ffmpeg, renamed). Nothing in the install
-    # folder announces which third-party tools are inside.
+    # Bundled media encoder (ffmpeg, renamed). Its licence notice is in
+    # THIRD-PARTY-NOTICES.md beside the program, as the licence asks.
     # ffprobe is deliberately NOT shipped: nothing in Dannify calls it, and
     # yt-dlp's FFmpegExtractAudio falls back to `ffmpeg -i` for codec probing.
     # Leaving it out takes 97 MB off every install.
@@ -110,6 +110,8 @@ a = Analysis(
     excludes=[
         'tkinter', 'unittest', 'pydoc_data', 'lib2to3',
         'pytest', '_pytest', 'pip', 'setuptools', 'wheel',
+        # GPL: kept out of the program for good, even if it is installed.
+        'mutagen',
     ],
     noarchive=False,
     optimize=2,   # strip docstrings/asserts from the shipped bytecode

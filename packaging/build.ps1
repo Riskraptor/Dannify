@@ -115,6 +115,13 @@ if (Test-Path $runtime) {
 # updates.py, support.py): nothing in the install folder can be edited to
 # point them elsewhere. packaging\config is read by development runs only.
 
+# Dannify's licence, and the notices the open-source parts inside it ask to
+# travel with them, beside the program.
+$repoRoot = Split-Path $PSScriptRoot -Parent
+foreach ($notice in 'LICENSE', 'THIRD-PARTY-NOTICES.md') {
+    Copy-Item (Join-Path $repoRoot $notice) (Join-Path $app $notice) -Force
+}
+
 Step 'Installer program'
 & $dotnet build $csproj -c Release -nologo -v q
 if ($LASTEXITCODE -ne 0) { throw "installer build failed ($LASTEXITCODE)" }

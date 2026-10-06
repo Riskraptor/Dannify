@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
 import hmac as _hmac
 import logging
 import mimetypes
@@ -26,12 +25,6 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from load_dotenv import load_dotenv
 from loguru import logger
-from mutagen import File as MutagenFile
-from mutagen.flac import FLAC, Picture
-from mutagen.id3 import ID3
-from mutagen.mp4 import MP4
-from mutagen.oggopus import OggOpus
-from mutagen.oggvorbis import OggVorbis
 from uvicorn import Config, Server
 
 from dannify import __version__, account, api
@@ -399,87 +392,23 @@ def _fix_mime_types() -> None:
 
 
 def _extract_cover(path: Path) -> tuple[bytes | None, str | None]:
-    """Return ``(image_bytes, mime)`` for the embedded cover, or ``(None, None)``.
+    """Return ``(image_bytes, mime)`` for the embedded cover, or ``(None, None)``."""
 
-    Reads tags lazily: mutagen format detection handles MP3/FLAC/M4A/OGG/Opus
-    without us needing to dispatch on extension.
-    """
-
-    # A sealed container carries its artwork in its own header; mutagen would
-    # only see noise.
+    # A sealed container carries its artwork in its own header; a tag reader
+    # would only see noise.
     if path.suffix.lower() == '.dnf':
         from dannify import vault
 
         found = vault.cover(path)
         return found if found else (None, None)
 
+    from dannify import tags
+
     try:
-        # ID3 (mp3, sometimes wav/aac)
-        try:
-            tag = ID3(str(path))
-            for frame in tag.getall('APIC'):
-                if frame.data:
-                    return frame.data, frame.mime or 'image/jpeg'
-        except Exception:
-            pass
-
-        # FLAC
-        if path.suffix.lower() == '.flac':
-            try:
-                f = FLAC(str(path))
-                if f.pictures:
-                    pic = f.pictures[0]
-                    return pic.data, pic.mime or 'image/jpeg'
-            except Exception:
-                pass
-
-        # MP4 / M4A
-        if path.suffix.lower() in {'.m4a', '.mp4', '.aac'}:
-            try:
-                m = MP4(str(path))
-                covr = m.tags.get('covr') if m.tags else None
-                if covr:
-                    pic = covr[0]
-                    fmt = getattr(pic, 'imageformat', None)
-                    mime = (
-                        'image/png'
-                        if fmt == 14  # MP4Cover.FORMAT_PNG
-                        else 'image/jpeg'
-                    )
-                    return bytes(pic), mime
-            except Exception:
-                pass
-
-        # Ogg Vorbis / Opus - METADATA_BLOCK_PICTURE base64
-        if path.suffix.lower() in {'.ogg', '.opus'}:
-            try:
-                ogg = (
-                    OggOpus(str(path))
-                    if path.suffix.lower() == '.opus'
-                    else OggVorbis(str(path))
-                )
-                blocks = ogg.get('metadata_block_picture') or []
-                for raw in blocks:
-                    try:
-                        pic = Picture(base64.b64decode(raw))
-                        if pic.data:
-                            return pic.data, pic.mime or 'image/jpeg'
-                    except Exception:
-                        continue
-            except Exception:
-                pass
-
-        # Generic fallback: let mutagen pick the right parser
-        try:
-            f = MutagenFile(str(path))
-            if f is not None and getattr(f, 'pictures', None):
-                pic = f.pictures[0]
-                return pic.data, pic.mime or 'image/jpeg'
-        except Exception:
-            pass
+        found = tags.cover(path)
     except Exception:
-        return None, None
-    return None, None
+        found = None
+    return found if found else (None, None)
 
 
 def build_app() -> FastAPI:
