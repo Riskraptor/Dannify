@@ -71,8 +71,17 @@
             {{ initials }}
           </span>
           <Icon v-else icon="ph:user-circle" class="h-[19px] w-[19px]" />
+          <!-- Signed out: the same button, saying what it does. Home used to
+               carry a second "Sign in" button of its own for this. -->
+          <span v-if="!account.signedIn.value && desktop.isDesktop && !ui.isCompact.value" class="tb-signin">
+            {{ t('account.connect') }}
+          </span>
         </button>
+        <!-- Settings lives at the foot of the sidebar. Only when the sidebar
+             is a closed drawer (phone-sized windows) is it repeated here, or
+             it would be two clicks away. Ctrl+, works everywhere. -->
         <button
+          v-if="ui.isCompact.value"
           class="icon-btn"
           :class="{ 'is-active': route.name === 'Settings' }"
           :title="`${t('nav.settings')} (Ctrl+,)`"
@@ -129,7 +138,7 @@ const initials = computed(() =>
 
 function openAccountMenu(e) {
   if (!account.signedIn.value) {
-    account.signIn()
+    if (!account.busy.value) account.signIn()
     return
   }
   openContextMenu(
@@ -262,6 +271,19 @@ onBeforeUnmount(() => {
 }
 .tb-account.is-in {
   box-shadow: 0 0 0 1.5px rgb(var(--c-accent) / 0.75);
+}
+/* Signed out on the desktop: a pill with words rather than a bare icon. */
+.tb-account:has(.tb-signin) {
+  display: inline-flex;
+  width: auto;
+  gap: 6px;
+  padding: 0 10px 0 6px;
+  border: 1px solid rgb(var(--c-tint) / 0.16);
+}
+.tb-signin {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .tb-avatar {
   width: 22px;

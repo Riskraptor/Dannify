@@ -66,14 +66,17 @@ namespace Dannify.Setup.Core
             {
                 using (var fs = new FileStream(exe, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                 {
-                    if (fs.Length < TrailerSize + 16) return null;
-                    fs.Seek(-TrailerSize, SeekOrigin.End);
+                    // A code-signed setup has its signature appended after the
+                    // trailer, so the trailer ends where the signature starts.
+                    long end = TrailerEnd(fs, SignedEnd(fs));
+                    if (end < TrailerSize + 16) return null;
+                    fs.Seek(end - TrailerSize, SeekOrigin.Begin);
                     var trailer = ReadExactly(fs, TrailerSize);
                     for (int i = 0; i < Magic.Length; i++)
                         if (trailer[i] != Magic[i]) return null;
                     long offset = BitConverter.ToInt64(trailer, 8);
                     long length = BitConverter.ToInt64(trailer, 16);
-                    if (offset <= 0 || length <= 0 || offset + length != fs.Length - TrailerSize)
+                    if (offset <= 0 || length <= 0 || offset + length != end - TrailerSize)
                         throw new InvalidDataException("payload trailer does not match the file");
                     var payload = new Payload
                     {
@@ -95,6 +98,66 @@ namespace Dannify.Setup.Core
                 Log.Warn("no readable payload: " + ex.Message);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Where the file's own content ends: its length, less an Authenticode
+        /// signature when one sits at the very end (where Windows puts it). The
+        /// PE header's security directory says where that is, as a file offset.
+        /// Anything that does not read as exactly that is left alone, and the
+        /// whole length counts, as it did before setups were signed.
+        /// </summary>
+        internal static long SignedEnd(Stream fs)
+        {
+            long length = fs.Length;
+            try
+            {
+                if (length < 0x40) return length;
+                fs.Seek(0, SeekOrigin.Begin);
+                var dos = ReadExactly(fs, 0x40);
+                if (dos[0] != (byte)'M' || dos[1] != (byte)'Z') return length;
+                long pe = BitConverter.ToInt32(dos, 0x3C);
+                if (pe <= 0 || pe + 24 + 2 > length) return length;
+                fs.Seek(pe, SeekOrigin.Begin);
+                var head = ReadExactly(fs, 24 + 2);
+                if (head[0] != (byte)'P' || head[1] != (byte)'E' || head[2] != 0 || head[3] != 0) return length;
+                ushort magic = BitConverter.ToUInt16(head, 24);
+                long dirs = pe + 24 + (magic == 0x20b ? 112 : magic == 0x10b ? 96 : -1);
+                if (dirs < pe + 24) return length;
+                long security = dirs + 4 * 8; // IMAGE_DIRECTORY_ENTRY_SECURITY
+                if (security + 8 > length) return length;
+                fs.Seek(security, SeekOrigin.Begin);
+                var entry = ReadExactly(fs, 8);
+                long at = BitConverter.ToUInt32(entry, 0);
+                long size = BitConverter.ToUInt32(entry, 4);
+                if (at <= 0 || size <= 0 || at + size != length) return length;
+                return at;
+            }
+            catch (Exception)
+            {
+                return length;
+            }
+        }
+
+        /// <summary>
+        /// Signing first pads the file with zeros to a multiple of 8 bytes, so
+        /// the trailer can end up to 7 bytes before <paramref name="end"/>.
+        /// Only zero bytes are stepped over, and only to land on the magic.
+        /// </summary>
+        private static long TrailerEnd(Stream fs, long end)
+        {
+            if (end == fs.Length || end < TrailerSize + 8) return end;
+            fs.Seek(end - TrailerSize - 7, SeekOrigin.Begin);
+            var tail = ReadExactly(fs, TrailerSize + 7);
+            for (int pad = 0; pad <= 7; pad++)
+            {
+                if (pad > 0 && tail[tail.Length - pad] != 0) break;
+                int start = tail.Length - pad - TrailerSize;
+                bool match = true;
+                for (int i = 0; i < Magic.Length && match; i++) match = tail[start + i] == Magic[i];
+                if (match) return end - pad;
+            }
+            return end;
         }
 
         private static byte[] ReadExactly(Stream s, int count)
@@ -372,13 +435,57 @@ namespace Dannify.Setup.Core
             {
                 var buf = new byte[1 << 16];
                 long left = Offset;
+                long written = 0;
+                // A signed setup's header points at a signature on the end of
+                // the setup, which the launcher copy does not have, and carries
+                // the checksum signing wrote. Both are put back to the zeros the
+                // engine was built with, so the copy is that engine, byte for
+                // byte: a plain program that does not claim a signature.
+                long[] blank = SignedHeaderFields(src);
                 while (left > 0)
                 {
                     int n = src.Read(buf, 0, (int)Math.Min(buf.Length, left));
                     if (n <= 0) throw new InvalidDataException("setup file is shorter than it says");
+                    for (int f = 0; f + 1 < blank.Length; f += 2)
+                    {
+                        long from = Math.Max(blank[f], written), to = Math.Min(blank[f] + blank[f + 1], written + n);
+                        for (long i = from; i < to; i++) buf[i - written] = 0;
+                    }
                     dst.Write(buf, 0, n);
+                    written += n;
                     left -= n;
                 }
+            }
+        }
+
+        /// <summary>
+        /// (offset, length) pairs of the PE header fields signing changes: the
+        /// checksum and the security directory entry. Empty when the file does
+        /// not carry a signature, so an unsigned setup is copied untouched.
+        /// </summary>
+        private static long[] SignedHeaderFields(Stream fs)
+        {
+            long at = fs.Position;
+            try
+            {
+                if (SignedEnd(fs) == fs.Length) return new long[0];
+                fs.Seek(0, SeekOrigin.Begin);
+                var dos = ReadExactly(fs, 0x40);
+                long pe = BitConverter.ToInt32(dos, 0x3C);
+                fs.Seek(pe, SeekOrigin.Begin);
+                var head = ReadExactly(fs, 26);
+                ushort magic = BitConverter.ToUInt16(head, 24);
+                long optional = pe + 24;
+                long security = optional + (magic == 0x20b ? 112 : 96) + 4 * 8;
+                return new long[] { optional + 64, 4, security, 8 };
+            }
+            catch (Exception)
+            {
+                return new long[0];
+            }
+            finally
+            {
+                fs.Seek(at, SeekOrigin.Begin);
             }
         }
     }

@@ -31,10 +31,26 @@ $tag = "v$version"
 # installer that moves it to the new one.
 $files = @(
     (Join-Path $out "Dannify-Setup-$version.exe"),
+    (Join-Path $out "Dannify-Setup-$version.exe.sig"),
     (Join-Path $out "package-$version.json"),
+    (Join-Path $out "package-$version.json.sig"),
     (Join-Path $out "package-$version.zip")
 )
 foreach ($f in $files) { if (-not (Test-Path $f)) { throw "missing $f" } }
+
+# Every installed copy from 4.7.0 on refuses an update that does not verify.
+# Checked once more here, against the key the app carries, so a release that
+# would be refused everywhere is never put up in the first place.
+$python = Join-Path $root 'Backend\venv\Scripts\python.exe'
+$shipped = (Select-String -Path (Join-Path $root 'Backend\dannify\updates.py') -Pattern "^PUBLIC_KEY = '([0-9a-f]+)'$").Matches[0].Groups[1].Value
+if (-not $shipped) { throw 'updates.py carries no PUBLIC_KEY' }
+$env:DANNIFY_RELEASE_PUBLIC = $shipped
+try {
+    & $python (Join-Path $PSScriptRoot 'release_key.py') verify package $version (Join-Path $out "package-$version.json")
+    if ($LASTEXITCODE -ne 0) { throw 'the package list is not signed with the release key' }
+    & $python (Join-Path $PSScriptRoot 'release_key.py') verify installer $version (Join-Path $out "Dannify-Setup-$version.exe")
+    if ($LASTEXITCODE -ne 0) { throw 'the installer is not signed with the release key' }
+} finally { Remove-Item Env:\DANNIFY_RELEASE_PUBLIC -ErrorAction SilentlyContinue }
 
 Write-Host "Publishing $tag on $Repo" -ForegroundColor Cyan
 & gh release create $tag --repo $Repo --verify-tag --latest --title "Dannify $version" --notes $Notes @files

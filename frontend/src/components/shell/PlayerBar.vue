@@ -46,8 +46,10 @@
           :disabled="inLibrary"
           @click="saveCurrent"
         >
+          <!-- A download arrow, filled once saved. A green tick beside the
+               heart read as a second "liked", not as "on this PC". -->
           <Icon
-            :icon="inLibrary ? 'ph:check-circle-fill' : 'ph:plus-circle'"
+            :icon="inLibrary ? 'ph:arrow-circle-down-fill' : 'ph:arrow-circle-down'"
             class="h-[18px] w-[18px]"
           />
         </button>
@@ -527,22 +529,22 @@ function onTrackMenu(e) {
   flex: 1;
 }
 
-.pb-more {
+/* About and the mini player sit behind More at every width: ten icons in a
+   row, most of them unlabelled, was more than anyone could tell apart. The
+   sleep timer stays out while it runs, because its countdown is live. */
+.pb-extra:not(.pb-sleep),
+.pb-sleep:not(.is-on) {
   display: none;
 }
 
-/* Medium windows: tighten the right side. Sleep, About and the mini player
-   go behind a More button: all nine buttons kept their room and the song's
-   own name, the one thing everyone reads, was cut to three letters. */
+/* Medium windows: tighten the right side; a running sleep timer goes behind
+   More too, so the song's own name keeps its room. */
 @media (max-width: 1000px) {
   .pbar {
     grid-template-columns: minmax(150px, 1fr) minmax(240px, 1.5fr) auto;
   }
   .pb-extra {
     display: none;
-  }
-  .pb-more {
-    display: inline-flex;
   }
   .pb-volume {
     width: auto;

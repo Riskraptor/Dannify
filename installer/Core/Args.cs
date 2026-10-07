@@ -30,6 +30,7 @@ namespace Dannify.Setup.Core
         public string UiState;
         public string RemoveMachineCopy;
         public string UnpackTo;
+        public string WriteEngineTo; // build check: the launcher copy an install would leave
         public readonly List<string> PassThrough = new List<string>();
 
         private static readonly HashSet<string> InnoIgnored = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -110,6 +111,9 @@ namespace Dannify.Setup.Core
                         continue;
                     case "--unpack-to":
                         a.UnpackTo = Next();
+                        continue;
+                    case "--write-engine":
+                        a.WriteEngineTo = Next();
                         continue;
                 }
 

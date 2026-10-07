@@ -775,6 +775,8 @@ export default {
     whatsNew: 'Nouveautés',
     whatsNewTitle: 'Nouveautés de la version {version}',
     whatsNewEmpty: 'Corrections et améliorations.',
+    rolledBack:
+      "Dannify {version} n'a pas pu démarrer sur ce PC : vous êtes revenu à la version {running}. Elle ne sera plus proposée ; la suivante le sera.",
     gotIt: 'Compris',
   },
   restart: {

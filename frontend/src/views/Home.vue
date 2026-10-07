@@ -3,15 +3,6 @@
     <div class="home-band" aria-hidden="true" />
     <header class="view-pad relative flex items-end justify-between gap-4 pb-5 pt-7">
       <h1 class="text-[32px] font-bold tracking-tight">{{ greeting }}</h1>
-      <button
-        v-if="!account.signedIn.value && desktop.isDesktop"
-        class="btn btn-pill shrink-0"
-        :disabled="account.busy.value"
-        @click="account.signIn()"
-      >
-        <Icon icon="ph:google-logo" class="h-4 w-4" />
-        {{ t('account.connect') }}
-      </button>
     </header>
 
     <!-- First run: nothing downloaded, nothing played, no feed yet -->
@@ -46,7 +37,7 @@
       <header class="shelf-head is-flush">
         <h2 class="shelf-title">{{ t('home.jumpBackIn') }}</h2>
       </header>
-      <div class="tile-grid">
+      <div class="tile-grid" :class="{ 'is-few': quick.length < 3 }">
         <SongTile
           v-for="(row, i) in quick"
           :key="row.key + i"
@@ -228,7 +219,6 @@ import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
 import { useDeferred } from '/src/model/deferred'
-import { desktop } from '/src/desktop/bridge'
 import { usePlayer } from '/src/model/player'
 import { useLibrary } from '/src/model/library'
 import { useRecent, sameSong } from '/src/model/recent'
@@ -484,6 +474,11 @@ function submitWelcome() {
 .tile-grid.is-flush {
   margin-bottom: 0;
   padding: 0 10px;
+}
+/* One or two recent songs: they share the row instead of sitting at the left
+   of a mostly empty grid, but stop short of turning into one long bar. */
+.tile-grid.is-few {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 420px));
 }
 .shelves {
   padding: 0 14px;

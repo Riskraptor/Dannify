@@ -2540,7 +2540,14 @@ async def update_download_endpoint(
         raise HTTPException(status_code=404, detail='no_download')
     dest = Path(state.data_dir or Path.home()) / 'updates'
     try:
-        path = await asyncio.to_thread(updates.download, url, dest, _progress)
+        path = await asyncio.to_thread(
+            updates.download,
+            url,
+            dest,
+            _progress,
+            str(info.get('version') or ''),
+            str(info.get('installer_signature_url') or ''),
+        )
     except Exception as exc:
         logger.opt(exception=True).info('update download failed')
         raise HTTPException(status_code=502, detail='update_failed') from exc
@@ -2557,6 +2564,16 @@ def update_status_endpoint() -> dict[str, Any]:
 
     waiting = layout.pending()
     fresh = layout.just_updated()
+    # A version the launcher had to take back out because it would not
+    # start. It used to happen in silence: the update simply never arrived
+    # and nobody knew why. Only while it is newer than what runs, so a later
+    # release that did install puts an end to the message.
+    bad = layout.skipped_version()
+    rolled_back = (
+        {'version': bad, 'running': state.version or ''}
+        if bad and state.version and updates.is_newer(bad, state.version)
+        else None
+    )
     return {
         'managed': layout.managed(),
         'pending': {'version': str(waiting.get('version') or '')} if waiting else None,
@@ -2565,6 +2582,7 @@ def update_status_endpoint() -> dict[str, Any]:
             if fresh
             else None
         ),
+        'rolled_back': rolled_back,
     }
 
 

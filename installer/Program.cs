@@ -70,6 +70,20 @@ namespace Dannify.Setup
                 if (args.RemoveMachineCopy != null) return Engine.RemoveMachineCopy(args.RemoveMachineCopy);
                 if (args.VerifyPayload) return Verify(payload, null);
                 if (args.UnpackTo != null) return Verify(payload, args.UnpackTo);
+                if (args.WriteEngineTo != null)
+                {
+                    if (payload == null) return 4;
+                    try
+                    {
+                        payload.WriteEngine(args.WriteEngineTo);
+                        return 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("could not write the launcher copy", ex);
+                        return 5;
+                    }
+                }
 
                 if (inPlace && !args.Uninstall && args.AfterPid == 0 && args.UiState == null)
                 {

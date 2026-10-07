@@ -220,6 +220,8 @@ async function showWhatsNew(version, notes) {
   })
 }
 
+let rollbackShown = false
+
 async function loadStatus() {
   try {
     const { data } = await API.updateStatus()
@@ -227,6 +229,23 @@ async function loadStatus() {
       updateKind.value = 'staged'
       installerPath.value = 'staged'
       info.value = { ...info.value, available: true, version: data.pending.version }
+    }
+    // The launcher took a new version back out because it would not start.
+    // That used to happen without a word; say it once a session.
+    if (data && data.rolled_back && data.rolled_back.version && !rollbackShown) {
+      rollbackShown = true
+      toast(
+        t('update.rolledBack', {
+          version: data.rolled_back.version,
+          running: data.rolled_back.running || '',
+        }),
+        {
+          icon: 'ph:arrow-counter-clockwise',
+          tone: 'error',
+          timeout: 15000,
+          action: { label: t('update.releaseNotes'), run: () => desktop.openExternal(siteUrl.value) },
+        }
+      )
     }
     if (data && data.just_updated && data.just_updated.version) {
       const { version, notes } = data.just_updated

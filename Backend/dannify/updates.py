@@ -25,6 +25,7 @@ import re
 import shutil
 import threading
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,7 +33,7 @@ from typing import Any, Callable, Optional
 
 from loguru import logger
 
-from . import layout
+from . import layout, signing
 
 # Releases live on Dannify's own repository, which is public. Up to 4.6.1
 # they came from a separate one, dannify-releases, while the source was
@@ -41,7 +42,16 @@ DEFAULT_REPO = 'DANIELMWENDWA9451/Dannify'
 # Where About sends people: the page the builds are on.
 SITE_URL = 'https://github.com/DANIELMWENDWA9451/Dannify/releases'
 CHECK_TTL = 60 * 60 * 6  # re-check at most every 6 hours
+# A refused check (GitHub's limit is 60 an hour per address, shared by
+# everyone behind the same router) is not retried for this long.
+RATE_LIMIT_HOLD = 30 * 60
 _USER_AGENT = 'Dannify-Updater'
+# What every release is signed with (see signing.py and
+# packaging/release_key.py). The private half stays on the release machine.
+# Every release from 4.7.0 on is signed; a copy with this key refuses any
+# update that is not. Releases up to 4.6.2 were not signed, which is fine:
+# this check only ever applies to what comes after the copy doing it.
+PUBLIC_KEY = '987db4ce83dddd6720451a0c4b09e5d505cf07b6a4bd20fa91a25e1d779d1f7a'
 
 _lock = threading.Lock()
 _cache: dict[str, Any] = {'at': 0.0, 'result': None}
@@ -99,25 +109,111 @@ def _api_base() -> str:
     return 'https://api.github.com'
 
 
-def _version_tuple(value: str) -> tuple[int, ...]:
-    parts = re.findall(r'\d+', str(value or ''))
-    return tuple(int(p) for p in parts[:4]) or (0,)
+_SEMVER = re.compile(r'^\s*[vV]?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]*)?\s*$')
+
+
+def _version_key(value: str) -> tuple:
+    """Ordering for versions, prereleases included (semver rules).
+
+    Digits alone used to be compared, so ``4.7.0-beta.2`` read as 4.7.0.2:
+    newer than 4.7.0 itself. Someone on the prerelease channel was then never
+    offered the final release. A prerelease now sorts before its release, and
+    prerelease parts compare numerically where they are numbers.
+    """
+
+    text = str(value or '')
+    match = _SEMVER.match(text)
+    if not match:
+        parts = re.findall(r'\d+', text)
+        return (tuple(int(p) for p in parts[:4]) or (0,), (1,))
+    numbers = [int(p) for p in match.group(1).split('.')][:4]
+    numbers += [0] * (4 - len(numbers))
+    pre = match.group(2)
+    if not pre:
+        return (tuple(numbers), (1,))
+    ids = tuple((0, int(p), '') if p.isdigit() else (1, 0, p) for p in pre.split('.'))
+    return (tuple(numbers), (0,) + ids)
 
 
 def is_newer(candidate: str, current: str) -> bool:
-    return _version_tuple(candidate) > _version_tuple(current)
+    return _version_key(candidate) > _version_key(current)
+
+
+def _require_signatures() -> bool:
+    return bool(PUBLIC_KEY)
+
+
+def _check_signature(kind: str, version: str, digest: str, signature_url: str) -> None:
+    """Raise unless the release signed exactly this file.
+
+    The hashes an update is checked against come from the same release as
+    the files, so they cannot tell a genuine release from a planted one. The
+    signature can: only the release machine holds the key that makes it.
+    """
+
+    if not _require_signatures():
+        return
+    if not signature_url:
+        raise RuntimeError(f'the {kind} for {version} is not signed')
+    _check_asset(signature_url)
+    text = _get_text(signature_url)
+    if not signing.verify_release(PUBLIC_KEY, kind, version, digest, text):
+        raise RuntimeError(f'the {kind} for {version} has a bad signature')
+
+
+class RateLimited(RuntimeError):
+    """GitHub said no more checks for now; ``hold`` is how long to wait (s)."""
+
+    def __init__(self, hold: float) -> None:
+        super().__init__('rate_limited')
+        self.hold = hold
+
+
+# The last answer to each address and its ETag. Asking again with
+# If-None-Match costs nothing when nothing changed: GitHub answers 304 and
+# does not count it against the 60 an hour an address is allowed.
+_conditional: dict[str, tuple[str, Any]] = {}
+
+
+def _rate_limit_hold(headers: Any) -> Optional[float]:
+    if headers is None:
+        return None
+    remaining = str(headers.get('X-RateLimit-Remaining') or '').strip()
+    retry_after = str(headers.get('Retry-After') or '').strip()
+    if retry_after.isdigit():
+        return float(min(int(retry_after), 6 * 3600))
+    if remaining != '0':
+        return None
+    reset = str(headers.get('X-RateLimit-Reset') or '').strip()
+    if reset.isdigit():
+        return float(max(60, min(int(reset) - time.time(), 6 * 3600)))
+    return float(RATE_LIMIT_HOLD)
 
 
 def _get(url: str) -> Any:
-    request = urllib.request.Request(
-        url,
-        headers={
-            'Accept': 'application/vnd.github+json',
-            'User-Agent': _USER_AGENT,
-        },
-    )
-    with urllib.request.urlopen(request, timeout=12) as response:
-        return json.loads(response.read().decode('utf-8'))
+    headers = {
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': _USER_AGENT,
+    }
+    known = _conditional.get(url)
+    if known:
+        headers['If-None-Match'] = known[0]
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            etag = response.headers.get('ETag') if response.headers else None
+            if etag:
+                _conditional[url] = (etag, data)
+            return data
+    except urllib.error.HTTPError as exc:
+        if exc.code == 304 and known:
+            return known[1]
+        if exc.code in (403, 429):
+            hold = _rate_limit_hold(exc.headers)
+            if hold is not None or exc.code == 429:
+                raise RateLimited(hold if hold is not None else RATE_LIMIT_HOLD) from exc
+        raise
 
 
 def _get_text(url: str) -> str:
@@ -208,6 +304,7 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         'package_url': '',
         'managed': layout.managed(),
     }
+    hold = 60.0
     try:
         data = _fetch_latest()
         tag = str(data.get('tag_name') or data.get('name') or '').lstrip('vV')
@@ -226,6 +323,7 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         # launcher; offering it again would only go round in circles.
         if available and tag == layout.skipped_version():
             available = False
+        installer_name = str((installer or {}).get('name') or '')
         result.update(
             {
                 'available': available,
@@ -237,9 +335,18 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
                 'published_at': data.get('published_at') or '',
                 'package_manifest_url': _asset(assets, 'package-', '.json'),
                 'package_url': _asset(assets, 'package-', '.zip'),
+                # The signatures that go with them (see signing.py).
+                'package_signature_url': _asset(assets, 'package-', '.json.sig'),
+                'installer_signature_url': (
+                    _asset(assets, installer_name + '.sig', '') if installer_name else ''
+                ),
             }
         )
-    except Exception as exc:  # offline, rate-limited, no releases yet…
+    except RateLimited as exc:
+        result['error'] = 'rate_limited'
+        hold = exc.hold
+        logger.debug('Update check refused by the server; next try in {:.0f}s', hold)
+    except Exception as exc:  # offline, no releases yet…
         result['error'] = str(exc)
         logger.debug('Update check failed: {}', exc)
 
@@ -248,8 +355,9 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         # A failure is not an answer. Caching one for the full six hours meant
         # a single bad moment on the network left the app believing it was
         # offline until tomorrow, with nothing the user could do about it.
-        # Hold a failure for a minute, then let the next check actually try.
-        _cache['at'] = now if not result['error'] else now - CHECK_TTL + 60
+        # Hold a failure for a minute (a refusal for as long as the server
+        # asked), then let the next check actually try.
+        _cache['at'] = now if not result['error'] else now - CHECK_TTL + hold
     return result
 
 
@@ -293,10 +401,15 @@ def download(
     url: str,
     dest_dir: Path,
     progress_cb: Optional[Callable[..., None]] = None,
+    version: str = '',
+    signature_url: str = '',
 ) -> Path:
     """Download the installer (for a copy that cannot update in place)."""
 
     _check_asset(url)
+    if _require_signatures() and (not version or not signature_url):
+        # Refused before a byte is fetched: without these it can never pass.
+        raise RuntimeError('the installer is not signed')
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     # The name comes from the address, so it is cut down to something that
@@ -362,6 +475,16 @@ def download(
     # copy for the next try to finish, and is not handed over as ready.
     if total and done != total:
         raise RuntimeError(f'download stopped early ({done} of {total} bytes)')
+    # Only a setup the release signed is ever handed over to be run. One that
+    # fails is deleted, not kept to resume: carrying on from it would only
+    # finish the same wrong file.
+    if _require_signatures():
+        try:
+            _check_signature('installer', version, signing.sha256_file(partial), signature_url)
+        except Exception:
+            partial.unlink(missing_ok=True)
+            tag_file.unlink(missing_ok=True)
+            raise
     partial.replace(target)
     tag_file.unlink(missing_ok=True)
     bar.done()
@@ -414,11 +537,21 @@ def stage(info: dict[str, Any], progress: Optional[Callable[..., None]] = None) 
     with _stage_lock:
         bar = Progress(progress)
         bar.stage('reading', 0.0, 0.03)
-        manifest = json.loads(_get_text(manifest_url))
+        manifest_text = _get_text(manifest_url)
+        manifest = json.loads(manifest_text)
         files: dict[str, Any] = manifest.get('files') or {}
         version = str(manifest.get('version') or info.get('version') or '')
         if not files or not version:
             raise RuntimeError('the release package list is empty')
+        # The list names every file's hash, so signing the list signs the
+        # whole update. Checked on the exact bytes that were read, and with
+        # the version the list itself claims: an older release's list,
+        # validly signed, cannot be passed off as this one.
+        if _require_signatures():
+            if version != str(info.get('version') or version):
+                raise RuntimeError('the package list is for another version')
+            digest = hashlib.sha256(manifest_text.encode('utf-8')).hexdigest()
+            _check_signature('package', version, digest, str(info.get('package_signature_url') or ''))
 
         tmp = base / f'app-next.tmp-{os.urandom(4).hex()}'
         for rel in files:

@@ -61,7 +61,7 @@
             :title="inLibrary ? t('player.inLibrary') : t('player.saveToLibrary')"
             @click="downloadRows([row])"
           >
-            <Icon :icon="inLibrary ? 'ph:check-circle-fill' : 'ph:plus-circle'" class="h-6 w-6" />
+            <Icon :icon="inLibrary ? 'ph:arrow-circle-down-fill' : 'ph:arrow-circle-down'" class="h-6 w-6" />
           </button>
           <button class="icon-btn is-round np-btn h-10 w-10" :title="t('actions.more')" @click="onMore">
             <Icon icon="ph:dots-three-bold" class="h-6 w-6" />
