@@ -1,0 +1,11 @@
+#!/bin/sh
+# Dannify launcher for Ubuntu/Debian (/usr/bin/dannify).
+set -eu
+APP_DIR="/opt/dannify"
+BACKEND="$APP_DIR/Backend"
+if [ -x "$APP_DIR/venv/bin/python3" ]; then
+  PY="$APP_DIR/venv/bin/python3"
+else
+  PY="python3"
+fi
+PYTHONPATH="$BACKEND:${PYTHONPATH:-}" exec "$PY" "$BACKEND/desktop_linux.py" "$@"
