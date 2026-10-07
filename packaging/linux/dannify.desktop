@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Dannify
+Comment=Search, play and keep tracks as real files with artwork, tags and synced lyrics
+Exec=dannify %U
+Icon=dannify
+Terminal=false
+Categories=AudioVideo;Audio;Player;Music;
+Keywords=music;player;youtube;lyrics;
+StartupWMClass=Dannify
+MimeType=x-scheme-handler/dannify;audio/mpeg;audio/flac;audio/ogg;audio/x-wav;
