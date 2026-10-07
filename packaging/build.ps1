@@ -1,12 +1,13 @@
 # Dannify release build: frontend -> PyInstaller bundle -> installer.
 #
 #   pwsh packaging\build.ps1              # full build
-#   pwsh packaging\build.ps1 -SkipTests   # skip the frontend test run
+#   pwsh packaging\build.ps1 -SkipTests   # skip the test runs
 #
 # Output:
 #   Backend\dist\Dannify\                    the app folder (installed as <root>\app)
 #   packaging\out\Dannify-Setup-<v>.exe      the installer: our own, see installer\
 #   packaging\out\package-<v>.json/.zip      what installed copies update from
+#   packaging\out\*.sig                      release signatures (release_key.py)
 
 [CmdletBinding()]
 param(
@@ -37,6 +38,22 @@ function Size($path) {
 $dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
 if (-not $dotnet) { $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe' }
 if (-not (Test-Path $dotnet)) { throw 'the .NET SDK is needed to build the installer (dotnet not found)' }
+
+# Without the release key there is no point building: nothing it makes could
+# be installed as an update. Found out now rather than after PyInstaller.
+if (-not $SkipInstaller) {
+    & $python (Join-Path $PSScriptRoot 'release_key.py') public | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'no release signing key (see packaging\release_key.py)' }
+}
+
+if (-not $SkipTests) {
+    Step 'Backend tests'
+    Push-Location $backend
+    try {
+        & $python -m pytest -q -p no:cacheprovider
+        if ($LASTEXITCODE -ne 0) { throw "backend tests failed ($LASTEXITCODE)" }
+    } finally { Pop-Location }
+}
 
 Step 'Frontend'
 Push-Location $frontend
@@ -149,6 +166,50 @@ $check = Join-Path ([IO.Path]::GetTempPath()) ("dannify-build-check-" + [Guid]::
 $verify = Start-Process -FilePath $setup -ArgumentList @('--verify-payload', '--data', $check) -Wait -PassThru
 Remove-Item -Recurse -Force $check -ErrorAction SilentlyContinue
 if ($verify.ExitCode -ne 0) { throw "the installer failed its own check ($($verify.ExitCode))" }
+
+# Windows code signing, when a certificate is available. SmartScreen warns
+# about any setup that is not signed. The signature goes on the end of the
+# file, after the payload; the installer reads past it (see Payload.cs).
+#   DANNIFY_SIGN_THUMBPRINT  a code-signing certificate in CurrentUser\My
+#   DANNIFY_TIMESTAMP_URL    optional, default http://timestamp.digicert.com
+if ($env:DANNIFY_SIGN_THUMBPRINT) {
+    Step 'Code signing'
+    $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert |
+        Where-Object { $_.Thumbprint -eq $env:DANNIFY_SIGN_THUMBPRINT } | Select-Object -First 1
+    if (-not $cert) { throw "no code-signing certificate $($env:DANNIFY_SIGN_THUMBPRINT) in CurrentUser\My" }
+    $stamp = if ($env:DANNIFY_TIMESTAMP_URL) { $env:DANNIFY_TIMESTAMP_URL } else { 'http://timestamp.digicert.com' }
+    $signed = Set-AuthenticodeSignature -FilePath $setup -Certificate $cert -HashAlgorithm SHA256 -TimestampServer $stamp
+    if ($signed.Status -ne 'Valid') { throw "code signing failed: $($signed.StatusMessage)" }
+    # Signed, it must still unpack and check out exactly as before.
+    $check = Join-Path ([IO.Path]::GetTempPath()) ("dannify-build-check-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+    $verify = Start-Process -FilePath $setup -ArgumentList @('--verify-payload', '--data', $check) -Wait -PassThru
+    Remove-Item -Recurse -Force $check -ErrorAction SilentlyContinue
+    if ($verify.ExitCode -ne 0) { throw "the signed installer failed its own check ($($verify.ExitCode))" }
+    Write-Host "  signed by $($cert.Subject)"
+} else {
+    Write-Host "`n  (no DANNIFY_SIGN_THUMBPRINT: the installer is not code-signed; SmartScreen will warn)" -ForegroundColor Yellow
+}
+
+# Dannify's own release signatures: what installed copies check every update
+# against (see Backend/dannify/signing.py). Last, because they cover the final
+# bytes of each file. A release without them would be refused by every copy.
+Step 'Release signatures'
+$manifestFile = Join-Path $out "package-$version.json"
+& $python (Join-Path $PSScriptRoot 'release_key.py') sign package $version $manifestFile
+if ($LASTEXITCODE -ne 0) { throw "signing the package list failed ($LASTEXITCODE)" }
+& $python (Join-Path $PSScriptRoot 'release_key.py') sign installer $version $setup
+if ($LASTEXITCODE -ne 0) { throw "signing the installer failed ($LASTEXITCODE)" }
+# Checked against the key the app itself carries, not the one just used:
+# a release signed with any other key would install nowhere.
+$shipped = (Select-String -Path (Join-Path $backend 'dannify\updates.py') -Pattern "^PUBLIC_KEY = '([0-9a-f]+)'$").Matches[0].Groups[1].Value
+if (-not $shipped) { throw 'updates.py carries no PUBLIC_KEY' }
+$env:DANNIFY_RELEASE_PUBLIC = $shipped
+try {
+    & $python (Join-Path $PSScriptRoot 'release_key.py') verify package $version $manifestFile
+    if ($LASTEXITCODE -ne 0) { throw 'the package list does not verify against the key in updates.py' }
+    & $python (Join-Path $PSScriptRoot 'release_key.py') verify installer $version $setup
+    if ($LASTEXITCODE -ne 0) { throw 'the installer does not verify against the key in updates.py' }
+} finally { Remove-Item Env:\DANNIFY_RELEASE_PUBLIC -ErrorAction SilentlyContinue }
 
 $file = Get-Item $setup
 Write-Host ("Installer: {0} ({1:N1} MB), checked" -f $file.Name, ($file.Length / 1MB)) -ForegroundColor Green

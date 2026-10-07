@@ -45,7 +45,9 @@ def main() -> int:
 
     manifest = delta.build_manifest(app_dir, version)
     manifest_path = out_dir / f'package-{version}.json'
-    manifest_path.write_text(json.dumps(manifest, indent=1), encoding='utf-8')
+    # Bytes, not text mode: on Windows text mode turns every \n into \r\n,
+    # and the signature is over the exact bytes an installed copy downloads.
+    manifest_path.write_bytes(json.dumps(manifest, indent=1).encode('utf-8'))
 
     zip_path = out_dir / f'package-{version}.zip'
     # Deflate per entry, no solid compression: every file has to be

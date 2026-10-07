@@ -377,6 +377,11 @@ def build_release(version, tweak):
     RELEASES.mkdir(parents=True, exist_ok=True)
     subprocess.run([PYTHON, str(REPO / 'packaging' / 'make_update_assets.py'), str(src), version, str(RELEASES)],
                    check=True, capture_output=True)
+    # The built app only takes updates signed with the release key, so the
+    # stand-in releases are signed with it too (on the release machine, the
+    # only place the key is).
+    subprocess.run([PYTHON, str(REPO / 'packaging' / 'release_key.py'), 'sign', 'package', version,
+                    str(RELEASES / f'package-{version}.json')], check=True, capture_output=True)
     return src
 
 
@@ -420,8 +425,9 @@ def serve(version, notes='Faster starts.\nA new look for the queue.', folder=Non
             if '/dl/' in self.path:
                 return self._file()
             base = f'http://127.0.0.1:{self.server.server_port}/dl/'
+            names = (f'package-{version}.json', f'package-{version}.json.sig', f'package-{version}.zip')
             assets = [{'name': n, 'browser_download_url': base + n, 'size': (source / n).stat().st_size}
-                      for n in (f'package-{version}.json', f'package-{version}.zip')]
+                      for n in names if (source / n).is_file()]
             body = json.dumps({'tag_name': f'v{version}', 'name': f'Dannify {version}', 'body': notes,
                                'html_url': 'http://127.0.0.1/', 'published_at': '2026-01-01T00:00:00Z',
                                'assets': assets}).encode()

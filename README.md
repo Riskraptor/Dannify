@@ -56,9 +56,11 @@ cd ..
 pwsh packaging\build.ps1
 ```
 
-That leaves you `Backend\dist\Dannify\`, the installer
-`packaging\out\Dannify-Setup-<version>.exe`, and the update package
-(`package-<version>.json` and `.zip`) beside it.
+That runs the backend and interface tests, then leaves you
+`Backend\dist\Dannify\`, the installer `packaging\out\Dannify-Setup-<version>.exe`,
+and the update package (`package-<version>.json` and `.zip`) beside it, all
+signed (see [Signed releases](#signed-releases)). Building the installer needs
+the release key; `-SkipInstaller` builds the app folder without it.
 
 Two binaries are not in the repo because they are redistributables, not
 source: the media encoder at `packaging\media\dnfmedia.exe` and the JS engine
@@ -135,6 +137,32 @@ pwsh packaging\publish.ps1 -Notes "what changed"
 
 That uploads the installer and the update package as a new release on this
 repository; installed copies update from its latest release.
+
+### Signed releases
+
+From 4.7.0 every installed copy refuses an update that is not signed with
+Dannify's release key. A SHA-256 only shows a download was not damaged; it
+comes from the same release as the files, so it cannot show who made them.
+The signature (Ed25519, `Backend/dannify/signing.py`) covers the package list,
+which names every file's hash, and the installer. `build.ps1` signs both and
+then checks them against the public key in `updates.py` before anything can
+be published. `publish.ps1` checks again and uploads the `.sig` files.
+
+```powershell
+python packaging\release_key.py new      # once, ever: prints the PUBLIC_KEY line
+python packaging\release_key.py public   # what updates.py must carry
+```
+
+The private key lives in `%USERPROFILE%\.dannify\release-signing.key`, or in
+`DANNIFY_RELEASE_KEY` for a CI secret, and never in the repository. **Back it
+up offline.** If you lose it, installed copies can only be moved to a new key
+by installing by hand. If it leaks, anyone can sign an update.
+
+Windows code signing is separate and optional: set `DANNIFY_SIGN_THUMBPRINT`
+to a code-signing certificate in `CurrentUser\My` and `build.ps1` signs the
+setup, so SmartScreen stops warning. The installer reads its payload past an
+Authenticode signature, and `pwsh packaging\test_installer.ps1` checks that,
+signed and unsigned, on every CI run.
 
 ## Licence
 

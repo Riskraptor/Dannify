@@ -773,6 +773,8 @@ export default {
     whatsNewTitle: "What's new in {version}",
     whatsNewEmpty: 'Fixes and improvements.',
     gotIt: 'Got it',
+    rolledBack:
+      'Dannify {version} would not start on this PC, so you are back on {running}. It will not be offered again; the next version will be.',
   },
   restart: {
     title: 'Restart Dannify?',
