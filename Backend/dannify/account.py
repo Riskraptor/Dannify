@@ -348,6 +348,8 @@ def sign_out() -> dict[str, Any]:
         _state['profile'] = {}
         _state['gen'] += 1
     _save()
+    # Whoever signs in next follows their own channels.
+    _keep_channels([])
     logger.info('Signed out of YouTube Music')
     return status()
 
@@ -518,8 +520,66 @@ _CHANNEL = re.compile(r'^UC[A-Za-z0-9_-]{22}$')
 _VIDEO = re.compile(r'^[A-Za-z0-9_-]{11}$')
 
 
+# Plain YouTube channels the account followed from Dannify. YouTube Music's
+# library lists only Music artists, so a followed channel (a preacher, a
+# podcaster) would vanish from the list on the next refresh and its page
+# would offer "Follow" again. Remembered here, beside the session.
+_CHANNELS_FILE = 'followed_channels.json'
+
+
+def _channels_path() -> Optional[Path]:
+    path = _state.get('path')
+    return Path(path).parent / _CHANNELS_FILE if path else None
+
+
+def _followed_channels() -> list[dict[str, Any]]:
+    path = _channels_path()
+    try:
+        rows = json.loads(path.read_text(encoding='utf-8')) if path and path.is_file() else []
+    except (OSError, ValueError):
+        return []
+    return [r for r in rows if isinstance(r, dict) and _CHANNEL.match(str(r.get('browse_id') or ''))]
+
+
+def _keep_channels(rows: list[dict[str, Any]]) -> None:
+    path = _channels_path()
+    if not path:
+        return
+    try:
+        if rows:
+            path.write_text(json.dumps(rows, ensure_ascii=False), encoding='utf-8')
+        elif path.is_file():
+            path.unlink()
+    except OSError:
+        logger.opt(exception=True).debug('could not keep the followed channels')
+
+
+def _note_channel(channel_id: str, on: bool) -> None:
+    """Remember (or forget) a followed channel that has no artist page."""
+
+    rows = [r for r in _followed_channels() if r['browse_id'] != channel_id]
+    if on:
+        from . import explorer  # noqa: PLC0415
+
+        try:
+            brief = explorer.artist_brief(channel_id)
+        except Exception:
+            logger.opt(exception=True).debug('could not look up {}', channel_id)
+            return
+        if not brief.get('plain_channel'):
+            return  # a Music artist: the library lists it already
+        rows.insert(0, {
+            'type': 'artist',
+            'browse_id': channel_id,
+            'name': brief.get('name') or '',
+            'cover_url': brief.get('cover_url') or '',
+            'subscribers': '',
+        })
+    _keep_channels(rows)
+
+
 def subscriptions(limit: int = 100) -> list[dict[str, Any]]:
-    """The artists the account follows on YouTube Music."""
+    """The artists (and plain channels) the account follows."""
 
     rows = client(require_auth=True).get_library_subscriptions(limit=limit) or []
     out = []
@@ -535,6 +595,8 @@ def subscriptions(limit: int = 100) -> list[dict[str, Any]]:
                 'subscribers': str(row.get('subscribers') or ''),
             }
         )
+    listed = {a['browse_id'] for a in out}
+    out.extend(c for c in _followed_channels() if c['browse_id'] not in listed)
     return out
 
 
@@ -548,6 +610,7 @@ def follow(channel_id: str, on: bool) -> dict[str, Any]:
         yt.subscribe_artists([channel_id])
     else:
         yt.unsubscribe_artists([channel_id])
+    _note_channel(channel_id, bool(on))
     return {'channel_id': channel_id, 'following': bool(on)}
 
 

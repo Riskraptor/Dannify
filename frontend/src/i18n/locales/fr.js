@@ -642,6 +642,9 @@ export default {
     back: 'Tous les artistes',
     label: 'Artiste',
     notFound: 'Artiste introuvable.',
+    artistMissingText: 'Cet artiste ou cette chaîne n’existe plus sur YouTube, ou le lien est faux.',
+    artistFailed: 'La page de cet artiste ne s’est pas chargée',
+    artistFailedText: 'YouTube n’a pas envoyé sa page. Réessayez dans un instant. Si cela continue, la chaîne est peut-être privée ou limitée dans votre pays.',
     albumCount: '{count} album | {count} albums',
     singles: 'Singles',
     shuffle: 'Aléatoire',
@@ -812,6 +815,7 @@ export default {
     offlineSearch: 'La recherche sur YouTube Music a besoin d’Internet. Ce que vous avez enregistré est affiché plus haut, le reste apparaîtra au retour de la connexion.',
     offlineHome: 'Vous êtes hors ligne. Les recommandations reviennent avec la connexion ; toute votre musique enregistrée est là.',
     loadFailed: 'Impossible de charger ceci.',
+    loadFailedText: 'YouTube n’a pas répondu comme prévu. Réessayez dans un instant ; votre musique enregistrée se lit toujours.',
   },
   explore: {
     title: 'Explorer',

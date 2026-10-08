@@ -171,3 +171,57 @@ def test_the_connection_check_asks_fresh_every_time(monkeypatch):
     assert api._reachable() is False  # not the answer from before
     assert api._reachable() is True
     assert calls == ['https://music.youtube.com/'] * 3
+
+
+class _Channel:
+    """A plain YouTube channel: no artist page, but uploads that play."""
+
+    def get_artist(self, bid):
+        raise KeyError('musicImmersiveHeaderRenderer')
+
+
+def _listing(channel_id):
+    assert channel_id == 'UCchan'
+    return {
+        'channel': 'Islam in East',
+        'thumbnails': [
+            {'id': '0', 'url': 'https://yt3.example/banner', 'width': 1060},
+            {'id': 'avatar_uncropped', 'url': 'https://yt3.example/avatar'},
+        ],
+        'entries': [
+            {'id': 'kCYJLTAkrcU', 'title': 'SURAH MULK', 'duration': 122,
+             'thumbnails': [{'url': 'https://i.ytimg.com/a.jpg', 'width': 360}]},
+            {'id': 'kCYJLTAkrcU', 'title': 'SURAH MULK'},  # listed twice
+            {'id': 'UCshelfNotAVideo', 'title': 'a shelf, not an upload'},
+            {'id': 'aBcDeFgHiJk', 'title': 'Second'},
+        ],
+    }
+
+
+def test_a_channel_without_an_artist_page_still_opens_and_can_be_followed(monkeypatch):
+    explorer.forget_artist('UCchan')
+    monkeypatch.setattr(explorer, '_ytm', lambda: _Channel())
+    monkeypatch.setattr(explorer, '_channel_listing', _listing)
+    out = explorer.artist('UCchan')
+    assert out['name'] == 'Islam in East'
+    assert out['channel_id'] == 'UCchan'  # what Follow sends
+    assert [s['song_id'] for s in out['songs']] == ['kCYJLTAkrcU', 'aBcDeFgHiJk']
+    assert out['songs'][0]['duration'] == 122
+    assert out['songs'][0]['artist_ids'] == [{'name': 'Islam in East', 'id': 'UCchan'}]
+    assert out['songs'][1]['cover_url'].endswith('/aBcDeFgHiJk/hqdefault.jpg')
+    assert out['cover_url'] == 'https://yt3.example/avatar' and out['has_songs'] is False
+    explorer.forget_artist('UCchan')
+    brief = explorer.artist_brief('UCchan')
+    assert brief['name'] == 'Islam in East' and brief['has_songs'] is False
+
+
+def test_an_id_that_is_no_channel_is_still_an_error(monkeypatch):
+    def nothing(channel_id):
+        raise RuntimeError('This channel does not exist')
+
+    explorer.forget_artist('UCnone')
+    monkeypatch.setattr(explorer, '_ytm', lambda: _Channel())
+    monkeypatch.setattr(explorer, '_channel_listing', nothing)
+    import pytest
+    with pytest.raises(LookupError):
+        explorer.artist('UCnone')

@@ -393,12 +393,21 @@ def artist_brief(browse_id: str) -> dict[str, Any]:
             'cover_url': full.get('cover_url', ''),
             'subscribers': full.get('subscribers', ''),
             'has_songs': bool(full.get('has_songs', full.get('songs'))),
+            'plain_channel': bool(full.get('plain_channel')),
         }
     key = f'brief::{browse_id}'
     cached = _cache_get(key)
     if cached is not None:
         return cached
-    data = _ytm().get_artist(browse_id)
+    try:
+        data = _ytm().get_artist(browse_id)
+    except KeyError:
+        # A plain channel (see _channel_page): it has a page, not songs.
+        page = artist(browse_id)
+        out = {'name': page['name'], 'cover_url': page['cover_url'],
+               'subscribers': '', 'has_songs': False, 'plain_channel': True}
+        _cache_put(key, out)
+        return out
     songs = data.get('songs') if isinstance(data.get('songs'), dict) else {}
     out = {
         'name': data.get('name', ''),
@@ -537,12 +546,118 @@ def _artist_full_albums(browse_id: str, section: Any, channel_id: str, kind: str
     return _section_albums(section)
 
 
+# A channel page lists this many uploads at most: enough to play through,
+# and one page load stays a few seconds.
+_CHANNEL_UPLOADS = 200
+
+
+def _channel_listing(channel_id: str) -> dict[str, Any]:
+    """The channel's own uploads list, read the way yt-dlp reads it.
+
+    A flat listing is one page load and gives every upload (up to the cap),
+    where a video search for the channel's name found only the few uploads
+    that happened to rank. Kept apart so tests can answer it.
+    """
+
+    import yt_dlp  # noqa: PLC0415  (heavy; only a channel page needs it)
+
+    from .streaming import _YDL_LOGGER, _cookiefile  # noqa: PLC0415
+
+    opts: dict[str, Any] = {
+        'quiet': True,
+        'no_warnings': True,
+        'logger': _YDL_LOGGER,
+        'extract_flat': 'in_playlist',
+        'playlistend': _CHANNEL_UPLOADS,
+        'skip_download': True,
+        'socket_timeout': 10,
+    }
+    jar = _cookiefile()
+    if jar is not None:
+        opts['cookiefile'] = jar
+    url = f'https://www.youtube.com/channel/{channel_id}/videos'
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=False) or {}
+
+
+def _channel_page(channel_id: str) -> dict[str, Any]:
+    """The page of a channel YouTube Music has no artist page for.
+
+    Its name, picture and uploads come from the channel itself. Raises if the
+    channel cannot be found at all, so a wrong id is still an error.
+    """
+
+    try:
+        info = _channel_listing(channel_id)
+    except Exception as exc:
+        raise LookupError(f'no channel {channel_id}') from exc
+    name = (info.get('channel') or info.get('uploader') or '').strip()
+    if not name:
+        raise LookupError(f'no channel {channel_id}')
+    # The listing's pictures mix wide banners with the square avatar; the
+    # page wants the avatar.
+    pics = [t for t in info.get('thumbnails') or [] if isinstance(t, dict) and t.get('url')]
+    avatar = next((t['url'] for t in pics if t.get('id') == 'avatar_uncropped'), '') or next(
+        (t['url'] for t in pics if t.get('width') and t.get('width') == t.get('height')), ''
+    )
+
+    songs: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for e in info.get('entries') or []:
+        vid = e.get('id') if isinstance(e, dict) else None
+        # Shelves and shorts tabs can show up as entries too: only an
+        # 11-character video id is an upload that plays.
+        if not vid or vid in seen or len(vid) != 11:
+            continue
+        seen.add(vid)
+        thumbs = [t for t in e.get('thumbnails') or [] if isinstance(t, dict) and t.get('url')]
+        cover = max(thumbs, key=lambda t: t.get('width') or 0)['url'] if thumbs else ''
+        songs.append({
+            'song_id': vid,
+            'name': e.get('title') or '',
+            'artists': [name],
+            'artist_ids': [{'name': name, 'id': channel_id}],
+            'album_name': '',
+            'album_id': '',
+            'video_id': vid,
+            'like_status': '',
+            'cover_url': cover or f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg',
+            'duration': int(e.get('duration') or 0),
+            'url': f'https://music.youtube.com/watch?v={vid}',
+            'source': 'youtube',
+        })
+
+    return {
+        'type': 'artist',
+        'browse_id': channel_id,
+        'name': name,
+        'description': (info.get('description') or '').strip(),
+        'cover_url': avatar,
+        'subscribers': '',
+        'monthly_listeners': '',
+        'channel_id': channel_id,
+        'songs': songs,
+        'albums': [],
+        'singles': [],
+        'has_songs': False,
+        'plain_channel': True,
+    }
+
+
 def artist(browse_id: str) -> dict[str, Any]:
     cache_key = f'artist::{browse_id}'
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
-    data = _ytm().get_artist(browse_id)
+    try:
+        data = _ytm().get_artist(browse_id)
+    except KeyError:
+        # A plain YouTube channel (a user who uploads, not a Music artist)
+        # has no artist header, and ytmusicapi fails on it. Its uploads still
+        # play, so give it a page of its own instead of an error.
+        out = _channel_page(browse_id)
+        _cache_put(cache_key, out)
+        return out
     channel_id = data.get('channelId') or browse_id
 
     # The artist page needs three more things from YouTube: the full songs
