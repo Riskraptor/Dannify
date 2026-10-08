@@ -10,7 +10,7 @@
       </div>
     </div>
 
-    <EmptyState v-else-if="!artist" icon="ph:warning-circle" :title="t('net.loadFailed')">
+    <EmptyState v-else-if="!artist" icon="ph:warning-circle" :title="t('net.loadFailed')" :text="t('net.loadFailedText')">
       <div class="flex gap-2">
         <button class="btn btn-pill" @click="load">{{ t('common.retry') }}</button>
         <button class="btn btn-pill" @click="router.push({ name: 'Artists' })">{{ t('artist.back') }}</button>

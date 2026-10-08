@@ -639,6 +639,9 @@ export default {
     back: 'All artists',
     label: 'Artist',
     notFound: 'Artist not found.',
+    artistMissingText: 'This artist or channel no longer exists on YouTube, or the link is wrong.',
+    artistFailed: 'This artist’s page did not load',
+    artistFailedText: 'YouTube did not send their page. Try again in a moment. If it keeps happening, the channel may be private or limited in your country.',
     albumCount: '{count} album | {count} albums',
     singles: 'Singles',
     shuffle: 'Shuffle',
@@ -809,6 +812,7 @@ export default {
     offlineSearch: 'Searching YouTube Music needs the internet. What you have saved is shown above, and the rest appears when you’re back online.',
     offlineHome: 'You’re offline. Recommendations come back with the connection; your saved music is all here.',
     loadFailed: 'This could not be loaded.',
+    loadFailedText: 'YouTube did not answer as expected. Try again in a moment; your saved music still plays.',
   },
   explore: {
     title: 'Explore',

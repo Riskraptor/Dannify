@@ -1123,6 +1123,10 @@ async def explore_search_endpoint(
 async def explore_artist_endpoint(id: str = Query(...)) -> dict[str, Any]:
     try:
         return await asyncio.to_thread(explorer.artist, id)
+    except LookupError as exc:
+        # No such artist or channel (removed, or a wrong link): say so, so
+        # the page can tell it from YouTube failing to answer.
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception('explore artist failed for {}', id)
         raise HTTPException(status_code=502, detail=str(exc)) from exc

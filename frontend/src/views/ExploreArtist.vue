@@ -23,8 +23,8 @@
     <EmptyState
       v-else-if="!artist && !loading"
       :icon="failure === 'offline' ? 'ph:wifi-slash' : failure === 'error' ? 'ph:warning-circle' : 'ph:user'"
-      :title="failure === 'offline' ? t('net.offlineTitle') : failure === 'error' ? t('net.loadFailed') : t('explore.notFound')"
-      :text="failure === 'offline' ? t('net.offlinePage') : ''"
+      :title="failure === 'offline' ? t('net.offlineTitle') : failure === 'error' ? t('explore.artistFailed') : t('explore.notFound')"
+      :text="failure === 'offline' ? t('net.offlinePage') : failure === 'error' ? t('explore.artistFailedText') : t('explore.artistMissingText')"
     >
       <div class="flex gap-2">
         <button v-if="failure" class="btn btn-pill" @click="load">{{ t('common.retry') }}</button>

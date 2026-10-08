@@ -32,7 +32,7 @@
               : 'ph:vinyl-record'
       "
       :title="failure === 'offline' ? t('net.offlineTitle') : failure === 'error' ? t('net.loadFailed') : t('explore.notFound')"
-      :text="failure === 'offline' ? t('net.offlinePage') : ''"
+      :text="failure === 'offline' ? t('net.offlinePage') : failure === 'error' ? t('net.loadFailedText') : ''"
     >
       <div class="flex gap-2">
         <button v-if="failure" class="btn btn-pill" @click="load">{{ t('common.retry') }}</button>

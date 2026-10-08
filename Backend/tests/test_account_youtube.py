@@ -64,6 +64,25 @@ def test_following(yt):
         account.follow('not-a-channel', True)
 
 
+def test_a_followed_channel_stays_followed_though_the_library_omits_it(yt, monkeypatch, tmp_path):
+    from dannify import explorer
+
+    plain = 'UC' + 'b' * 22
+    monkeypatch.setitem(account._state, 'path', tmp_path / 'account.dat')
+    briefs = {plain: {'name': 'Islam in East', 'cover_url': 'https://yt3/x', 'plain_channel': True},
+              CHANNEL: {'name': 'Bensoul', 'plain_channel': False}}
+    monkeypatch.setattr(explorer, 'artist_brief', lambda cid: briefs[cid])
+    account.follow(plain, True)
+    account.follow(CHANNEL, True)  # a Music artist: the library has it
+    names = [a['name'] for a in account.subscriptions()]
+    assert names == ['Bensoul', 'Islam in East']
+    account.follow(plain, False)
+    assert [a['name'] for a in account.subscriptions()] == ['Bensoul']
+    account.follow(plain, True)
+    account.sign_out()
+    assert not (tmp_path / 'followed_channels.json').exists()
+
+
 def test_history_has_each_song_once(yt):
     songs = account.history()
     assert len(songs) == 1 and songs[0]['song_id'] == 'QtrUp3-HLkw'
