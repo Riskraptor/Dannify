@@ -13,6 +13,9 @@ USER_NAME="${SUDO_USER:-root}"
 export DEBIAN_FRONTEND=noninteractive
 
 echo "== install"
+# A runner's package index can be days old, and apt then asks for versions
+# the archive has already replaced.
+apt-get update -q >/dev/null
 apt-get install -y -q xvfb dbus-x11 >/dev/null
 apt-get install -y -q "$DEB"
 test -x /opt/dannify/venv/bin/python3
