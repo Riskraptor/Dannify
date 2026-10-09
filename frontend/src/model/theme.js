@@ -28,7 +28,7 @@ export const THEMES = [
   { id: 'aurora', mode: 'dark', name: 'theme.aurora', bg: '#111324', accent: '#818CF8' },
   { id: 'rose', mode: 'dark', name: 'theme.rose', bg: '#1B1216', accent: '#FB7196' },
   { id: 'forest', mode: 'dark', name: 'theme.forest', bg: '#0F1813', accent: '#84CC16' },
-  { id: 'light', mode: 'light', name: 'theme.paper', bg: '#FFFFFF', accent: '#14A84A' },
+  { id: 'light', mode: 'light', name: 'theme.paper', bg: '#FFFFFF', accent: '#0E7935' },
   { id: 'sand', mode: 'light', name: 'theme.sand', bg: '#FDFAF5', accent: '#A04C10' },
   { id: 'sky', mode: 'light', name: 'theme.sky', bg: '#FAFCFF', accent: '#1D64D6' },
 ]

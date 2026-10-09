@@ -67,6 +67,23 @@ function setAutoUpdate(on) {
   write(AUTO_KEY, autoUpdate.value ? '1' : '0')
 }
 
+// A copy that cannot install over itself (Linux or macOS run from source, an
+// app somewhere it cannot be replaced) is pointed at the download page
+// instead. The check says so up front; a download the backend turns down as
+// 'manual_update' says it after the fact, and is believed just the same.
+const manualOnly = ref(false)
+const manual = computed(() => info.value.self_update === false || manualOnly.value)
+const downloadPage = computed(() => info.value.url || siteUrl.value)
+
+function openDownloadPage() {
+  return desktop.openExternal(downloadPage.value)
+}
+
+function isManualRefusal(e) {
+  const r = e && e.response
+  return !!r && r.status === 409 && !!r.data && r.data.detail === 'manual_update'
+}
+
 const available = computed(
   () => !!info.value.available && info.value.version !== skipped.value
 )
@@ -129,6 +146,10 @@ async function check(force = false, { quiet = true } = {}) {
 
 async function download({ quiet = false } = {}) {
   if (downloading.value) return false
+  if (manual.value) {
+    if (!quiet) openDownloadPage()
+    return false
+  }
   if (!info.value.package_url && !info.value.download_url) {
     if (!quiet) toast(t('update.downloadFailed'), { tone: 'error' })
     return false
@@ -151,6 +172,12 @@ async function download({ quiet = false } = {}) {
     }
     return true
   } catch (e) {
+    if (isManualRefusal(e)) {
+      manualOnly.value = true
+      stageCode.value = ''
+      if (!quiet) openDownloadPage()
+      return false
+    }
     // A background attempt that fails says nothing: it will be retried, and
     // an error about work the user never asked for is just noise.
     console.warn('[update] download failed', e)
@@ -161,14 +188,34 @@ async function download({ quiet = false } = {}) {
   }
 }
 
+// Which system the update installs on. The release names its own kind
+// ('installer-linux-deb-amd64', 'app-macos-zip-arm64'); the shell is asked
+// only when it does not.
+function installSystem() {
+  const kind = String(info.value.installer_kind || '')
+  if (/linux/.test(kind)) return 'linux'
+  if (/macos/.test(kind)) return 'macos'
+  return (desktop.platform && desktop.platform.value) || 'windows'
+}
+
+const INSTALL_MESSAGE = {
+  windows: 'update.installMessage',
+  linux: 'update.installMessageLinux',
+  macos: 'update.installMessageMac',
+}
+
 /** Apply the prepared update: restart into it. */
 async function install({ ask = true } = {}) {
   if (!installerPath.value) return false
   if (updateKind.value === 'staged') return desktop.restart()
-  if (!ask) return desktop.installUpdate(installerPath.value)
+  // On Linux the package manager asks for the system password, and a
+  // password prompt nobody was told about looks like something else asking.
+  // So it is said first there, and on macOS too, where the app reopens.
+  const system = installSystem()
+  if (!ask && system === 'windows') return desktop.installUpdate(installerPath.value)
   const ok = await confirmDialog({
     title: t('update.installTitle', { version: info.value.version }),
-    message: t('update.installMessage'),
+    message: t(INSTALL_MESSAGE[system] || INSTALL_MESSAGE.windows),
     confirmText: t('update.installNow'),
     icon: 'ph:download-simple',
   })
@@ -180,6 +227,10 @@ async function install({ ask = true } = {}) {
 
 /** Download (if needed) and apply in one step: what "update now" does. */
 async function downloadAndInstall() {
+  if (manual.value) {
+    openDownloadPage()
+    return false
+  }
   if (!ready.value && !(await download())) return false
   return install({ ask: false })
 }
@@ -290,7 +341,7 @@ function announceReady() {
 
 async function tryAutoDownload() {
   clearTimeout(autoTimer)
-  if (!autoUpdate.value || !available.value || ready.value || downloading.value) return
+  if (!autoUpdate.value || !available.value || ready.value || downloading.value || manual.value) return
   // Wait for a quiet moment rather than fighting the stream for bandwidth.
   let playing = false
   try {
@@ -349,5 +400,7 @@ export function useUpdates() {
     setAutoUpdate,
     downloadAndInstall,
     skipVersion,
+    manual,
+    openDownloadPage,
   }
 }

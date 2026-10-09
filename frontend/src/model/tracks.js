@@ -11,6 +11,7 @@ import { copyText } from '/src/model/clipboard'
 import { repairFiles, repairStateOf } from '/src/model/repair'
 import { refreshDetailsFor } from '/src/model/details'
 import { t } from '/src/i18n'
+import { tp } from '/src/i18n/platform'
 import { usePlaylists } from '/src/model/playlists'
 
 // ---------------------------------------------------------------------------
@@ -358,8 +359,8 @@ export async function deleteRows(rows) {
         : t('actions.deleteTitleMany', { count: files.length }),
     message:
       files.length === 1
-        ? t('actions.deleteMessage', { title: files[0].title })
-        : t('actions.deleteMessageMany', { count: files.length }),
+        ? tp('actions.deleteMessage', { title: files[0].title })
+        : tp('actions.deleteMessageMany', { count: files.length }),
     confirmText: t('common.delete'),
     danger: true,
     icon: 'ph:trash',
@@ -574,7 +575,7 @@ export function trackMenu(rows, ctx = {}) {
     desktop.isDesktop &&
       single &&
       single.file && {
-        label: t('actions.showInFolder'),
+        label: tp('actions.showInFolder'),
         icon: 'ph:folder-open',
         action: () => desktop.revealInFolder(single.file),
       },

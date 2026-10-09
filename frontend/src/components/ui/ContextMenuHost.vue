@@ -79,7 +79,10 @@ async function place() {
   let x = menu.value.alignRight ? menu.value.x - width : menu.value.x
   let y = menu.value.y
   if (x + width > vw - MARGIN) x = Math.max(MARGIN, menu.value.x - width)
-  if (y + height > vh - MARGIN) y = Math.max(MARGIN, y - height)
+  if (y + height > vh - MARGIN) {
+    const flip = typeof menu.value.above === 'number' ? menu.value.above : y
+    y = Math.max(MARGIN, flip - height)
+  }
   x = Math.min(Math.max(MARGIN, x), vw - width - MARGIN)
   y = Math.min(Math.max(MARGIN, y), vh - height - MARGIN)
   style.value = { left: `${x}px`, top: `${y}px`, visibility: 'visible' }
@@ -216,7 +219,7 @@ onBeforeUnmount(() => {
 }
 .cm-shortcut {
   font-size: 12px;
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 .cm-check {
   width: 14px;
@@ -234,6 +237,6 @@ onBeforeUnmount(() => {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 </style>

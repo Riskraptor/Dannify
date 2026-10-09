@@ -22,6 +22,7 @@
       v-else-if="query"
       class="sbx-clear"
       :title="t('search.clear')"
+      :aria-label="t('search.clear')"
       @mousedown.prevent
       @click="clear"
     >
@@ -50,6 +51,7 @@
           class="sbx-remove"
           role="button"
           :title="t('search.removeRecent')"
+          :aria-label="t('search.removeRecent')"
           @click.stop="recent.forgetSearch(s.value)"
         >
           <Icon icon="ph:x" class="h-3.5 w-3.5" />
@@ -202,7 +204,7 @@ watch(
   left: 12px;
   width: 17px;
   height: 17px;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
   pointer-events: none;
 }
 .sbx-input {
@@ -216,7 +218,7 @@ watch(
   border: 0;
 }
 .sbx-input::placeholder {
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 .sbx-hint {
   position: absolute;
@@ -240,7 +242,7 @@ watch(
   width: 24px;
   height: 24px;
   border-radius: 999px;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .sbx-clear:hover {
   background: rgb(var(--c-tint) / 0.1);
@@ -260,7 +262,7 @@ watch(
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 .sbx-item {
   display: flex;
@@ -282,7 +284,7 @@ watch(
   width: 22px;
   height: 22px;
   border-radius: 4px;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
   opacity: 0;
 }
 .sbx-item:hover .sbx-remove,

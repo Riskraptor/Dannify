@@ -19,6 +19,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
 import { t } from '/src/i18n'
+import { tp } from '/src/i18n/platform'
 import { useRepair } from '/src/model/repair'
 
 const props = defineProps({
@@ -61,7 +62,7 @@ function messageFor(p) {
   if (p.code === 'storage_unavailable') return t('health.storageUnavailable')
   if (p.code === 'folder_missing') return t('health.folderMissing', { path: p.path })
   if (p.code === 'folder_read_only') return t('health.folderReadOnly', { path: p.path })
-  if (p.code === 'check_failed') return t('health.checkFailed')
+  if (p.code === 'check_failed') return tp('health.checkFailed')
   if (p.code === 'update_failed') {
     return t('health.updateFailed', { wanted: p.wanted, running: p.running })
   }
@@ -169,7 +170,7 @@ onUnmounted(() => {
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
 
 .note-close:hover {

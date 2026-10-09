@@ -33,7 +33,7 @@
         @play="playAll"
       >
         <template #cover>
-          <button class="pl-cover" :title="t('playlists.rename')" @click="rename">
+          <button class="pl-cover" :title="t('playlists.rename')" :aria-label="t('playlists.rename')" @click="rename">
             <PlaylistArt :covers="data.covers" :size="232" eager class="h-full w-full" />
           </button>
         </template>
@@ -45,13 +45,14 @@
           </template>
         </template>
         <template #actions>
-          <button class="play-fab" :disabled="!rows.length" :title="t('explore.play')" @click="playAll">
+          <button class="play-fab" :disabled="!rows.length" :title="t('explore.play')" :aria-label="t('explore.play')" @click="playAll">
             <Icon :icon="playingHere ? 'ph:pause-fill' : 'ph:play-fill'" class="h-5 w-5" />
           </button>
           <button
             class="icon-btn is-round h-10 w-10"
             :disabled="!rows.length"
             :title="t('actions.shuffle')"
+            :aria-label="t('actions.shuffle')"
             @click="shuffleRows(rows)"
           >
             <Icon icon="ph:shuffle" class="h-6 w-6" />
@@ -61,10 +62,10 @@
             {{ t('explore.downloadRemaining', { count: pendingCount }) }}
           </button>
           <span v-else-if="rows.length" class="pill-accent h-7 px-3 text-xs">
-            <Icon icon="ph:check-circle-fill" class="h-4 w-4" />
+            <Icon icon="ph:arrow-circle-down-fill" class="h-4 w-4" />
             {{ t('explore.allInLibrary') }}
           </span>
-          <button class="icon-btn is-round h-10 w-10" :title="t('actions.more')" @click="onMore">
+          <button class="icon-btn is-round h-10 w-10" :title="t('actions.more')" :aria-label="t('actions.more')" @click="onMore">
             <Icon icon="ph:dots-three-bold" class="h-6 w-6" />
           </button>
         </template>
@@ -295,6 +296,6 @@ function onMore(e) {
   gap: 4px;
   margin: 0 0 6px;
   font-size: 11.5px;
-  color: rgb(var(--c-fg) / 0.4);
+  color: rgb(var(--c-fg) / var(--fg-40));
 }
 </style>

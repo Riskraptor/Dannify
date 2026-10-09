@@ -63,12 +63,13 @@
           </button>
         </template>
         <template #actions>
-          <button class="play-fab" :title="t('artists.playAll')" :disabled="!playableRows.length" @click="playAll">
+          <button class="play-fab" :title="t('artists.playAll')" :aria-label="t('artists.playAll')" :disabled="!playableRows.length" @click="playAll">
             <Icon :icon="playingHere ? 'ph:pause-fill' : 'ph:play-fill'" class="h-5 w-5" />
           </button>
           <button
             class="icon-btn is-round h-10 w-10"
             :title="t('artist.shuffle')"
+            :aria-label="t('artist.shuffle')"
             :disabled="!playableRows.length"
             @click="shuffleRows(playableRows)"
           >
@@ -506,7 +507,7 @@ onBeforeUnmount(() => clearTimeout(reloadTimer))
   flex-shrink: 0;
   font-size: 13px;
   font-weight: 600;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .more-link:hover {
   color: rgb(var(--c-fg));
@@ -523,7 +524,7 @@ onBeforeUnmount(() => clearTimeout(reloadTimer))
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .more-note {
   display: flex;
@@ -531,13 +532,13 @@ onBeforeUnmount(() => clearTimeout(reloadTimer))
   gap: 8px;
   padding: 10px 0 20px;
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .more-btn {
   margin: 8px 0 0 12px;
   font-size: 13px;
   font-weight: 700;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .more-btn:hover {
   color: rgb(var(--c-fg));

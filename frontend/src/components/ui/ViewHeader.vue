@@ -55,7 +55,7 @@ defineProps({
 .vh-sub {
   margin-top: 6px;
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .vh-actions {
   display: flex;

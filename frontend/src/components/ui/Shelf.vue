@@ -97,7 +97,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   font-size: 13.5px;
   font-weight: 700;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
 .shelf-more:hover {
   color: rgb(var(--c-fg));

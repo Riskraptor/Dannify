@@ -37,9 +37,9 @@
       <header class="shelf-head is-flush">
         <h2 class="shelf-title">{{ t('home.jumpBackIn') }}</h2>
       </header>
-      <div class="tile-grid" :class="{ 'is-few': quick.length < 3 }">
+      <div ref="quickGrid" class="tile-grid" :class="{ 'is-few': quick.length < 3 }">
         <SongTile
-          v-for="(row, i) in quick"
+          v-for="(row, i) in quickShown"
           :key="row.key + i"
           :row="row"
           :source="quick"
@@ -214,7 +214,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onActivated } from 'vue'
+import { ref, computed, watch, onActivated, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
@@ -326,6 +326,36 @@ function ghostWidth(n) {
 const quick = computed(() =>
   recent.played.value.slice(0, 8).map((tr, i) => queueRow(tr, i))
 )
+
+// Only whole rows: four songs in three columns left one alone on a second
+// row, which read as something missing rather than something played. Two
+// rows at most when the grid is wide, four when it is down to one or two
+// columns. The grid says how many columns it has made.
+const quickGrid = ref(null)
+const quickCols = ref(4)
+let quickObserver = null
+function measureQuick() {
+  const el = quickGrid.value
+  if (!el) return
+  const cols = getComputedStyle(el).gridTemplateColumns.split(' ').filter(Boolean).length
+  if (cols > 0) quickCols.value = cols
+}
+onMounted(() => {
+  if (typeof ResizeObserver === 'undefined') return
+  quickObserver = new ResizeObserver(measureQuick)
+  watch(quickGrid, (el, old) => {
+    if (old) quickObserver.unobserve(old)
+    if (el) quickObserver.observe(el)
+  }, { immediate: true })
+})
+onBeforeUnmount(() => quickObserver && quickObserver.disconnect())
+const quickShown = computed(() => {
+  const list = quick.value
+  const cols = quickCols.value
+  if (list.length <= cols) return list
+  const rows = Math.min(Math.floor(list.length / cols), cols >= 3 ? 2 : 4)
+  return list.slice(0, rows * cols)
+})
 
 // Sections whose items are all songs get the wide-tile grid; everything else
 // (albums, playlists, artists) keeps the card shelf.
@@ -462,7 +492,7 @@ function submitWelcome() {
   width: 18px;
   height: 18px;
   transform: translateY(-50%);
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
   pointer-events: none;
 }
 .tile-grid {
@@ -512,7 +542,7 @@ function submitWelcome() {
   flex-shrink: 0;
   font-size: 13px;
   font-weight: 600;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
 .shelf-more:hover {
   color: rgb(var(--c-fg));
@@ -558,7 +588,7 @@ function submitWelcome() {
   margin-top: 2px;
   font-size: 12.5px;
   line-height: 1.45;
-  color: rgb(var(--c-fg) / 0.62);
+  color: rgb(var(--c-fg) / var(--fg-62));
 }
 .give-actions {
   display: flex;

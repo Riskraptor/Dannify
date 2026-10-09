@@ -2,13 +2,15 @@
   <div
     ref="root"
     class="tt"
-    :class="{ 'is-dense': !showCover, 'has-bar': barShown }"
+    :class="{ 'is-dense': !showCover, 'has-bar': barShown, 'is-keyed': focused && byKeys && cursor >= 0 }"
     :style="{ '--tt-cols': gridCols, '--tt-sticky': `${stickyOffset}px` }"
     tabindex="0"
     role="grid"
     :aria-rowcount="shown.length"
     :aria-multiselectable="true"
+    :aria-activedescendant="focused && cursor >= 0 && cursor < shown.length ? rowId(cursor) : undefined"
     @keydown="onKey"
+    @focus="onGridFocus"
     @focusin="focused = true"
     @focusout="onFocusOut"
     @dragleave="onTableDragLeave"
@@ -57,6 +59,7 @@
         :class="sortClass('duration')"
         :disabled="!sortable"
         :title="t('table.duration')"
+        :aria-label="t('table.duration')"
         @click="emit('sort', 'duration')"
       >
         <SortArrow v-if="sortKey === 'duration'" :dir="sortDir" />
@@ -73,8 +76,11 @@
     >
       <template #default="{ item: row, index }">
         <div
+          :id="rowId(index)"
           class="tt-row"
           role="row"
+          :aria-rowindex="index + (header ? 2 : 1)"
+          :aria-label="row.artistText ? `${row.title}, ${row.artistText}` : row.title"
           :aria-selected="selected.has(row.key)"
           :class="{
             'is-selected': selected.has(row.key),
@@ -104,6 +110,7 @@
               class="check"
               tabindex="-1"
               :checked="picking && selected.has(row.key)"
+              :aria-label="t('table.selectRow', { title: row.title })"
               @mousedown.stop
               @click.stop="tick(index)"
             />
@@ -120,6 +127,7 @@
               class="tt-play"
               tabindex="-1"
               :title="isRowCurrent(row) && player.isPlaying.value ? t('player.pause') : t('player.play')"
+              :aria-label="isRowCurrent(row) && player.isPlaying.value ? t('player.pause') : t('player.play')"
               @mousedown.stop
               @click.stop="play(index)"
             >
@@ -142,6 +150,7 @@
                 :class="{ 'is-on': isRowCurrent(row) }"
                 tabindex="-1"
                 :title="isRowCurrent(row) && player.isPlaying.value ? t('player.pause') : t('player.play')"
+                :aria-label="isRowCurrent(row) && player.isPlaying.value ? t('player.pause') : t('player.play')"
                 @mousedown.stop
                 @click.stop="play(index)"
               >
@@ -178,6 +187,7 @@
               :class="account.isLiked(videoIdOf(row)) ? 'tt-liked' : 'tt-hover'"
               tabindex="-1"
               :title="account.isLiked(videoIdOf(row)) ? t('account.removeFromLiked') : t('account.addToLiked')"
+              :aria-label="account.isLiked(videoIdOf(row)) ? t('account.removeFromLiked') : t('account.addToLiked')"
               @mousedown.stop
               @click.stop="account.toggleLike(row.raw)"
             >
@@ -218,7 +228,7 @@
               />
               <Icon
                 v-else-if="dlState(row) === 'done'"
-                icon="ph:check-circle-fill"
+                icon="ph:arrow-circle-down-fill"
                 class="h-4 w-4 text-accent"
                 :title="t('search.downloaded')"
               />
@@ -227,6 +237,7 @@
                 class="icon-btn h-7 w-7 text-danger hover:text-danger"
                 tabindex="-1"
                 :title="t('downloads.failedRetry')"
+                :aria-label="t('downloads.failedRetry')"
                 @mousedown.stop
                 @click.stop="retryDownload(row)"
               >
@@ -237,10 +248,14 @@
                 class="tt-hover icon-btn h-7 w-7"
                 tabindex="-1"
                 :title="t('actions.download')"
+                :aria-label="t('actions.download')"
                 @mousedown.stop
                 @click.stop="downloadRows([row])"
               >
-                <Icon icon="ph:download-simple" class="h-4 w-4" />
+                <!-- The same arrow as the play bar's: outlined to save, filled
+                     once saved. A tick here meant a different thing from a
+                     tick anywhere else. -->
+                <Icon icon="ph:arrow-circle-down" class="h-4 w-4" />
               </button>
             </span>
             <span class="tt-time">{{ row.duration ? formatTime(row.duration) : '' }}</span>
@@ -248,6 +263,7 @@
               class="tt-hover icon-btn h-7 w-7"
               tabindex="-1"
               :title="t('actions.more')"
+              :aria-label="t('actions.more')"
               @mousedown.stop
               @click.stop="onMore($event, index)"
             >
@@ -301,7 +317,7 @@
           <Icon icon="ph:trash" class="h-4 w-4" />
           <span>{{ t('common.delete') }}</span>
         </button>
-        <button class="selbar-close" :title="t('selection.clear')" @click="clearSelection">
+        <button class="selbar-close" :title="t('selection.clear')" :aria-label="t('selection.clear')" @click="clearSelection">
           <Icon icon="ph:x-bold" class="h-4 w-4" />
         </button>
       </div>
@@ -310,7 +326,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, inject, onMounted, onBeforeUnmount, onActivated, onDeactivated, h } from 'vue'
+import { ref, computed, watch, inject, onMounted, onBeforeUnmount, onActivated, onDeactivated, h, useId } from 'vue'
 import { Icon } from '@iconify/vue'
 import VirtualList from './VirtualList.vue'
 import CoverImage from './CoverImage.vue'
@@ -376,6 +392,10 @@ const playlists = usePlaylists()
 const scroller = inject('viewScroller', ref(null))
 
 const root = ref(null)
+// The grid keeps focus itself and points at the row the arrows are on, so a
+// screen reader says the row as the cursor moves.
+const uid = useId()
+const rowId = (i) => `${uid}-row-${i}`
 const list = ref(null)
 const focused = ref(false)
 const width = ref(1000)
@@ -749,6 +769,12 @@ function onKey(e) {
   }
 }
 
+// Reached with Tab: show where the arrows will start from, the row they are
+// on or, before there is one, the table itself.
+function onGridFocus(e) {
+  if (e.target === root.value && root.value.matches(':focus-visible')) byKeys.value = true
+}
+
 function onFocusOut(e) {
   if (!root.value || !root.value.contains(e.relatedTarget)) focused.value = false
 }
@@ -905,7 +931,7 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
   height: 32px;
   margin-left: 2px;
   border-radius: 999px;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .selbar-close:hover {
   background: rgb(var(--c-tint) / 0.08);
@@ -948,7 +974,7 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
   background: rgb(var(--c-panel));
   font-size: 12px;
   font-weight: 500;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
 .tt-sort {
   display: flex;
@@ -977,8 +1003,15 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
 .tt-row.is-selected {
   background: rgb(var(--c-tint) / 0.11);
 }
+/* The keyboard's place: drawn in the accent, strong enough to find on any
+   palette, light or dark. */
 .tt-row.is-cursor {
-  box-shadow: inset 0 0 0 1px rgb(var(--c-tint) / 0.25);
+  box-shadow: inset 0 0 0 2px rgb(var(--c-accent) / 0.85);
+}
+.tt:focus-visible:not(.is-keyed) {
+  outline: 2px solid rgb(var(--c-accent));
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 .tt-row.is-gone {
   opacity: 0.45;
@@ -999,7 +1032,7 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
   position: relative;
   justify-content: center;
   font-size: 14px;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
   font-variant-numeric: tabular-nums;
 }
 .tt-head .tt-c-index {
@@ -1078,7 +1111,7 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
   gap: 6px;
   min-width: 0;
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.58);
+  color: rgb(var(--c-fg) / var(--fg-58));
 }
 .tt-sub :deep(.artist-links) {
   overflow: hidden;
@@ -1088,7 +1121,7 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
 .tt-c-album,
 .tt-c-added {
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.58);
+  color: rgb(var(--c-fg) / var(--fg-58));
 }
 .tt-c-album .link {
   overflow: hidden;
@@ -1113,7 +1146,7 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
   width: 40px;
   text-align: right;
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.58);
+  color: rgb(var(--c-fg) / var(--fg-58));
   font-variant-numeric: tabular-nums;
 }
 .tt-head .tt-c-duration {
@@ -1138,7 +1171,7 @@ defineExpose({ selectedRows, clearSelection, focus: () => root.value && root.val
   opacity: 0.5;
 }
 .tt-waiting {
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .tt-liked:hover {
   color: rgb(var(--c-accent));

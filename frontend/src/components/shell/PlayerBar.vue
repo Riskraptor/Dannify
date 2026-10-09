@@ -11,6 +11,7 @@
         <button
           class="pb-cover"
           :title="t('player.openNowPlaying')"
+          :aria-label="t('player.openNowPlaying')"
           @click="openNowPlaying"
         >
           <CoverImage :src="cur.cover" radius="sm" :size="56" class="h-full w-full" eager />
@@ -31,18 +32,21 @@
         </div>
         <button
           v-if="!ui.isCompact.value && videoId"
-          class="icon-btn is-round press shrink-0"
+          class="icon-btn is-round press shrink-0 pb-like"
           :class="{ 'is-liked': liked }"
           :title="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
+          :aria-label="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
+          :aria-pressed="liked"
           @click="account.toggleLike(row.raw)"
         >
           <Icon :icon="liked ? 'ph:heart-fill' : 'ph:heart'" class="h-[18px] w-[18px]" />
         </button>
         <button
           v-if="!ui.isCompact.value"
-          class="icon-btn is-round press shrink-0"
+          class="icon-btn is-round press shrink-0 pb-save"
           :class="{ 'is-active': inLibrary }"
           :title="inLibrary ? t('player.inLibrary') : t('player.saveToLibrary')"
+          :aria-label="inLibrary ? t('player.inLibrary') : t('player.saveToLibrary')"
           :disabled="inLibrary"
           @click="saveCurrent"
         >
@@ -68,6 +72,9 @@
           :class="{ 'is-active-dot': player.shuffle.value }"
           :disabled="!cur"
           :title="`${player.shuffle.value ? t('player.shuffleOn') : t('player.shuffleOff')} (S)`"
+          :aria-label="player.shuffle.value ? t('player.shuffleOn') : t('player.shuffleOff')"
+          :aria-pressed="player.shuffle.value"
+          aria-keyshortcuts="S"
           @click="player.toggleShuffle()"
         >
           <Icon icon="ph:shuffle-bold" class="h-[18px] w-[18px]" />
@@ -76,6 +83,8 @@
           class="icon-btn is-round"
           :disabled="!cur"
           :title="`${t('player.previous')} (P)`"
+          :aria-label="t('player.previous')"
+          aria-keyshortcuts="P"
           @click="player.prev()"
         >
           <Icon icon="ph:skip-back-fill" class="h-5 w-5" />
@@ -84,6 +93,8 @@
           class="pb-play"
           :disabled="!cur && !player.playlist.value.length"
           :title="`${player.isPlaying.value ? t('player.pause') : t('player.play')} (Space)`"
+          :aria-label="player.isPlaying.value ? t('player.pause') : t('player.play')"
+          aria-keyshortcuts="Space"
           @click="player.toggle()"
         >
           <Icon :icon="player.isPlaying.value ? 'ph:pause-fill' : 'ph:play-fill'" class="h-[18px] w-[18px]" />
@@ -92,6 +103,8 @@
           class="icon-btn is-round"
           :disabled="!cur"
           :title="`${t('player.next')} (N)`"
+          :aria-label="t('player.next')"
+          aria-keyshortcuts="N"
           @click="player.next()"
         >
           <Icon icon="ph:skip-forward-fill" class="h-5 w-5" />
@@ -101,6 +114,9 @@
           :class="{ 'is-active-dot': player.repeatMode.value !== 'off' }"
           :disabled="!cur"
           :title="`${repeatTitle} (R)`"
+          :aria-label="repeatTitle"
+          :aria-pressed="player.repeatMode.value !== 'off'"
+          aria-keyshortcuts="R"
           @click="player.cycleRepeat()"
         >
           <Icon
@@ -131,6 +147,7 @@
         :class="{ 'is-on': player.sleepMode.value !== 'off' }"
         :title="t('actions.more')"
         :aria-label="t('actions.more')"
+        aria-haspopup="menu"
         @click="onMoreMenu"
       >
         <Icon icon="ph:dots-three-outline" class="h-[18px] w-[18px]" />
@@ -140,6 +157,7 @@
         :class="{ 'is-on': player.sleepMode.value !== 'off' }"
         :title="sleepTitle"
         :aria-label="sleepTitle"
+        aria-haspopup="menu"
         @click="onSleepMenu"
       >
         <Icon :icon="player.sleepMode.value !== 'off' ? 'ph:moon-fill' : 'ph:moon'" class="h-[18px] w-[18px]" />
@@ -150,6 +168,8 @@
         :class="{ 'is-active-dot': ui.panel.value === 'about' && !onNowPlaying && cur }"
         :disabled="!cur"
         :title="t('panel.aboutButton')"
+        :aria-label="t('panel.aboutButton')"
+        :aria-pressed="ui.panel.value === 'about' && !onNowPlaying && !!cur"
         @click="ui.setPanel('about')"
       >
         <Icon icon="ph:vinyl-record" class="h-[18px] w-[18px]" />
@@ -159,6 +179,9 @@
         :class="{ 'is-active-dot': ui.panel.value === 'lyrics' && !onNowPlaying && cur }"
         :disabled="!cur"
         :title="`${t('lyrics.title')} (Ctrl+L)`"
+        :aria-label="t('lyrics.title')"
+        :aria-pressed="ui.panel.value === 'lyrics' && !onNowPlaying && !!cur"
+        aria-keyshortcuts="Control+L"
         @click="ui.setPanel('lyrics')"
       >
         <Icon icon="ph:microphone-stage" class="h-[18px] w-[18px]" />
@@ -168,6 +191,9 @@
         :class="{ 'is-active-dot': ui.panel.value === 'queue' && !onNowPlaying && cur }"
         :disabled="!cur && !player.playlist.value.length"
         :title="`${t('player.queue')} (Ctrl+Q)`"
+        :aria-label="t('player.queue')"
+        :aria-pressed="ui.panel.value === 'queue' && !onNowPlaying && !!cur"
+        aria-keyshortcuts="Control+Q"
         @click="ui.setPanel('queue')"
       >
         <Icon icon="ph:queue" class="h-[18px] w-[18px]" />
@@ -177,6 +203,9 @@
         class="icon-btn is-round"
         :class="{ 'is-active-dot': soundOpen || player.eq.value.on }"
         :title="t('sound.title')"
+        :aria-label="t('sound.title')"
+        :aria-expanded="soundOpen"
+        aria-haspopup="dialog"
         @click="soundOpen = !soundOpen"
       >
         <Icon icon="ph:sliders-horizontal" class="h-[18px] w-[18px]" />
@@ -186,6 +215,8 @@
         <button
           class="icon-btn is-round"
           :title="`${player.isMuted.value ? t('player.unmute') : t('player.mute')} (M)`"
+          :aria-label="player.isMuted.value ? t('player.unmute') : t('player.mute')"
+          aria-keyshortcuts="M"
           @click="player.toggleMute()"
         >
           <Icon :icon="volumeIcon" class="h-[18px] w-[18px]" />
@@ -203,6 +234,8 @@
         v-if="desktop.isDesktop"
         class="icon-btn is-round pb-extra"
         :title="`${t('player.miniPlayer')} (Ctrl+Shift+M)`"
+        :aria-label="t('player.miniPlayer')"
+        aria-keyshortcuts="Control+Shift+M"
         @click="desktop.setMini(true)"
       >
         <Icon icon="ph:picture-in-picture" class="h-[18px] w-[18px]" />
@@ -212,6 +245,9 @@
         :class="{ 'is-active-dot': onNowPlaying }"
         :disabled="!cur"
         :title="`${t('player.openNowPlaying')} (Ctrl+E)`"
+        :aria-label="t('player.openNowPlaying')"
+        :aria-pressed="onNowPlaying"
+        aria-keyshortcuts="Control+E"
         @click="toggleNowPlaying"
       >
         <Icon :icon="onNowPlaying ? 'ph:arrows-in-simple' : 'ph:arrows-out-simple'" class="h-[18px] w-[18px]" />
@@ -424,7 +460,7 @@ function onTrackMenu(e) {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12.5px;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .is-liked,
 .is-liked:hover {
@@ -442,7 +478,7 @@ function onTrackMenu(e) {
   height: 56px;
   border-radius: 4px;
   background: rgb(var(--c-tint) / 0.06);
-  color: rgb(var(--c-fg) / 0.3);
+  color: rgb(var(--c-fg) / var(--fg-30));
 }
 .pb-center {
   display: flex;
@@ -488,7 +524,7 @@ function onTrackMenu(e) {
   min-width: 38px;
   font-size: 11.5px;
   text-align: center;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
   font-variant-numeric: tabular-nums;
 }
 .pb-sleep {
@@ -546,6 +582,12 @@ function onTrackMenu(e) {
   .pb-extra {
     display: none;
   }
+  /* The song's own name needs the room more than a second button beside
+     it: saving is in the song's menu too. Below 860 the heart goes as well;
+     at 760 the two of them left the title two letters wide. */
+  .pb-save {
+    display: none;
+  }
   .pb-volume {
     width: auto;
   }
@@ -555,6 +597,12 @@ function onTrackMenu(e) {
   .pb-vol-slider {
     flex: none;
     width: 58px;
+  }
+}
+
+@media (max-width: 860px) {
+  .pb-like {
+    display: none;
   }
 }
 

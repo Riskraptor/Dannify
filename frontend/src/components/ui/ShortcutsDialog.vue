@@ -14,7 +14,7 @@
         >
           <header class="flex items-center justify-between px-5 pb-2 pt-4">
             <h2 class="text-[15px] font-semibold">{{ t('shortcuts.title') }}</h2>
-            <button class="icon-btn" :title="t('common.close')" @click="close">
+            <button class="icon-btn" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
               <Icon icon="ph:x" class="h-4 w-4" />
             </button>
           </header>

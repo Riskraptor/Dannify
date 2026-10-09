@@ -393,7 +393,7 @@ watch(step, async () => {
   display: block;
   margin-top: 2px;
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .ob-modes {
   display: inline-flex;
@@ -495,7 +495,7 @@ watch(step, async () => {
 .ob-note {
   margin-top: 12px;
   font-size: 12.5px;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .ob-google {
   margin-top: 26px;

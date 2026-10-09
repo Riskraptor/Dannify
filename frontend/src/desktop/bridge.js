@@ -1,4 +1,4 @@
-import { reactive, readonly, watch } from 'vue'
+import { computed, reactive, readonly, watch } from 'vue'
 
 // ---------------------------------------------------------------------------
 // Bridge to the native desktop shell (Backend/desktop.py → pywebview js_api).
@@ -36,6 +36,27 @@ function detectDesktop() {
 
 export const isDesktop = detectDesktop()
 
+const PLATFORMS = ['windows', 'macos', 'linux']
+
+/**
+ * Which system this is: 'windows', 'macos' or 'linux'. The shell says for
+ * certain (the `platform` in win_state); until it has, and in a plain
+ * browser on the LAN, the browser's own report is the best guess. The newer report
+ * (userAgentData) is asked first, the old ones after it.
+ */
+export function detectPlatform(nav = typeof navigator !== 'undefined' ? navigator : null) {
+  if (!nav) return 'windows'
+  const reports = [nav.userAgentData && nav.userAgentData.platform, nav.platform, nav.userAgent]
+  for (const report of reports) {
+    const r = String(report || '').toLowerCase()
+    if (!r) continue
+    if (/mac|darwin|iphone|ipad/.test(r)) return 'macos'
+    if (/win/.test(r)) return 'windows'
+    if (/linux|x11|cros|bsd/.test(r)) return 'linux'
+  }
+  return 'windows'
+}
+
 if (isDesktop) document.documentElement.classList.add('is-desktop')
 
 const state = reactive({
@@ -58,12 +79,29 @@ const state = reactive({
   // snap layouts, which means the button never gets :hover. It tells us
   // instead; see bindMaxButton below.
   maxHover: false,
+  platform: detectPlatform(),
 })
 
-// Python pushes window-state changes through this global (evaluate_js).
-window.__dannifyWindowState = (patch) => {
-  if (patch && typeof patch === 'object') Object.assign(state, patch)
+// What the shell reports, minus a platform it has no business naming.
+function applyState(patch) {
+  if (!patch || typeof patch !== 'object') return
+  const next = { ...patch }
+  if ('platform' in next && !PLATFORMS.includes(next.platform)) delete next.platform
+  Object.assign(state, next)
 }
+
+// Python pushes window-state changes through this global (evaluate_js).
+window.__dannifyWindowState = applyState
+
+// Styles that differ by system (the caption buttons, the title bar) key off
+// this rather than asking the browser again.
+watch(
+  () => state.platform,
+  (p) => {
+    if (typeof document !== 'undefined') document.documentElement.dataset.platform = p
+  },
+  { immediate: true }
+)
 
 window.__dannifyMaxHover = (on) => {
   state.maxHover = !!on
@@ -123,8 +161,7 @@ async function call(name, ...args) {
 
 if (isDesktop) {
   whenReady().then(async () => {
-    const s = await call('win_state')
-    if (s) Object.assign(state, s)
+    applyState(await call('win_state'))
   })
   window.addEventListener('focus', () => (state.focused = true))
   window.addEventListener('blur', () => (state.focused = false))
@@ -220,7 +257,8 @@ export function bindWindowDrag(el, { systemMenu = true } = {}) {
   }
   // Right-click on empty title-bar space → the real Windows system menu.
   function onMenu(e) {
-    if (!systemMenu || state.nativeFrame || e.target.closest(INTERACTIVE)) return
+    // Only Windows has a system menu to show; elsewhere the click is ignored.
+    if (!systemMenu || state.nativeFrame || state.platform !== 'windows' || e.target.closest(INTERACTIVE)) return
     e.preventDefault()
     e.stopPropagation()
     showSystemMenu()
@@ -301,8 +339,16 @@ export function beginResize(e, edge) {
   trackGesture(e, () => call('win_start_resize', edge))
 }
 
+/** The system this runs on, as a ref: 'windows', 'macos' or 'linux'. */
+export const platform = computed(() => state.platform)
+
+export function usePlatform() {
+  return platform
+}
+
 export const desktop = {
   isDesktop,
+  platform,
   state: readonly(state),
   whenReady,
   minimize,

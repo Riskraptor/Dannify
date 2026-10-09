@@ -33,7 +33,7 @@
                 <h2 class="rp-title">{{ t('problems.title') }}</h2>
                 <p class="rp-sub">{{ t('problems.intro') }}</p>
               </div>
-              <button class="icon-btn h-8 w-8" :title="t('common.close')" @click="close">
+              <button class="icon-btn h-8 w-8" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
                 <Icon icon="ph:x" class="h-4 w-4" />
               </button>
             </header>
@@ -90,7 +90,7 @@
               <ul v-if="showWhat" class="rp-list">
                 <li>{{ t('problems.inLogs') }}</li>
                 <li>{{ t('problems.inErrors') }}</li>
-                <li>{{ t('problems.inAbout') }}</li>
+                <li>{{ tp('problems.inAbout') }}</li>
                 <li class="rp-never">{{ t('problems.never') }}</li>
               </ul>
 
@@ -121,6 +121,7 @@ import { Icon } from '@iconify/vue'
 import { useReporting } from '/src/model/problems'
 import { rememberFocus } from '/src/model/focusTrap'
 import { useI18n } from '/src/i18n'
+import { tp } from '/src/i18n/platform'
 
 const { t } = useI18n()
 const reporting = useReporting()
@@ -258,7 +259,7 @@ function onKey(e) {
   margin-top: 4px;
   font-size: 13px;
   line-height: 1.5;
-  color: rgb(var(--c-fg) / 0.62);
+  color: rgb(var(--c-fg) / var(--fg-62));
 }
 .rp-body {
   flex: 1;
@@ -324,10 +325,10 @@ function onKey(e) {
   margin-top: 4px;
   text-align: right;
   font-size: 11px;
-  color: rgb(var(--c-fg) / 0.4);
+  color: rgb(var(--c-fg) / var(--fg-40));
 }
 .rp-count.is-short {
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .rp-check {
   display: flex;
@@ -350,7 +351,7 @@ function onKey(e) {
   list-style: disc;
   font-size: 12px;
   line-height: 1.7;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .rp-never {
   color: rgb(var(--c-fg) / 0.78);
@@ -396,7 +397,7 @@ function onKey(e) {
   margin-top: 10px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 .dlg-enter-active,
 .dlg-leave-active {

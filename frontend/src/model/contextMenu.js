@@ -44,11 +44,16 @@ export function openContextMenu(event, items, { anchor = false } = {}) {
   if (!list.length) return
   let x = 0
   let y = 0
+  // Where an anchored menu goes when there is no room under its button: above
+  // the button, not over it. Flipping by its own height from the bottom edge
+  // put the "⋯" menu on the play bar right on top of the button that opened it.
+  let above = null
   const target = event && (event.currentTarget || event.target)
   if (anchor && target && target.getBoundingClientRect) {
     const r = target.getBoundingClientRect()
     x = r.right
     y = r.bottom + 4
+    above = r.top - 4
   } else if (event && typeof event.clientX === 'number' && (event.clientX || event.clientY)) {
     x = event.clientX
     y = event.clientY
@@ -59,8 +64,8 @@ export function openContextMenu(event, items, { anchor = false } = {}) {
     y = r.top + r.height / 2
   }
   if (!menu.value) giveBack = rememberFocus()
-  lastPoint = { x, y, alignRight: anchor }
-  menu.value = { id: ++seq, x, y, items: list, alignRight: anchor }
+  lastPoint = { x, y, alignRight: anchor, above }
+  menu.value = { id: ++seq, x, y, items: list, alignRight: anchor, above }
 }
 
 export function lastMenuPoint() {
@@ -73,8 +78,9 @@ export function openMenuAt(point, items) {
   if (!list.length) return
   const p = point || lastPoint
   if (!menu.value) giveBack = rememberFocus()
-  lastPoint = { x: p.x, y: p.y, alignRight: !!p.alignRight }
-  menu.value = { id: ++seq, x: p.x, y: p.y, items: list, alignRight: !!p.alignRight }
+  const above = typeof p.above === 'number' ? p.above : null
+  lastPoint = { x: p.x, y: p.y, alignRight: !!p.alignRight, above }
+  menu.value = { id: ++seq, x: p.x, y: p.y, items: list, alignRight: !!p.alignRight, above }
 }
 
 export function closeContextMenu() {

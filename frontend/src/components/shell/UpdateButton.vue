@@ -18,6 +18,7 @@
     class="upd"
     :class="{ 'is-busy': updates.downloading.value }"
     :title="t('update.available', { version: updates.info.value.version })"
+    :aria-label="t('update.available', { version: updates.info.value.version })"
     @click="onClick"
   >
     <span v-if="updates.downloading.value" class="upd-ring" :style="ringStyle" />
@@ -53,11 +54,13 @@ function onClick(e) {
         disabled: true,
       },
       { divider: true },
-      {
-        label: updates.ready.value ? t('update.installNow') : t('update.downloadAndInstall'),
-        icon: 'ph:download-simple',
-        action: () => updates.downloadAndInstall(),
-      },
+      updates.manual.value
+        ? { label: t('update.downloadManual'), icon: 'ph:arrow-square-out', action: () => updates.openDownloadPage() }
+        : {
+            label: updates.ready.value ? t('update.installNow') : t('update.downloadAndInstall'),
+            icon: 'ph:download-simple',
+            action: () => updates.downloadAndInstall(),
+          },
       { divider: true },
       { label: t('update.skip'), icon: 'ph:x', action: () => updates.skipVersion() },
     ],
