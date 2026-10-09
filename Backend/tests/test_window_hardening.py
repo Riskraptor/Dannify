@@ -79,7 +79,7 @@ def test_debugger_variables_are_dropped_before_the_browser_starts(monkeypatch):
 
 
 def test_saved_songs_reach_the_window_marked_never_to_be_stored():
-    source = (BACKEND / 'main.py').read_text(encoding='utf-8')
+    source = (BACKEND / 'dannify' / 'served.py').read_text(encoding='utf-8')
     start = source.index('length = max(0, end - start + 1)')
     block = source[start:start + 1200]
     assert "'Cache-Control': 'no-store'" in block
