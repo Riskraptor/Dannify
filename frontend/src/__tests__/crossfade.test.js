@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   getLyricVersions: null,
   getStreamInfo: null,
   getRadio: null,
+  resolveStream: null,
   saveLyricsOffset: null,
   download: null,
 }))
@@ -192,6 +193,7 @@ beforeEach(async () => {
   api.getLyricVersions = vi.fn(() => Promise.resolve({ data: { versions: [] } }))
   api.getStreamInfo = vi.fn(() => Promise.resolve({ data: { loudness_db: 14 } }))
   api.getRadio = vi.fn(() => Promise.resolve({ data: { songs: [] } }))
+  api.resolveStream = vi.fn(() => Promise.reject(new Error('offline')))
   vi.resetModules()
   P = (await import('/src/model/player.js')).usePlayer()
 })
