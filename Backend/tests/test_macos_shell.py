@@ -319,3 +319,120 @@ def test_global_shortcuts_register_and_let_go():
     taken = hotkeys.register()
     assert isinstance(taken, list) and len(taken) <= len(core.HOTKEYS)
     hotkeys.dispose()
+
+
+@MAC
+def test_the_menu_bar_item_comes_and_goes():
+    from dannify.shell.macos.cocoa import AppKit
+    from dannify.shell.macos.tray import Tray
+
+    AppKit.NSApplication.sharedApplication()
+    tray = Tray(lambda command: None)
+    assert tray.install() and tray.showing
+    tray.set_track('Inauma', 'Bien', playing=False, has_track=True)
+    tray.dispose()
+    assert not tray.showing
+
+
+@MAC
+def test_now_playing_takes_the_song_its_cover_and_the_keys():
+    import base64
+
+    import MediaPlayer
+
+    from dannify.shell.macos.nowplaying import NowPlaying
+
+    seen = []
+    now = NowPlaying(seen.append)
+    now.start()
+    now.update(playing=True, has_track=True, title='Inauma', artist='Bien', album='Bien',
+               duration=200.0, position=12.0, key='k1')
+    center = MediaPlayer.MPNowPlayingInfoCenter.defaultCenter()
+    info = center.nowPlayingInfo()
+    assert info[MediaPlayer.MPMediaItemPropertyTitle] == 'Inauma'
+    assert info[MediaPlayer.MPMediaItemPropertyPlaybackDuration] == 200.0
+    png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhf'
+                           'DwAChwGA60e6kgAAAABJRU5ErkJggg==')
+    now.set_art('k1', png)
+    assert MediaPlayer.MPMediaItemPropertyArtwork in center.nowPlayingInfo()
+    now.set_art('another song', png)  # late for a song that is gone: ignored
+    assert now._handler('next')(None) == 0 and seen == ['next']
+    now.stop()
+    assert center.nowPlayingInfo() is None
+
+
+@MAC
+def test_the_dock_progress_draws():
+    from dannify.shell.macos.cocoa import AppKit
+
+    AppKit.NSApplication.sharedApplication()
+    view = desktop._dock_view_class().alloc().initWithFrame_(AppKit.NSMakeRect(0, 0, 128, 128))
+    view.value = 0.4
+    image = AppKit.NSImage.alloc().initWithSize_(AppKit.NSMakeSize(128, 128))
+    image.lockFocus()
+    try:
+        view.drawRect_(view.bounds())
+    finally:
+        image.unlockFocus()
+    progress = desktop.DockProgress()
+    progress.set(0.5, True)
+    progress.set(0.0, False)
+
+
+@MAC
+def test_sign_in_takes_the_youtube_session_and_webkit_takes_our_blocks():
+    import Foundation
+    import WebKit
+
+    from dannify.shell.macos import login
+    from dannify.shell.macos.cocoa import os_major
+
+    def cookie(domain, name, value):
+        return Foundation.NSHTTPCookie.cookieWithProperties_({
+            Foundation.NSHTTPCookieDomain: domain, Foundation.NSHTTPCookiePath: '/',
+            Foundation.NSHTTPCookieName: name, Foundation.NSHTTPCookieValue: value,
+        })
+
+    window = login.LoginWindow('dark')
+    window._collect([cookie('.google.com', 'SID', 'g')])
+    assert window.cookies == {}  # not signed in to YouTube yet
+    window._collect([cookie('.youtube.com', 'SAPISID', 'abc'), cookie('.google.com', 'SAPISID', 'other'),
+                     cookie('music.youtube.com', 'PREF', 'x')])
+    assert window.cookies == {'SAPISID': 'abc', 'PREF': 'x'}
+
+    # The completion blocks the sign-in and sign-out code hands WebKit.
+    store = WebKit.WKWebsiteDataStore.nonPersistentDataStore()
+    store.httpCookieStore().getAllCookies_(window._collect)
+    store.removeDataOfTypes_modifiedSince_completionHandler_(
+        WebKit.WKWebsiteDataStore.allWebsiteDataTypes(), Foundation.NSDate.distantPast(), lambda: None)
+    if os_major() >= 14:
+        WebKit.WKWebsiteDataStore.removeDataStoreForIdentifier_completionHandler_(
+            Foundation.NSUUID.UUID(), lambda _error: None)
+    delegate = type(login._delegate())
+    assert delegate.webView_didFinishNavigation_.signature.startswith(b'v')
+    assert delegate.webView_createWebViewWithConfiguration_forNavigationAction_windowFeatures_.signature.startswith(b'@')
+
+
+@MAC
+def test_the_app_delegate_answers_appkit_in_its_own_types():
+    from dannify.shell.macos import app as mac_app
+    from dannify.shell.macos.tray import Tray
+
+    class Api:
+        _quitting = False
+        _tray = Tray(lambda command: None)
+        shown = 0
+
+        def win_show(self):
+            self.shown += 1
+
+    api = Api()
+    opened = []
+    delegate = mac_app._app_delegate(api, None, opened.append)
+    kind = type(delegate)
+    assert kind.applicationShouldTerminate_.signature[:1] in (b'Q', b'L', b'I')  # NSApplicationTerminateReply
+    assert kind.applicationShouldHandleReopen_hasVisibleWindows_.signature[:1] in (b'Z', b'c')  # BOOL
+    assert kind.applicationDockMenu_.signature[:1] == b'@'
+    assert kind.application_openFiles_.signature[:1] == b'v'
+    assert delegate.applicationShouldHandleReopen_hasVisibleWindows_(None, False) and api.shown == 1
+    assert delegate.applicationDockMenu_(None).numberOfItems() > 0

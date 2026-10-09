@@ -295,15 +295,23 @@ def first_start(app: Path) -> None:
 
 
 def started_by_launchservices(app: Path) -> None:
-    step('open -n --env keeps the data folder')
+    step('open -n --env keeps the data folder; started hidden, it shows when asked')
     copy = Copy(app, 'opened')
     before = copy.starts()
-    done = run(['/usr/bin/open', '-n', '--env', f'DANNIFY_DATA_DIR={copy.data}', str(app), '--args'])
+    # Hidden, as at login (the login item passes --minimized the same way).
+    done = run(['/usr/bin/open', '-n', '--env', f'DANNIFY_DATA_DIR={copy.data}', str(app),
+                '--args', '--minimized'])
     if done.returncode != 0:
         fail(f'open -n --env: {done.stderr}')
     copy.wait_started(before)
+    time.sleep(3)
+    screenshot('started-hidden')
+    if copy.send({'cmd': 'show', 'file': ''}) != {'ok': True}:
+        fail('the hidden copy did not take the show message')
+    time.sleep(3)
+    screenshot('shown')
     copy.quit()
-    print('started with its own data folder, and quit')
+    print('started with its own data folder, showed itself, and quit')
 
 
 def update_over(installed: Path, copy: Copy, archive: Path) -> None:
@@ -331,6 +339,9 @@ def good_update(app: Path, archive: Path) -> Path:
     log = copy.data / 'updates' / 'update.log'
     wait_until(lambda: log.is_file() and 'started' in log.read_text(), 90, 'the updater to start the new version')
     copy.wait_started(before)
+    time.sleep(6)
+    # Same data folder, so past the first-run welcome: the main window.
+    screenshot('after-update')
     wait_until(lambda: not (place / 'Dannify.app.old').exists(), 30, 'the new version to remove the backup')
     leftovers = [p.name for p in place.iterdir() if p.name != 'Dannify.app']
     if leftovers:

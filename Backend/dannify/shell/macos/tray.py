@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
+import objc
 from loguru import logger
 
 from ..core import APP_TITLE, DEFAULT_LABELS, TRAY_TIP_MAX, fit_text, track_label, tray_menu
@@ -23,6 +24,7 @@ def _target(on_command: Callable[[str], None]):
     global _target_class
     if _target_class is None:
         class DannifyMenuTarget(Foundation.NSObject):
+            @objc.IBAction
             def menuAction_(self, sender) -> None:  # noqa: ANN001
                 command = sender.representedObject()
                 if command:
