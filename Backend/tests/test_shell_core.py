@@ -97,6 +97,8 @@ def test_the_port_the_last_run_just_let_go_of_is_free_again():
     import time
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # As the app's server binds (asyncio does this); Linux wants it on both sides.
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(('127.0.0.1', 0))
     server.listen(1)
     port = server.getsockname()[1]
