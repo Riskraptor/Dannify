@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from loguru import logger
+from PyObjCTools import AppHelper
 
 from .. import core
 from . import desktop, login, updater
@@ -39,6 +40,10 @@ _NOTES = (
     'NSWindowDidMiniaturizeNotification', 'NSWindowDidDeminiaturizeNotification',
     'NSWindowDidEnterFullScreenNotification', 'NSWindowDidExitFullScreenNotification',
     'NSWindowDidEndLiveResizeNotification', 'NSWindowDidResizeNotification',
+    # AppKit lays the title bar out again when the window first appears on
+    # screen (key or not), and on a screen with another scale.
+    'NSWindowDidChangeOcclusionStateNotification', 'NSWindowDidChangeScreenNotification',
+    'NSWindowDidChangeBackingPropertiesNotification',
 )
 
 
@@ -194,6 +199,8 @@ class MacApi:
         self._fullscreen = bool(ns.styleMask() & _FULLSCREEN_MASK)
         self._maximized = bool(ns.isZoomed()) and not self._fullscreen and not self._mini
         self._place_buttons()
+        # Once more after AppKit's own layout pass, which can come just after.
+        AppHelper.callLater(0.1, self._place_buttons)
         if (self._focused, self._minimized, self._fullscreen, self._maximized) != before:
             self._push_state()
 
