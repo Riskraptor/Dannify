@@ -304,6 +304,8 @@ def started_by_launchservices(app: Path) -> None:
     if done.returncode != 0:
         fail(f'open -n --env: {done.stderr}')
     copy.wait_started(before)
+    if 'Window hidden until asked' not in (copy.data / 'dannify.log').read_text(errors='replace'):
+        fail('the copy started with --minimized did not start hidden')
     time.sleep(3)
     screenshot('started-hidden')
     if copy.send({'cmd': 'show', 'file': ''}) != {'ok': True}:
@@ -342,6 +344,10 @@ def good_update(app: Path, archive: Path) -> Path:
     time.sleep(6)
     # Same data folder, so past the first-run welcome: the main window.
     screenshot('after-update')
+    ports = [line.rsplit(':', 1)[-1].split()[0] for line in
+             (copy.data / 'dannify.log').read_text(errors='replace').splitlines()
+             if 'Uvicorn running on' in line]
+    print('ports used, before and after the update:', ports)
     wait_until(lambda: not (place / 'Dannify.app.old').exists(), 30, 'the new version to remove the backup')
     leftovers = [p.name for p in place.iterdir() if p.name != 'Dannify.app']
     if leftovers:

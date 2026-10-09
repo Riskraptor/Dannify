@@ -89,3 +89,21 @@ def test_a_second_copy_hands_over_and_a_stale_socket_is_replaced(tmp_path, monke
     assert sock.stat().st_mode & 0o077 == 0
     first.release()
     assert instance.send({'cmd': 'ping'}) is None
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='TIME_WAIT blocks a new bind on Linux and macOS')
+def test_the_port_the_last_run_just_let_go_of_is_free_again():
+    import socket
+    import time
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(('127.0.0.1', 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    client = socket.create_connection(('127.0.0.1', port))
+    conn, _ = server.accept()
+    conn.close()  # the server's side closes first, so it is the one left waiting
+    time.sleep(0.1)
+    client.close()
+    server.close()
+    assert core.port_is_free(port, '127.0.0.1')

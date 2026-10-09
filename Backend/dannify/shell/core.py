@@ -89,6 +89,14 @@ def write_prefs(patch: dict) -> None:
 def port_is_free(port: int, host: str = BIND_HOST) -> bool:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if os.name != 'nt':
+                # The last run's connections linger for a minute after it
+                # quits (TIME_WAIT), and a restart or an update comes back
+                # well within it. Without this the port looked taken, a new
+                # one was picked, and with it a new origin: everything the
+                # page had stored was gone. The server binds the same way.
+                # (On Windows this option would let a port in use be shared.)
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((host, port))
         return True
     except OSError:
