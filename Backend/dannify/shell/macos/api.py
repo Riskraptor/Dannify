@@ -77,6 +77,7 @@ class MacApi:
         self._login: Optional[login.LoginWindow] = None
         self._art_for: tuple = ()
         self._observers: list = []
+        self._bar_moves: list[float] = []
         self._tray = Tray(self._tray_command)
         self._now_playing = NowPlaying(self._media)
         self._hotkeys = desktop.Hotkeys(self._media)
@@ -110,6 +111,7 @@ class MacApi:
         for name in _NOTES:
             self._observers.append(center.addObserverForName_object_queue_usingBlock_(
                 getattr(AppKit, name), ns, queue, self._on_window_note))
+        self._watch_bar(center, queue)
 
         desktop.set_appearance(self._theme == 'dark')
         if self._close_to_tray:
@@ -153,23 +155,49 @@ class MacApi:
             if button is not None:
                 button.setHidden_(not on)
 
-    def _place_buttons(self) -> None:
-        """Main thread. The window's buttons, centred in the page's title bar.
-
-        AppKit lays the title bar out again on every resize and on leaving
-        full screen, so this runs after each of those too.
-        """
+    def _bar(self):
+        """The window's buttons, the view they sit in and the title bar
+        container around it, or None if AppKit is not built that way."""
 
         ns = self._ns
-        if ns is None or self._fullscreen or self._mini:
-            return
+        if ns is None:
+            return None
         buttons = [ns.standardWindowButton_(kind) for kind in _BUTTONS]
         if any(b is None for b in buttons) or buttons[0].superview() is None:
-            return
+            return None
         bar_view = buttons[0].superview()
         container = bar_view.superview()
-        if container is None:
+        return None if container is None else (buttons, bar_view, container)
+
+    def _watch_bar(self, center, queue) -> None:  # noqa: ANN001
+        """Main thread. Put the buttons back whenever AppKit lays the title bar
+        out again: on a resize, a change of appearance, the window coming on
+        screen. Watching the bar itself catches every one of them."""
+
+        found = self._bar()
+        if found is None:
             return
+        container = found[2]
+        container.setPostsFrameChangedNotifications_(True)
+        self._observers.append(center.addObserverForName_object_queue_usingBlock_(
+            AppKit.NSViewFrameDidChangeNotification, container, queue, self._on_bar_moved))
+
+    def _on_bar_moved(self, _note) -> None:  # noqa: ANN001
+        now = time.monotonic()
+        self._bar_moves = [t for t in self._bar_moves if now - t < 1.0] + [now]
+        # After AppKit's layout pass, not inside it; and never a tug of war
+        # with AppKit, should it keep putting the bar back.
+        if len(self._bar_moves) <= 12:
+            AppHelper.callAfter(self._place_buttons)
+
+    def _place_buttons(self) -> None:
+        """Main thread. The window's buttons, centred in the page's title bar."""
+
+        found = self._bar()
+        if found is None or self._fullscreen or self._mini:
+            return
+        ns = self._ns
+        buttons, bar_view, container = found
         bar = container.frame()
         bar.size.height = _BAR_HEIGHT
         bar.origin.y = ns.frame().size.height - _BAR_HEIGHT
@@ -522,6 +550,7 @@ class MacApi:
             view = self._view
             if view is not None and view.respondsToSelector_('setUnderPageBackgroundColor:'):
                 view.setUnderPageBackgroundColor_(color)
+            AppHelper.callAfter(self._place_buttons)
         on_main(run)
 
     # --- the shell ------------------------------------------------------------
