@@ -111,7 +111,14 @@ def skipped_version() -> str:
 
     base = root()
     if base is None:
-        return ''
+        if sys.platform != 'darwin' or not getattr(sys, 'frozen', False):
+            return ''
+        # A Mac app is put back by its own updater (shell/macos/updater.py),
+        # which leaves the note in the data folder's updates.
+        from . import osenv
+
+        raw = os.getenv('DANNIFY_DATA_DIR')
+        base = (Path(raw).expanduser() if raw else osenv.default_data_dir()) / 'updates'
     try:
         return (base / SKIP).read_text(encoding='utf-8').strip()
     except OSError:
