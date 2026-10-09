@@ -89,6 +89,14 @@ def write_prefs(patch: dict) -> None:
 def port_is_free(port: int, host: str = BIND_HOST) -> bool:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if os.name != 'nt':
+                # The last run's connections linger for a minute after it
+                # quits (TIME_WAIT), and a restart or an update comes back
+                # well within it. Without this the port looked taken, a new
+                # one was picked, and with it a new origin: everything the
+                # page had stored was gone. The server binds the same way.
+                # (On Windows this option would let a port in use be shared.)
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((host, port))
         return True
     except OSError:
@@ -263,11 +271,32 @@ def vetted_update(path: str, suffix: str) -> Optional[Path]:
         return None
 
 
-def relaunch_command() -> list[str]:
-    """How to start this same copy again."""
+# What a macOS copy started again through `open` is told by hand: `open`
+# starts an app with the login session's environment, not this one's.
+_PASSED_ON = ('DATABASE_DIR', 'DOWNLOAD_DIR', 'WEB_GUI_LOCATION', 'PYINSTALLER_RESET_ENVIRONMENT')
 
+
+def relaunch_command(env: Optional[dict] = None) -> list[str]:
+    """How to start this same copy again; *env* is what it should start with.
+
+    A macOS app is started through LaunchServices (open -n), the way Finder
+    starts it, so it comes back as an app of its own rather than a child of
+    this one. What this copy was given in its environment (another data
+    folder, a process to wait for) goes along as --env.
+    """
+
+    args = [a for a in sys.argv[1:] if a != '--minimized']
     if getattr(sys, 'frozen', False):
-        return [sys.executable, *[a for a in sys.argv[1:] if a != '--minimized']]
+        exe = Path(sys.executable).resolve()
+        app = exe.parents[2] if len(exe.parents) > 2 else exe
+        if sys.platform == 'darwin' and exe.parent.name == 'MacOS' and app.suffix == '.app':
+            env = dict(os.environ if env is None else env)
+            passed = []
+            for key in sorted(env):
+                if key.startswith('DANNIFY_') or key in _PASSED_ON:
+                    passed += ['--env', f'{key}={env[key]}']
+            return ['/usr/bin/open', '-n', *passed, str(app), '--args', *args]
+        return [sys.executable, *args]
     entry = Path(__file__).resolve().parents[2] / 'desktop.py'
     return [sys.executable, str(entry)]
 
