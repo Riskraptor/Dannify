@@ -108,9 +108,12 @@ def init(data_dir: Path) -> None:
     legacy = Path(data_dir) / _LEGACY
     _state['path'] = path
     data = None
+    plain = False
     try:
         if path.is_file():
-            data = json.loads(vault._unprotect(path.read_bytes()).decode('utf-8'))
+            stored = path.read_bytes()
+            plain = stored[:4] == b'RAW0'
+            data = json.loads(vault._unprotect(stored).decode('utf-8'))
         elif legacy.is_file():
             data = json.loads(legacy.read_text(encoding='utf-8'))
     except Exception:
@@ -128,6 +131,10 @@ def init(data_dir: Path) -> None:
         'YouTube Music account restored ({})',
         _state['profile'].get('name') or 'signed in',
     )
+    # A session saved unwrapped (by a Linux build before the key store, or
+    # when no store could be reached) is wrapped now that one can be.
+    if plain:
+        _save()
     # A session read from the old plain file is written encrypted, and the
     # plain one goes only once the encrypted copy reads back the same.
     if legacy.is_file() and _save() and _stored() == data.get('cookies'):

@@ -27,7 +27,7 @@ from load_dotenv import load_dotenv
 from loguru import logger
 from uvicorn import Config, Server
 
-from dannify import __version__, account, api
+from dannify import __version__, account, api, osenv
 from dannify.downloader import Downloader
 
 
@@ -198,19 +198,22 @@ def _setup_logging(level: str) -> None:
 # Frozen (PyInstaller desktop) builds relocate everything:
 #   * bundled read-only resources (frontend dist, ffmpeg) live in
 #     ``sys._MEIPASS`` (the unpacked bundle dir),
-#   * user data (settings, caches, DBs) lives in ``%LOCALAPPDATA%/Dannify``,
+#   * user data (settings, caches, DBs) lives in the platform's per-user
+#     folder (see osenv.default_data_dir),
 #   * downloads default to ``~/Music/Dannify``.
+# The Linux package runs from source but is installed all the same, so it
+# takes the installed defaults too (osenv.packaged).
 _FROZEN = bool(getattr(sys, 'frozen', False))
 _BUNDLE_DIR = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-if _FROZEN:
-    _DEFAULT_DOWNLOADS = Path.home() / 'Music' / 'Dannify'
-    _DEFAULT_DATA = (
-        Path(os.getenv('LOCALAPPDATA', str(Path.home() / 'AppData' / 'Local')))
-        / 'Dannify'
+if osenv.packaged():
+    _DEFAULT_DOWNLOADS = osenv.default_music_dir()
+    _DEFAULT_DATA = osenv.default_data_dir()
+    _DEFAULT_WEB_GUI = (
+        _BUNDLE_DIR / 'frontend' / 'dist' if _FROZEN
+        else (_PROJECT_ROOT / 'frontend' / 'dist').resolve()
     )
-    _DEFAULT_WEB_GUI = _BUNDLE_DIR / 'frontend' / 'dist'
 else:
     _DEFAULT_DOWNLOADS = _PROJECT_ROOT / 'downloads'
     _DEFAULT_DATA = _PROJECT_ROOT / 'data'
@@ -243,7 +246,9 @@ WEB_GUI_LOCATION = os.getenv('WEB_GUI_LOCATION', str(_DEFAULT_WEB_GUI))
 # Source checkouts use the copy in packaging/ffmpeg (which also has ffprobe;
 # the shipped bundle leaves it out: nothing we do needs it, and it is 97 MB).
 _ffdir = _BUNDLE_DIR / 'media' if _FROZEN else _PROJECT_ROOT / 'packaging' / 'media'
-if _ffdir.is_dir():
+# The checkout's packaging/media holds the Windows build only: anywhere else
+# the system's own ffmpeg is the one to use.
+if _ffdir.is_dir() and (_FROZEN or osenv.IS_WINDOWS):
     os.environ['PATH'] = str(_ffdir) + os.pathsep + os.environ.get('PATH', '')
 # This machine only, unless asked. It used to be every network the PC was
 # on, with no key, so anyone on the same Wi-Fi could read the library and
@@ -892,7 +897,7 @@ def build_app() -> FastAPI:
         lyrics = full.with_suffix('.lrc')
         if lyrics.is_file():
             doomed.append(lyrics)
-        if not _recycle(doomed):
+        if not osenv.trash(doomed):
             try:
                 for path in doomed:
                     path.unlink(missing_ok=True)
@@ -1168,49 +1173,6 @@ def build_app() -> FastAPI:
             name='static',
         )
     return app
-
-
-def _recycle(paths: list[Path]) -> bool:
-    """Move files to the Recycle Bin. False when that could not be done.
-
-    SHFileOperation with FOF_ALLOWUNDO is what Explorer's own Delete does. On a
-    drive with no Recycle Bin it deletes outright, which is what the caller
-    would have done anyway.
-    """
-
-    if os.name != 'nt' or not paths:
-        return False
-    try:
-        import ctypes
-        from ctypes import wintypes
-
-        class SHFILEOPSTRUCTW(ctypes.Structure):
-            _fields_ = [
-                ('hwnd', wintypes.HWND),
-                ('wFunc', wintypes.UINT),
-                ('pFrom', wintypes.LPCWSTR),
-                ('pTo', wintypes.LPCWSTR),
-                ('fFlags', ctypes.c_ushort),
-                ('fAnyOperationsAborted', wintypes.BOOL),
-                ('hNameMappings', ctypes.c_void_p),
-                ('lpszProgressTitle', wintypes.LPCWSTR),
-            ]
-
-        fo_delete = 3
-        flags = 0x40 | 0x10 | 0x4 | 0x400  # ALLOWUNDO, NOCONFIRMATION, SILENT, NOERRORUI
-        # A list of paths, each ending in a nul, the whole ending in another.
-        names = ctypes.create_unicode_buffer('\0'.join(str(p) for p in paths) + '\0\0')
-        op = SHFILEOPSTRUCTW(
-            None, fo_delete, ctypes.cast(names, wintypes.LPCWSTR), None,
-            flags, False, None, None,
-        )
-        result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
-        return result == 0 and not op.fAnyOperationsAborted and not any(
-            p.exists() for p in paths
-        )
-    except Exception:
-        logger.opt(exception=True).debug('could not use the Recycle Bin')
-        return False
 
 
 def open_external(path: str | Path) -> dict[str, Any] | None:
