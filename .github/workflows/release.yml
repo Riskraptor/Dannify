@@ -10,7 +10,6 @@ name: Release builds
 on:
   push:
     tags: ['v*']
-    branches: [macos-build]
   workflow_dispatch:
 
 permissions:
