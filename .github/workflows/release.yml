@@ -104,7 +104,15 @@ jobs:
       - name: Build Dannify.app
         run: PYTHON=python bash packaging/macos/build.sh out
       - name: Smoke test
+        env:
+          DANNIFY_SMOKE_SHOTS: shots
         run: python packaging/macos/smoke_test.py "out/macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.zip"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-${{ matrix.arch }}
+          path: shots
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.zip

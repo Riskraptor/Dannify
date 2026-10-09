@@ -74,7 +74,10 @@ def test_a_second_copy_hands_over_and_a_stale_socket_is_replaced(tmp_path, monke
     from dannify.shell import instance
 
     monkeypatch.setattr(instance, 'DATA_DIR', tmp_path)
-    (tmp_path / 'instance.sock').write_text('left by a crash')
+    # Where the socket goes: a long temporary folder (macOS has those) moves
+    # it somewhere shorter, as it would a long data folder.
+    sock = instance._path()
+    sock.write_text('left by a crash')
     first = instance.Instance()
     got = []
     first.handler = lambda m: (got.append(m), {'ok': True, 'seen': m.get('cmd')})[1]
@@ -83,6 +86,6 @@ def test_a_second_copy_hands_over_and_a_stale_socket_is_replaced(tmp_path, monke
     assert second.claim() is False  # one copy only
     assert instance.send({'cmd': 'show', 'file': ''}) == {'ok': True, 'seen': 'show'}
     assert got == [{'cmd': 'show', 'file': ''}]
-    assert (tmp_path / 'instance.sock').stat().st_mode & 0o077 == 0
+    assert sock.stat().st_mode & 0o077 == 0
     first.release()
     assert instance.send({'cmd': 'ping'}) is None

@@ -13,6 +13,7 @@ from loguru import logger
 
 from .. import core, instance
 from . import desktop, updater
+from .cocoa import AppKit, on_main
 
 
 def _wait_for_previous() -> None:
@@ -85,8 +86,6 @@ def _app_delegate(api, leave: _Exit, open_file):  # noqa: ANN001
     is asked: reopen from the Dock, the Dock menu, documents, and quitting."""
 
     from webview.platforms.cocoa import BrowserView
-
-    from .cocoa import AppKit
 
     class DannifyAppDelegate(BrowserView.AppDelegate):
         def applicationShouldTerminate_(self, _app):  # noqa: ANN001
@@ -184,8 +183,6 @@ def main() -> None:
 
     def before_show(*_) -> None:  # main thread
         nonlocal delegate
-        from .cocoa import AppKit
-
         api._attach(window, hidden, prefs.get('mac_frame'))
         delegate = _app_delegate(api, leave, open_file)
         AppKit.NSApp().setDelegate_(delegate)
@@ -207,8 +204,19 @@ def main() -> None:
         api._closing = True
         return True
 
+    def on_closed() -> None:
+        # pywebview stops the event loop when its window closes, but a stopped
+        # loop only notices at the next event. A window closed from code, not
+        # by a click, has none coming: send one.
+        def post() -> None:
+            event = AppKit.NSEvent.otherEventWithType_location_modifierFlags_timestamp_windowNumber_context_subtype_data1_data2_(  # noqa: E501
+                AppKit.NSEventTypeApplicationDefined, AppKit.NSMakePoint(0, 0), 0, 0.0, 0, None, 0, 0, 0)
+            AppKit.NSApp().postEvent_atStart_(event, True)
+        on_main(post)
+
     window.events.before_show += before_show
     window.events.closing += on_closing
+    window.events.closed += on_closed
 
     webview.start(
         swap_to_app,
