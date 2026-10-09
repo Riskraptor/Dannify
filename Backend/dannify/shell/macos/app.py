@@ -96,7 +96,6 @@ def _app_delegate(api, leave: _Exit, open_file):  # noqa: ANN001
             return AppKit.NSTerminateNow
 
         def applicationShouldHandleReopen_hasVisibleWindows_(self, _app, _visible) -> bool:  # noqa: ANN001
-            logger.debug('reopened from the Dock or Finder')
             api.win_show()
             return True
 
@@ -174,6 +173,7 @@ def main() -> None:
 
     def on_message(message: dict) -> dict:
         command = message.get('cmd')
+        logger.info('Another launch asked to {}', command)
         if command == 'quit':
             api.app_quit()
         elif command == 'show':

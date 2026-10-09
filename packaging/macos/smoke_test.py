@@ -299,6 +299,10 @@ def first_start(app: Path) -> None:
         fail('the app did not write its start marker')
     if copy.send({'cmd': 'ping'}) != {'ok': True}:
         fail('the instance socket does not answer')
+    if 'Another launch asked' in (copy.data / 'dannify.log').read_text(errors='replace'):
+        # Nothing launched it twice: a helper process the app started
+        # itself was taken for a second copy of the app.
+        fail('a second copy of the app started and handed over')
     errors = [line for line in (copy.data / 'dannify.log').read_text(errors='replace').splitlines()
               if ' | ERROR ' in line or ' | CRITICAL ' in line or 'Traceback' in line]
     if errors:

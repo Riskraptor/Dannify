@@ -74,6 +74,10 @@ done
 iconutil -c icns "$ICONSET" -o "$BUILD/Dannify.icns"
 
 echo "== PyInstaller"
+# A module that does not compile is left out of the program without a word
+# (PyInstaller collects what imports): stop here instead.
+"$PYTHON" -m compileall -q "$ROOT/Backend/dannify" "$ROOT/Backend/main.py" "$ROOT/Backend/desktop.py" \
+  "$ROOT/Backend/boot.py"
 DANNIFY_VERSION="$VER" DANNIFY_ARCH="$MACHINE" DANNIFY_ICNS="$BUILD/Dannify.icns" \
   "$PYTHON" -m PyInstaller --noconfirm --log-level WARN \
     --distpath "$DIST" --workpath "$BUILD/pyinstaller" "$HERE/dannify-macos.spec"
