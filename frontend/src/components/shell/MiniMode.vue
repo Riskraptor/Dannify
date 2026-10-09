@@ -21,6 +21,7 @@
             class="icon-btn h-7 w-7"
             :class="{ 'is-active': panel === 'lyrics' }"
             :title="t('lyrics.title')"
+            :aria-label="t('lyrics.title')"
             @click="toggle('lyrics')"
           >
             <Icon icon="ph:microphone-stage" class="h-4 w-4" />
@@ -29,6 +30,7 @@
             class="icon-btn h-7 w-7"
             :class="{ 'is-active': panel === 'queue' }"
             :title="t('player.queue')"
+            :aria-label="t('player.queue')"
             @click="toggle('queue')"
           >
             <Icon icon="ph:queue" class="h-4 w-4" />
@@ -37,6 +39,7 @@
             class="icon-btn h-7 w-7"
             :class="{ 'is-active': win.onTop }"
             :title="t('player.keepOnTop')"
+            :aria-label="t('player.keepOnTop')"
             @click="desktop.setOnTop(!win.onTop)"
           >
             <Icon :icon="win.onTop ? 'ph:push-pin-fill' : 'ph:push-pin'" class="h-4 w-4" />
@@ -44,23 +47,24 @@
           <button
             class="icon-btn h-7 w-7"
             :title="t('player.exitMiniPlayer')"
+            :aria-label="t('player.exitMiniPlayer')"
             @click="desktop.setMini(false)"
           >
             <Icon icon="ph:arrows-out-simple" class="h-4 w-4" />
           </button>
-          <button class="icon-btn h-7 w-7 mini-close" :title="t('window.close')" @click="desktop.close()">
+          <button class="icon-btn h-7 w-7 mini-close" :title="t('window.close')" :aria-label="t('window.close')" @click="desktop.close()">
             <Icon icon="ph:x" class="h-4 w-4" />
           </button>
         </div>
 
         <div class="mini-controls">
-          <button class="icon-btn is-round h-8 w-8" :disabled="!cur" :title="t('player.previous')" @click="player.prev()">
+          <button class="icon-btn is-round h-8 w-8" :disabled="!cur" :title="t('player.previous')" :aria-label="t('player.previous')" @click="player.prev()">
             <Icon icon="ph:skip-back-fill" class="h-[18px] w-[18px]" />
           </button>
-          <button class="mini-play" :disabled="!cur" :title="player.isPlaying.value ? t('player.pause') : t('player.play')" @click="player.toggle()">
+          <button class="mini-play" :disabled="!cur" :title="player.isPlaying.value ? t('player.pause') : t('player.play')" :aria-label="player.isPlaying.value ? t('player.pause') : t('player.play')" @click="player.toggle()">
             <Icon :icon="player.isPlaying.value ? 'ph:pause-fill' : 'ph:play-fill'" class="h-4 w-4" />
           </button>
-          <button class="icon-btn is-round h-8 w-8" :disabled="!cur" :title="t('player.next')" @click="player.next()">
+          <button class="icon-btn is-round h-8 w-8" :disabled="!cur" :title="t('player.next')" :aria-label="t('player.next')" @click="player.next()">
             <Icon icon="ph:skip-forward-fill" class="h-[18px] w-[18px]" />
           </button>
           <div class="mini-seek">
@@ -82,7 +86,7 @@
          pointer moves when it opens. -->
     <div v-if="panel" class="mini-panel" data-no-drag>
       <template v-if="panel === 'lyrics'">
-        <LyricsPanel v-if="cur" class="mini-lyrics" compact />
+        <LyricsView v-if="cur" class="mini-lyrics" compact />
         <div v-else class="mini-empty">
           <Icon icon="ph:microphone-stage" class="mb-2 h-8 w-8 opacity-40" />
           <p>{{ t('panel.lyricsIdle') }}</p>
@@ -102,7 +106,7 @@ import { openContextMenu } from '/src/model/contextMenu'
 import { useI18n } from '/src/i18n'
 import CoverImage from '../ui/CoverImage.vue'
 import RangeSlider from '../ui/RangeSlider.vue'
-import LyricsPanel from '../LyricsPanel.vue'
+import LyricsView from '../lyrics/LyricsView.vue'
 import QueueList from './QueueList.vue'
 
 // The bar on its own (MINI_H in Backend/desktop.py), and the bar with a
@@ -335,6 +339,6 @@ onBeforeUnmount(() => unbind())
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 </style>

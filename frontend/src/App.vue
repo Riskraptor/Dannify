@@ -59,7 +59,7 @@
   <ToastHost />
   <ShortcutsDialog />
   <ReportDialog />
-  <LyricsSubmit :open="submitOpen" @close="submitOpen = false" />
+  <LyricsEditor :open="submitOpen" @close="submitOpen = false" />
   <Onboarding />
 </template>
 
@@ -79,7 +79,7 @@ import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
 import ReportDialog from '/src/components/ui/ReportDialog.vue'
 import ShortcutsDialog from './components/ui/ShortcutsDialog.vue'
-import LyricsSubmit from './components/LyricsSubmit.vue'
+import LyricsEditor from './components/lyrics/LyricsEditor.vue'
 import Onboarding from './components/Onboarding.vue'
 import { startOnboarding } from './model/onboarding'
 import { useUi } from './model/ui'
