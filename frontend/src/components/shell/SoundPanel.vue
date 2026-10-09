@@ -445,13 +445,13 @@ function openSettings() {
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
 .snd-hint {
   margin: 6px 0 2px;
   font-size: 11.5px;
   line-height: 1.45;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .snd-chips {
   display: flex;
@@ -529,7 +529,7 @@ function openSettings() {
   text-align: center;
   font-size: 11px;
   font-weight: 700;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .bal-track {
   position: relative;
@@ -599,7 +599,7 @@ function openSettings() {
   gap: 5px;
   font-size: 12px;
   font-weight: 600;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .snd-link:hover {
   color: rgb(var(--c-fg));

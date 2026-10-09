@@ -52,7 +52,14 @@
           >
             <Icon icon="ph:arrows-out-simple" class="h-4 w-4" />
           </button>
-          <button class="icon-btn h-7 w-7 mini-close" :title="t('window.close')" :aria-label="t('window.close')" @click="desktop.close()">
+          <!-- macOS has its own close button on the window. -->
+          <button
+            v-if="platform !== 'macos'"
+            class="icon-btn h-7 w-7 mini-close"
+            :title="t('window.close')"
+            :aria-label="t('window.close')"
+            @click="desktop.close()"
+          >
             <Icon icon="ph:x" class="h-4 w-4" />
           </button>
         </div>
@@ -101,7 +108,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
 import { usePlayer, formatTime } from '/src/model/player'
-import { desktop, bindWindowDrag } from '/src/desktop/bridge'
+import { desktop, bindWindowDrag, platform } from '/src/desktop/bridge'
 import { openContextMenu } from '/src/model/contextMenu'
 import { useI18n } from '/src/i18n'
 import CoverImage from '../ui/CoverImage.vue'

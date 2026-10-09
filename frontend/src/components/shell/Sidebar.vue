@@ -3,6 +3,7 @@
     class="sidebar"
     :class="{ 'is-rail': rail, 'is-drawer': ui.isCompact.value }"
     :aria-label="t('nav.navigation')"
+    @keydown="onNavKey"
   >
     <div class="sb-group">
       <SideLink :to="{ name: 'Home' }" icon="ph:house" active-icon="ph:house-fill" :label="t('nav.home')" :rail="rail" :active="route.name === 'Home'" />
@@ -35,6 +36,7 @@
           v-if="!rail"
           class="sb-plus"
           :title="t('playlists.new')"
+          :aria-label="t('playlists.new')"
           @click="playlists.createPlaylist()"
         >
           <Icon icon="ph:plus" class="h-4 w-4" />
@@ -45,6 +47,7 @@
           v-if="filter"
           class="sb-chip sb-chip-clear"
           :title="t('nav.showEverything')"
+          :aria-label="t('nav.showEverything')"
           @click="setFilter('')"
         >
           <Icon icon="ph:x" class="h-3.5 w-3.5" />
@@ -64,7 +67,7 @@
       </div>
       <div v-if="!rail" class="sb-tools">
         <div class="sb-find" :class="{ 'is-open': searching || query }">
-          <button class="sb-tool" :title="t('nav.searchLibrary')" @click="openFind">
+          <button class="sb-tool" :title="t('nav.searchLibrary')" :aria-label="t('nav.searchLibrary')" @click="openFind">
             <Icon icon="ph:magnifying-glass" class="h-4 w-4" />
           </button>
           <input
@@ -114,6 +117,8 @@
           class="sb-row"
           :class="{ 'is-active': isActive(r), 'is-drop': r.kind === 'playlist' && dropOn === r.id }"
           :title="rail ? r.title : ''"
+          :aria-label="rail ? r.title : undefined"
+          :aria-current="isActive(r) ? 'page' : undefined"
           @contextmenu="r.menu && r.menu($event)"
           @dragenter="r.kind === 'playlist' && onDragOver($event, r.playlist)"
           @dragover="r.kind === 'playlist' && onDragOver($event, r.playlist)"
@@ -162,6 +167,7 @@
           v-if="support.config.configured"
           class="sb-give"
           :title="t('support.sidebar')"
+          :aria-label="t('support.sidebar')"
           @click="support.openSupport()"
         >
           <Icon icon="ph:coffee" class="h-[18px] w-[18px]" />
@@ -289,6 +295,37 @@ function artistRow(a) {
 // The row for the page on screen, worked out for the rows drawn only: the
 // list itself does not depend on the page, so going from page to page does
 // not build (and sort) every row of a big library again.
+// Up and down move between the places in the side bar, the way they do in
+// any app's list of places; Tab still goes through them one at a time. Left
+// and right move along the chips. The list draws a few rows past what is on
+// screen, so the next one is always there to move to.
+const NAV_ITEMS = '.sb-link, .sb-row'
+function onNavKey(e) {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+  const from = e.target
+  if (!(from instanceof HTMLElement)) return
+  const chips = from.matches('.sb-chip') && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
+  if (!chips && !from.matches(NAV_ITEMS)) return
+  const items = [...e.currentTarget.querySelectorAll(chips ? '.sb-chip' : NAV_ITEMS)].filter(
+    (el) => el.offsetParent !== null
+  )
+  const at = items.indexOf(from)
+  const to = {
+    ArrowDown: at + 1,
+    ArrowUp: at - 1,
+    ArrowRight: at + 1,
+    ArrowLeft: at - 1,
+    Home: 0,
+    End: items.length - 1,
+  }[e.key]
+  if (to === undefined || (chips && (e.key === 'Home' || e.key === 'End'))) return
+  e.preventDefault()
+  const next = items[Math.max(0, Math.min(items.length - 1, to))]
+  if (!next || next === from) return
+  next.focus()
+  next.scrollIntoView({ block: 'nearest' })
+}
+
 function isActive(r) {
   const to = r.to
   if (!to || route.name !== to.name) return false
@@ -570,6 +607,7 @@ const SideLink = {
           to: props.to,
           class: ['sb-link', { 'is-active': props.active }],
           title: props.rail ? props.label : undefined,
+          'aria-label': props.rail ? props.label : undefined,
           'aria-current': props.active ? 'page' : undefined,
           onClick: () => emit('click'),
         },
@@ -622,6 +660,10 @@ const SideLink = {
 .sb-find.is-open {
   background: rgb(var(--c-tint) / 0.08);
 }
+/* The field draws no outline of its own; the box around it shows the focus. */
+.sb-find:focus-within:has(.sb-find-input:focus-visible) {
+  box-shadow: inset 0 0 0 1px rgb(var(--c-accent) / 0.8);
+}
 .sb-tool {
   display: grid;
   place-items: center;
@@ -661,7 +703,7 @@ const SideLink = {
 .sb-none {
   padding: 8px 12px;
   font-size: 12.5px;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 /* --- Your Library ---------------------------------------------------------- */
 .sb-lib {
@@ -742,6 +784,10 @@ const SideLink = {
   place-items: center;
   width: 30px;
   padding: 0;
+}
+/* Inside the scrolling list a ring drawn outside the row is cut off by it. */
+.sb-row:focus-visible {
+  outline-offset: -2px;
 }
 .sb-row {
   display: flex;
@@ -827,7 +873,7 @@ const SideLink = {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12.5px;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
 .sb-pin {
   width: 12px;
@@ -876,7 +922,7 @@ const SideLink = {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .sb-subheading {
   padding: 12px 12px 6px;
@@ -884,7 +930,7 @@ const SideLink = {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .sidebar :deep(.sb-link) {
   position: relative;
@@ -938,7 +984,7 @@ const SideLink = {
 .sidebar :deep(.sb-count) {
   font-size: 11px;
   font-weight: 500;
-  color: rgb(var(--c-fg) / 0.4);
+  color: rgb(var(--c-fg) / var(--fg-40));
   font-variant-numeric: tabular-nums;
 }
 .sidebar :deep(.sb-badge-rail) {
@@ -1006,7 +1052,7 @@ const SideLink = {
   margin: 0 12px 4px;
   font-size: 11.5px;
   line-height: 1.45;
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 .sb-empty {
   margin: 12px 4px;
@@ -1034,7 +1080,7 @@ const SideLink = {
   height: 38px;
   flex-shrink: 0;
   border-radius: 6px;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
   transition:
     color 0.12s ease,
     background-color 0.12s ease;

@@ -25,11 +25,12 @@
           class="icon-btn is-round press shrink-0"
           :class="{ 'is-liked': liked }"
           :title="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
+          :aria-label="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
           @click="account.toggleLike(row.raw)"
         >
           <Icon :icon="liked ? 'ph:heart-fill' : 'ph:heart'" class="h-5 w-5" />
         </button>
-        <button class="icon-btn is-round press shrink-0" :title="t('actions.more')" @click="onMore">
+        <button class="icon-btn is-round press shrink-0" :title="t('actions.more')" :aria-label="t('actions.more')" @click="onMore">
           <Icon icon="ph:dots-three-bold" class="h-5 w-5" />
         </button>
       </div>
@@ -181,7 +182,7 @@ function onMore(e) {
   padding: 48px 16px;
   text-align: center;
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 .npa-cover {
   width: 100%;
@@ -210,7 +211,7 @@ function onMore(e) {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
-  color: rgb(var(--c-fg) / 0.62);
+  color: rgb(var(--c-fg) / var(--fg-62));
 }
 .npa-link:hover {
   color: rgb(var(--c-fg));
@@ -257,7 +258,7 @@ function onMore(e) {
 .npa-about-meta {
   margin-top: 2px;
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
 .npa-bio {
   display: -webkit-box;
@@ -303,7 +304,7 @@ function onMore(e) {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .npa-next:hover .npa-next-play {
   color: rgb(var(--c-accent));

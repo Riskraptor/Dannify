@@ -218,7 +218,7 @@ const QueueItem = {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .ql-list {
   flex: 1;
@@ -231,7 +231,7 @@ const QueueItem = {
   padding: 36px 16px;
   text-align: center;
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 .ql :deep(.ql-item) {
   display: flex;
@@ -277,11 +277,11 @@ const QueueItem = {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
 .ql :deep(.ql-time) {
   font-size: 12px;
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
   font-variant-numeric: tabular-nums;
 }
 .ql :deep(.ql-remove) {

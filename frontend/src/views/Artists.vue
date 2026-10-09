@@ -231,7 +231,7 @@ function artistMenu(a) {
   width: 15px;
   height: 15px;
   transform: translateY(-50%);
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
   pointer-events: none;
 }
 </style>

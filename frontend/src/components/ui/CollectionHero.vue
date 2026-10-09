@@ -8,6 +8,7 @@
         class="play-fab relative h-9 w-9"
         tabindex="-1"
         :title="t('actions.play')"
+        :aria-label="t('actions.play')"
         @click="$emit('play')"
       >
         <Icon :icon="playing ? 'ph:pause-fill' : 'ph:play-fill'" class="h-4 w-4" />
@@ -226,7 +227,7 @@ onBeforeUnmount(disconnect)
   margin-top: 8px;
   font-size: 12.5px;
   line-height: 1.55;
-  color: rgb(var(--c-fg) / 0.62);
+  color: rgb(var(--c-fg) / var(--fg-62));
 }
 .hero-actions {
   position: relative;

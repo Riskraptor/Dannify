@@ -145,6 +145,6 @@ const fallbackIcon = computed(
   height: 40%;
   max-width: 48px;
   max-height: 48px;
-  color: rgb(var(--c-fg) / 0.35);
+  color: rgb(var(--c-fg) / var(--fg-35));
 }
 </style>

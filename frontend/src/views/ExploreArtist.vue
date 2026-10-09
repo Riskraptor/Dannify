@@ -62,13 +62,14 @@
           </button>
         </template>
         <template #actions>
-          <button class="play-fab" :disabled="!songRows.length" :title="t('explore.play')" @click="playTop">
+          <button class="play-fab" :disabled="!songRows.length" :title="t('explore.play')" :aria-label="t('explore.play')" @click="playTop">
             <Icon :icon="playingHere ? 'ph:pause-fill' : 'ph:play-fill'" class="h-5 w-5" />
           </button>
           <button
             class="icon-btn is-round h-10 w-10"
             :disabled="!songRows.length"
             :title="t('actions.shuffle')"
+            :aria-label="t('actions.shuffle')"
             @click="shuffleRows(songRows)"
           >
             <Icon icon="ph:shuffle" class="h-6 w-6" />
@@ -265,7 +266,7 @@ onRefresh(load)
   margin: 8px 0 0 12px;
   font-size: 13px;
   font-weight: 700;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .more-btn:hover {
   color: rgb(var(--c-fg));

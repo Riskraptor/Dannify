@@ -172,7 +172,7 @@ watch(current, async (d) => {
   margin-bottom: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .dlg-input {
   width: 100%;

@@ -73,13 +73,14 @@
           </template>
         </template>
         <template #actions>
-          <button class="play-fab" :disabled="!rows.length" :title="t('explore.play')" @click="playAll">
+          <button class="play-fab" :disabled="!rows.length" :title="t('explore.play')" :aria-label="t('explore.play')" @click="playAll">
             <Icon :icon="playingHere ? 'ph:pause-fill' : 'ph:play-fill'" class="h-5 w-5" />
           </button>
           <button
             class="icon-btn is-round h-10 w-10"
             :disabled="!rows.length"
             :title="t('actions.shuffle')"
+            :aria-label="t('actions.shuffle')"
             @click="shuffleRows(rows)"
           >
             <Icon icon="ph:shuffle" class="h-6 w-6" />
@@ -93,10 +94,10 @@
             {{ pendingCount === rows.length ? t('explore.downloadAll') : t('explore.downloadRemaining', { count: pendingCount }) }}
           </button>
           <span v-else-if="rows.length" class="pill-accent h-7 px-3 text-xs">
-            <Icon icon="ph:check-circle-fill" class="h-4 w-4" />
+            <Icon icon="ph:arrow-circle-down-fill" class="h-4 w-4" />
             {{ t('explore.allInLibrary') }}
           </span>
-          <button class="icon-btn is-round h-10 w-10" :title="t('actions.more')" @click="openMore">
+          <button class="icon-btn is-round h-10 w-10" :title="t('actions.more')" :aria-label="t('actions.more')" @click="openMore">
             <Icon icon="ph:dots-three-bold" class="h-6 w-6" />
           </button>
         </template>

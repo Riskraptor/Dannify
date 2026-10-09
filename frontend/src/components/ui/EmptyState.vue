@@ -41,7 +41,7 @@ defineProps({
   margin-bottom: 16px;
   border-radius: 999px;
   background: rgb(var(--c-tint) / 0.06);
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 .empty-title {
   font-size: 18px;
@@ -52,7 +52,7 @@ defineProps({
   margin-top: 6px;
   font-size: 13.5px;
   line-height: 1.5;
-  color: rgb(var(--c-fg) / 0.6);
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .empty-actions {
   display: flex;

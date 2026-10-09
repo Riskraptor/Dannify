@@ -72,7 +72,7 @@
               <Icon icon="ph:clock-counter-clockwise" class="h-4 w-4 text-fg/45" />
               {{ q }}
             </button>
-            <button class="recent-chip-x" :title="t('search.removeRecent')" @click="recent.forgetSearch(q)">
+            <button class="recent-chip-x" :title="t('search.removeRecent')" :aria-label="t('search.removeRecent')" @click="recent.forgetSearch(q)">
               <Icon icon="ph:x" class="h-3.5 w-3.5" />
             </button>
           </span>
@@ -173,7 +173,7 @@
                 <span v-if="topResult.subtitle" class="truncate">{{ topResult.subtitle }}</span>
                 <span class="pill-muted shrink-0">{{ topResult.label }}</span>
               </p>
-              <button class="top-play play-fab" :title="t('actions.play')" @click.stop="playTop">
+              <button class="top-play play-fab" :title="t('actions.play')" :aria-label="t('actions.play')" @click.stop="playTop">
                 <Icon icon="ph:play-fill" class="h-5 w-5" />
               </button>
             </div>
@@ -569,7 +569,7 @@ onRefresh(() => {
   align-self: center;
   margin-left: 4px;
   font-size: 12px;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
   white-space: nowrap;
 }
 .chips-busy-dot {
@@ -609,7 +609,7 @@ onRefresh(() => {
 .show-all {
   font-size: 13px;
   font-weight: 600;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
 .show-all:hover {
   color: rgb(var(--c-fg));
@@ -641,6 +641,9 @@ onRefresh(() => {
 .top-card:hover,
 .top-card:focus-visible {
   background: rgb(var(--c-tint) / 0.1);
+}
+.top-card:focus-visible {
+  box-shadow: inset 0 0 0 2px rgb(var(--c-accent) / 0.7);
 }
 .top-cover {
   width: 96px;
@@ -726,7 +729,7 @@ onRefresh(() => {
   width: 28px;
   height: 100%;
   padding-right: 4px;
-  color: rgb(var(--c-fg) / 0.5);
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .recent-chip:hover {
   background: rgb(var(--c-tint) / 0.11);

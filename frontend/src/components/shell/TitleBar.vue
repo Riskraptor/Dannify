@@ -6,6 +6,7 @@
       'is-desktop': desktop.isDesktop,
       'is-inactive': desktop.isDesktop && !win.focused,
       'is-welcome': welcome,
+      'is-mac': desktop.isDesktop && platform === 'macos',
     }"
   >
     <div class="tb-left">
@@ -13,6 +14,7 @@
         v-if="ui.isCompact.value"
         class="icon-btn"
         :title="t('nav.menu')"
+        :aria-label="t('nav.menu')"
         @click="ui.toggleSidebar()"
       >
         <Icon icon="ph:list" class="h-5 w-5" />
@@ -29,6 +31,7 @@
           class="icon-btn"
           :disabled="!nav.back"
           :title="`${t('nav.back')} (Alt+←)`"
+          :aria-label="t('nav.back')"
           @click="router.back()"
         >
           <Icon icon="ph:caret-left" class="h-[18px] w-[18px]" />
@@ -37,6 +40,7 @@
           class="icon-btn"
           :disabled="!nav.forward"
           :title="`${t('nav.forward')} (Alt+→)`"
+          :aria-label="t('nav.forward')"
           @click="router.forward()"
         >
           <Icon icon="ph:caret-right" class="h-[18px] w-[18px]" />
@@ -57,6 +61,7 @@
           class="tb-account"
           :class="{ 'is-in': account.signedIn.value }"
           :title="account.signedIn.value ? account.displayName.value : t('account.connect')"
+          :aria-label="account.signedIn.value ? account.displayName.value : t('account.connect')"
           @click="openAccountMenu"
         >
           <img
@@ -85,12 +90,14 @@
           class="icon-btn"
           :class="{ 'is-active': route.name === 'Settings' }"
           :title="`${t('nav.settings')} (Ctrl+,)`"
+          :aria-label="t('nav.settings')"
           @click="router.push({ name: 'Settings' })"
         >
           <Icon icon="ph:gear-six" class="h-[18px] w-[18px]" />
         </button>
       </div>
-      <template v-if="desktop.isDesktop && !win.nativeFrame">
+      <!-- macOS keeps its own traffic lights, at the other end. -->
+      <template v-if="desktop.isDesktop && !win.nativeFrame && platform !== 'macos'">
         <span class="tb-sep" />
         <WindowControls />
       </template>
@@ -102,7 +109,7 @@
 import { ref, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
-import { desktop, bindWindowDrag } from '/src/desktop/bridge'
+import { desktop, bindWindowDrag, platform } from '/src/desktop/bridge'
 import { useUi } from '/src/model/ui'
 import { useAccount } from '/src/model/account'
 import { useHomeFeed } from '/src/model/home'
@@ -214,6 +221,12 @@ onBeforeUnmount(() => {
 .tb-left {
   gap: 10px;
 }
+/* The window's own close, minimize and zoom buttons sit over the left end of
+   the bar on macOS (the title bar is transparent and the app runs under it):
+   room is left for them, and the bar still drags the window. */
+.titlebar.is-mac {
+  padding-left: 78px;
+}
 .tb-right {
   justify-content: flex-end;
   gap: 4px;
@@ -284,6 +297,20 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+}
+/* A medium window: the words took the room the search box needed (its own
+   hint ran under the Ctrl K keys). The icon stays, named for screen readers
+   and with the words on hover. */
+@media (max-width: 960px) {
+  .tb-signin {
+    display: none;
+  }
+  .tb-account:has(.tb-signin) {
+    display: grid;
+    width: 30px;
+    padding: 0;
+    border: 0;
+  }
 }
 .tb-avatar {
   width: 22px;

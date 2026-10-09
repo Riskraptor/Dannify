@@ -37,8 +37,11 @@
   --c-elev: 255 255 255;
   --c-fg: 20 22 26;
   --c-tint: 0 0 0;
-  --c-accent: 20 168 74;
-  --c-accent-hover: 17 150 66;
+  /* Dark enough for green text at 4.5:1 on every surface here, tinted tiles
+     included, and for white text on green; the lighter green it replaced
+     managed 3.1. */
+  --c-accent: 14 121 53;
+  --c-accent-hover: 11 104 45;
   --c-accent-fg: 255 255 255;
   --c-danger: 220 76 76;
   --c-warn: 200 138 18;
@@ -238,6 +241,73 @@
   --gap: 8px;
   --radius-panel: 10px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* How faint secondary text is drawn, by the strength it was designed at.
+     On a dark palette that is exactly what it says. On a light one nothing
+     goes below 0.65: the faintest grey that still reads at 4.5:1 on every
+     light palette's surfaces (Sand's window background is the hardest).
+     Written as rgb(var(--c-fg) / var(--fg-45)) where it was / 0.45. */
+  --fg-30: 0.3;
+  --fg-35: 0.35;
+  --fg-40: 0.4;
+  --fg-45: 0.45;
+  --fg-50: 0.5;
+  --fg-55: 0.55;
+  --fg-58: 0.58;
+  --fg-60: 0.6;
+  --fg-62: 0.62;
+}
+
+[data-mode='light'] {
+  --fg-30: 0.65;
+  --fg-35: 0.65;
+  --fg-40: 0.65;
+  --fg-45: 0.65;
+  --fg-50: 0.65;
+  --fg-55: 0.65;
+  --fg-58: 0.65;
+  --fg-60: 0.65;
+  --fg-62: 0.65;
+}
+
+/* The same floor for the few utility classes that set faint text. */
+[data-mode='light'] .text-fg\/45,
+[data-mode='light'] .text-fg\/50,
+[data-mode='light'] .text-fg\/55,
+[data-mode='light'] .text-fg\/60,
+[data-mode='light'] .eyebrow,
+[data-mode='light'] .kbd,
+[data-mode='light'] .pill-muted,
+[data-mode='light'] .field::placeholder {
+  color: rgb(var(--c-fg) / 0.65);
+}
+
+/* A control whose edge is all that shows where it is needs 3:1 against the
+   surface. On dark palettes the faint edges get that from the fill; on a
+   light one they need the darker line. */
+/* Accent words on an accent tint ("On screen now", the accent pills): the
+   tint lifts the background just enough to sink them below 4.5:1 on a light
+   palette, so the words are drawn a shade deeper there. */
+/* Counts and separators faded with opacity-60 beside text that is already
+   muted: on a light palette that compounds below 4.5:1. */
+[data-mode='light'] .opacity-60 {
+  opacity: 0.85;
+}
+
+[data-mode='light'] .pill-accent,
+[data-mode='light'] .settings .palette-side-now {
+  color: color-mix(in srgb, rgb(var(--c-accent)) 78%, black);
+}
+
+[data-mode='light'] .field:not(:focus):not(:hover) {
+  border-color: rgb(var(--c-tint) / 0.42);
+}
+[data-mode='light'] .field:hover:not(:focus) {
+  border-color: rgb(var(--c-tint) / 0.55);
+}
+[data-mode='light'] .check:not(:checked):not(:indeterminate),
+[data-mode='light'] .switch:not(:checked) {
+  border-color: rgb(var(--c-tint) / 0.48);
 }
 
 /* ==========================================================================

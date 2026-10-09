@@ -96,6 +96,7 @@
                 v-if="stateOf(item) === 'done' && item.filename"
                 class="icon-btn"
                 :title="t('actions.play')"
+                :aria-label="t('actions.play')"
                 @click="playItem(item)"
               >
                 <Icon icon="ph:play-fill" class="h-4 w-4" />
@@ -103,7 +104,8 @@
               <button
                 v-if="stateOf(item) === 'done' && item.filename && desktop.isDesktop"
                 class="icon-btn"
-                :title="t('actions.showInFolder')"
+                :title="tp('actions.showInFolder')"
+                :aria-label="tp('actions.showInFolder')"
                 @click="desktop.revealInFolder(item.filename)"
               >
                 <Icon icon="ph:folder-open" class="h-4 w-4" />
@@ -112,6 +114,7 @@
                 v-if="stateOf(item) === 'error'"
                 class="icon-btn"
                 :title="t('common.retry')"
+                :aria-label="t('common.retry')"
                 @click="retry(item)"
               >
                 <Icon icon="ph:arrow-clockwise" class="h-4 w-4" />
@@ -119,6 +122,7 @@
               <button
                 class="icon-btn hover:text-danger"
                 :title="t('queue.removeFromQueue')"
+                :aria-label="t('queue.removeFromQueue')"
                 @click="dm.remove(item.song)"
               >
                 <Icon icon="ph:x" class="h-4 w-4" />
@@ -143,6 +147,7 @@ import { openContextMenu } from '/src/model/contextMenu'
 import { confirmDialog } from '/src/model/dialog'
 import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
+import { tp } from '/src/i18n/platform'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
 import VirtualList from '/src/components/ui/VirtualList.vue'
 import CoverImage from '/src/components/ui/CoverImage.vue'
@@ -262,7 +267,7 @@ function onMenu(e, item) {
     s === 'done' &&
       item.filename &&
       desktop.isDesktop && {
-        label: t('actions.showInFolder'),
+        label: tp('actions.showInFolder'),
         icon: 'ph:folder-open',
         action: () => desktop.revealInFolder(item.filename),
       },

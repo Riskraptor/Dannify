@@ -27,6 +27,7 @@
         class="mcard-play"
         tabindex="-1"
         :title="t('actions.play')"
+        :aria-label="t('actions.play')"
         @click.stop="$emit('play')"
       >
         <Icon icon="ph:play-fill" class="h-5 w-5" />
@@ -162,6 +163,6 @@ function onMenu(e) {
   margin-top: 2px;
   font-size: 13.5px;
   line-height: 1.35;
-  color: rgb(var(--c-fg) / 0.58);
+  color: rgb(var(--c-fg) / var(--fg-58));
 }
 </style>

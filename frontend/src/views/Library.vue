@@ -14,16 +14,17 @@
     </ViewHeader>
 
     <div v-if="lib.tracks.value.length" class="toolbar view-pad">
-      <button class="play-fab" :title="t('library.play')" @click="playAll">
+      <button class="play-fab" :title="t('library.play')" :aria-label="t('library.play')" @click="playAll">
         <Icon :icon="playingHere ? 'ph:pause-fill' : 'ph:play-fill'" class="h-5 w-5" />
       </button>
-      <button class="icon-btn is-round h-10 w-10" :title="t('actions.shuffle')" @click="shuffleRows(rows)">
+      <button class="icon-btn is-round h-10 w-10" :title="t('actions.shuffle')" :aria-label="t('actions.shuffle')" @click="shuffleRows(rows)">
         <Icon icon="ph:shuffle" class="h-6 w-6" />
       </button>
       <button
         v-if="desktop.isDesktop"
         class="icon-btn is-round h-10 w-10"
         :title="t('settings.openFolder')"
+        :aria-label="t('settings.openFolder')"
         @click="desktop.openLibraryFolder()"
       >
         <Icon icon="ph:folder-open" class="h-[22px] w-[22px]" />
@@ -31,6 +32,7 @@
       <button
         class="icon-btn is-round h-10 w-10"
         :title="`${t('common.refresh')} (F5)`"
+        :aria-label="t('common.refresh')"
         :disabled="lib.loading.value"
         @click="lib.refresh()"
       >
@@ -48,7 +50,7 @@
             spellcheck="false"
             @keydown.esc="query = ''"
           />
-          <button v-if="query" class="filter-clear" @click="query = ''">
+          <button v-if="query" class="filter-clear" :title="t('search.clear')" :aria-label="t('search.clear')" @click="query = ''">
             <Icon icon="ph:x" class="h-3.5 w-3.5" />
           </button>
         </div>
@@ -253,7 +255,7 @@ function openSortMenu(e) {
   width: 15px;
   height: 15px;
   transform: translateY(-50%);
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
   pointer-events: none;
 }
 .filter-clear {
@@ -266,7 +268,7 @@ function openSortMenu(e) {
   height: 20px;
   transform: translateY(-50%);
   border-radius: 4px;
-  color: rgb(var(--c-fg) / 0.55);
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
 .filter-clear:hover {
   background: rgb(var(--c-tint) / 0.1);
