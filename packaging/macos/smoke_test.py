@@ -71,6 +71,17 @@ def screenshot(name: str) -> None:
                    capture_output=True, timeout=30)
 
 
+def windows_of(pid: int) -> list:
+    """The ordinary windows process *pid* has on screen (not its menu bar item)."""
+
+    import Quartz
+
+    found = Quartz.CGWindowListCopyWindowInfo(
+        Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID) or []
+    return [w for w in found if int(w.get('kCGWindowOwnerPID', 0)) == pid
+            and int(w.get('kCGWindowLayer', 0)) == 0]
+
+
 def wait_until(check, timeout: float, what: str, step_s: float = 0.25):  # noqa: ANN001
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -282,6 +293,8 @@ def first_start(app: Path) -> None:
     screenshot('first-start')
     if copy.proc.poll() is not None:
         fail(f'the app exited with {copy.proc.returncode} after starting')
+    if not windows_of(copy.proc.pid):
+        fail('the app has no window on screen')
     if not (copy.data / 'updates' / '.launched').is_file():
         fail('the app did not write its start marker')
     if copy.send({'cmd': 'ping'}) != {'ok': True}:
@@ -308,9 +321,14 @@ def started_by_launchservices(app: Path) -> None:
         fail('the copy started with --minimized did not start hidden')
     time.sleep(3)
     screenshot('started-hidden')
+    shown_early = 'Window shown again' in (copy.data / 'dannify.log').read_text(errors='replace')
+    if windows_of(copy.pid()):
+        fail('the copy started hidden has a window on screen'
+             + (' (it showed itself)' if shown_early else ' (not shown by the shell)'))
     if copy.send({'cmd': 'show', 'file': ''}) != {'ok': True}:
         fail('the hidden copy did not take the show message')
-    time.sleep(3)
+    wait_until(lambda: windows_of(copy.pid()), 10, 'the window to show')
+    time.sleep(2)
     screenshot('shown')
     copy.quit()
     print('started with its own data folder, showed itself, and quit')
@@ -335,6 +353,9 @@ def good_update(app: Path, archive: Path) -> Path:
     ditto(str(app), str(installed))
     copy = Copy(installed, 'updating')
     copy.start()
+    # Long enough for the page to load and keep what it stores, so the
+    # version after the update opens past the first-run welcome.
+    time.sleep(10)
     old_pid = copy.proc.pid
     before = copy.starts()
     update_over(installed, copy, archive)

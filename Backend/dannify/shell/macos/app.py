@@ -96,6 +96,7 @@ def _app_delegate(api, leave: _Exit, open_file):  # noqa: ANN001
             return AppKit.NSTerminateNow
 
         def applicationShouldHandleReopen_hasVisibleWindows_(self, _app, _visible) -> bool:  # noqa: ANN001
+            logger.debug('reopened from the Dock or Finder')
             api.win_show()
             return True
 

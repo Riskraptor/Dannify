@@ -439,6 +439,8 @@ class MacApi:
     def win_show(self) -> None:
         def run() -> None:
             ns = self._ns
+            if self._hidden:
+                logger.info('Window shown again')
             self._hidden = False
             if ns.isMiniaturized():
                 ns.deminiaturize_(None)
