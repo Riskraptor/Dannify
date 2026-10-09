@@ -7,21 +7,34 @@ track fails with "Requested format is not available".
 
 yt-dlp can drive deno, node, bun or quickjs, but only looks for deno by
 default and none of them ship with Windows. So Dannify carries its own:
-quickjs-ng is a single 2 MB executable (MIT), which is three orders of
+QuickJS is a single small executable (MIT), which is three orders of
 magnitude smaller than bundling Node or Deno for the same job.
 
-An engine already on the user's PATH is preferred when it is faster.
+An engine already on the user's PATH is preferred when it is faster, but
+only one new enough for yt-dlp: Ubuntu 24.04's Node is 18, which yt-dlp
+refuses, and picking it meant nothing played there at all.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Optional
 
 from loguru import logger
+
+from .osenv import IS_WINDOWS, PLATFORM, exe_names
+
+# The oldest of each that yt-dlp's challenge solver accepts.
+_MINIMUM = {
+    'deno': (2, 3, 0),
+    'bun': (1, 2, 11),
+    'node': (22, 0, 0),
+}
 
 # Fastest first. quickjs is last because it is ours and always present, so it
 # only runs when the machine has nothing better.
@@ -53,7 +66,11 @@ def _bundled(folder: str, *names: str) -> Optional[Path]:
         roots.append(Path(getattr(sys, '_MEIPASS', '.')) / folder)
         roots.append(Path(sys.executable).parent / folder)
     else:
-        roots.append(Path(__file__).resolve().parents[2] / 'packaging' / folder)
+        top = Path(__file__).resolve().parents[2]
+        # The Linux package keeps its tools beside the app; a checkout keeps
+        # the Windows ones in packaging/ and the others in packaging/<platform>.
+        roots.append(top / folder)
+        roots.append(top / 'packaging' / ('' if IS_WINDOWS else PLATFORM) / folder)
     for root in roots:
         for name in names:
             candidate = root / name
@@ -65,19 +82,47 @@ def _bundled(folder: str, *names: str) -> Optional[Path]:
 def bundled_qjs() -> Optional[Path]:
     """The JS engine we ship. Named for this app, not for the project it
     came from, so the install folder gives nothing away."""
-    return _bundled('jsruntime', 'dnfjs.exe', 'qjs.exe', 'dnfjs', 'qjs')
+    return _bundled('jsruntime', *exe_names('dnfjs', 'qjs'))
 
 
 def media_tool() -> Optional[Path]:
     """The bundled media encoder (ffmpeg under our own name)."""
-    return _bundled('media', 'dnfmedia.exe', 'ffmpeg.exe', 'dnfmedia', 'ffmpeg')
+    return _bundled('media', *exe_names('dnfmedia', 'ffmpeg'))
+
+
+def _version(path: str) -> Optional[tuple[int, ...]]:
+    """What `<runtime> --version` says, as numbers, or None."""
+
+    try:
+        out = subprocess.run(
+            [path, '--version'], capture_output=True, text=True, timeout=5,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = re.search(r'(\d+)\.(\d+)(?:\.(\d+))?', out or '')
+    if not found:
+        return None
+    return tuple(int(g or 0) for g in found.groups())
+
+
+def _new_enough(name: str, path: str) -> bool:
+    need = _MINIMUM.get(name)
+    if need is None:
+        return True  # quickjs prints no version; any build since 2023 works
+    have = _version(path)
+    if have is None or have < need:
+        logger.info('JS runtime: skipping {} {} at {} (yt-dlp needs {})',
+                    name, '.'.join(map(str, have or ())) or '?', path, '.'.join(map(str, need)))
+        return False
+    return True
 
 
 def _resolve() -> dict[str, Any]:
     """Pick a runtime once and remember it."""
     for name, executable in _PATH_RUNTIMES:
         found = shutil.which(executable)
-        if found:
+        if found and _new_enough(name, found):
             logger.info('JS runtime: {} ({})', name, found)
             return {name: {'path': found}}
     qjs = bundled_qjs()

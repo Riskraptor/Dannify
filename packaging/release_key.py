@@ -5,6 +5,12 @@
     python packaging/release_key.py sign <kind> <version> <file>
                                                    write <file>.sig
     python packaging/release_key.py verify <kind> <version> <file>
+    python packaging/release_key.py sign-release <file>...
+                                                   sign each, the kind and version
+                                                   read from its release name
+    python packaging/release_key.py verify-release <file>...
+                                                   check each against PUBLIC_KEY
+                                                   in updates.py (no private key)
 
 The private key is read from the DANNIFY_RELEASE_KEY environment variable
 (64 hex characters; that is how a CI secret hands it over) or else from
@@ -25,10 +31,41 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'Backend'))
 
-from dannify import signing  # noqa: E402
+from dannify import release_assets, signing  # noqa: E402
 
 KEY_FILE = Path.home() / '.dannify' / 'release-signing.key'
+# Windows' two kinds, and every platform kind release_assets names.
 KINDS = ('package', 'installer')
+
+
+def _known_kind(kind: str) -> bool:
+    return kind in KINDS or bool(
+        __import__('re').fullmatch(
+            r'installer-linux-deb-(amd64|arm64)|app-macos-zip-(arm64|x64)|installer-macos-dmg-(arm64|x64)',
+            kind,
+        )
+    )
+
+
+def _shipped_public_key() -> str:
+    """PUBLIC_KEY exactly as updates.py ships it: what installed copies trust."""
+
+    import re
+
+    text = (Path(__file__).resolve().parent.parent / 'Backend' / 'dannify' / 'updates.py').read_text(
+        encoding='utf-8'
+    )
+    found = re.search(r"^PUBLIC_KEY = '([0-9a-f]{64})'", text, re.M)
+    if not found:
+        raise SystemExit('PUBLIC_KEY not found in updates.py')
+    return found.group(1)
+
+
+def _described(path: Path) -> tuple[str, str]:
+    found = release_assets.describe(path.name)
+    if not found:
+        raise SystemExit(f'{path.name} is not named like a release file')
+    return found
 
 
 def load_secret() -> bytes:
@@ -51,8 +88,8 @@ def load_secret() -> bytes:
 
 
 def sign_file(kind: str, version: str, path: Path, secret: bytes) -> Path:
-    if kind not in KINDS:
-        raise SystemExit(f'kind must be one of {KINDS}')
+    if not _known_kind(kind):
+        raise SystemExit(f'unknown kind {kind!r}')
     digest = signing.sha256_file(path)
     signature = signing.sign(secret, signing.statement(kind, version, digest))
     # Checked straight back against the public half before anything is
@@ -81,6 +118,27 @@ def main(argv: list[str]) -> int:
     if command == 'public':
         print(signing.public_key(load_secret()).hex())
         return 0
+    if command == 'sign-release' and len(argv) > 1:
+        secret = load_secret()
+        if signing.public_key(secret).hex() != _shipped_public_key():
+            raise SystemExit('this key is not the one installed copies trust (PUBLIC_KEY)')
+        for name in argv[1:]:
+            path = Path(name)
+            kind, version = _described(path)
+            print(f'  signed {path.name} as {kind} {version} -> {sign_file(kind, version, path, secret).name}')
+        return 0
+    if command == 'verify-release' and len(argv) > 1:
+        public, bad = _shipped_public_key(), 0
+        for name in argv[1:]:
+            path = Path(name)
+            kind, version = _described(path)
+            sig = path.with_name(path.name + '.sig')
+            ok = sig.is_file() and signing.verify_release(
+                public, kind, version, signing.sha256_file(path), sig.read_text(encoding='ascii')
+            )
+            bad += not ok
+            print(f'  {path.name} ({kind} {version}): {"signature OK" if ok else "BAD SIGNATURE"}')
+        return 1 if bad else 0
     if command in ('sign', 'verify') and len(argv) == 4:
         kind, version, path = argv[1], argv[2], Path(argv[3])
         if not path.is_file():

@@ -12,6 +12,11 @@ the next start, or straight away for "restart to update".
 A copy that is not installed that way (run from source, or copied somewhere
 by hand) cannot do that, and downloads the installer instead.
 
+Linux and macOS update the whole app at once: the Linux package installs a
+new .deb (the system asks for the password), the macOS app swaps in a new
+Dannify.app. Each platform only ever looks at its own files in a release,
+and each file is signed as what it is (see release_assets.py).
+
 Point it at your repository with ``DANNIFY_UPDATE_REPO=owner/name`` (or edit
 ``DEFAULT_REPO``). Nothing here needs a token: public releases only.
 """
@@ -33,7 +38,7 @@ from typing import Any, Callable, Optional
 
 from loguru import logger
 
-from . import layout, signing
+from . import layout, osenv, release_assets, signing
 
 # Releases live on Dannify's own repository, which is public. Up to 4.6.1
 # they came from a separate one, dannify-releases, while the source was
@@ -303,21 +308,34 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         'package_manifest_url': '',
         'package_url': '',
         'managed': layout.managed(),
+        # What the downloaded file is signed as: 'installer' for the Windows
+        # setup, the platform's own kind elsewhere.
+        'installer_kind': release_assets.WINDOWS_INSTALLER,
+        # Whether this copy can install the update itself (an installed
+        # Linux package or macOS app), or only point at the download page.
+        'self_update': osenv.IS_WINDOWS or self_updatable(),
     }
     hold = 60.0
     try:
         data = _fetch_latest()
         tag = str(data.get('tag_name') or data.get('name') or '').lstrip('vV')
         assets = data.get('assets') or []
-        installer = next(
-            (
-                a
-                for a in assets
-                if str(a.get('name', '')).lower().endswith('.exe')
-                and 'setup' in str(a.get('name', '')).lower()
-            ),
-            None,
-        )
+        own = release_assets.own_update(tag) if tag else None
+        if own is not None:
+            # Linux and macOS: exactly this platform's file, by its full
+            # name, never something that merely looks like an update.
+            installer = next((a for a in assets if str(a.get('name', '')) == own[0]), None)
+            result['installer_kind'] = own[1]
+        else:
+            installer = next(
+                (
+                    a
+                    for a in assets
+                    if str(a.get('name', '')).lower().endswith('.exe')
+                    and 'setup' in str(a.get('name', '')).lower()
+                ),
+                None,
+            )
         available = bool(tag) and is_newer(tag, current_version)
         # A version that could not start on this PC was rolled back by the
         # launcher; offering it again would only go round in circles.
@@ -333,10 +351,13 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
                 'download_url': (installer or {}).get('browser_download_url', ''),
                 'size': int((installer or {}).get('size') or 0),
                 'published_at': data.get('published_at') or '',
-                'package_manifest_url': _asset(assets, 'package-', '.json'),
-                'package_url': _asset(assets, 'package-', '.zip'),
+                # Only Windows updates file by file from the package.
+                'package_manifest_url': _asset(assets, 'package-', '.json') if own is None else '',
+                'package_url': _asset(assets, 'package-', '.zip') if own is None else '',
                 # The signatures that go with them (see signing.py).
-                'package_signature_url': _asset(assets, 'package-', '.json.sig'),
+                'package_signature_url': (
+                    _asset(assets, 'package-', '.json.sig') if own is None else ''
+                ),
                 'installer_signature_url': (
                     _asset(assets, installer_name + '.sig', '') if installer_name else ''
                 ),
@@ -397,14 +418,38 @@ class Progress:
         self.__call__(1.0)
 
 
+def self_updatable() -> bool:
+    """Whether this Linux or macOS copy can put a new version in place.
+
+    The Linux package (DANNIFY_PACKAGED, under /opt/dannify) can, through the
+    system's package manager. A macOS app can when it runs from a real
+    Dannify.app, not from a source checkout or a translocated copy.
+    """
+
+    if osenv.IS_WINDOWS:
+        return False
+    if osenv.IS_MAC:
+        import sys  # noqa: PLC0415
+
+        exe = str(Path(sys.executable).resolve())
+        return bool(getattr(sys, 'frozen', False)) and '.app/Contents/' in exe
+    return osenv.packaged() and Path('/opt/dannify').is_dir() and bool(shutil.which('dpkg'))
+
+
+# The file types an update download may be saved as, per platform.
+_DOWNLOAD_TYPES = {'windows': '.exe', 'linux': '.deb', 'macos': '.zip'}
+
+
 def download(
     url: str,
     dest_dir: Path,
     progress_cb: Optional[Callable[..., None]] = None,
     version: str = '',
     signature_url: str = '',
+    kind: str = release_assets.WINDOWS_INSTALLER,
 ) -> Path:
-    """Download the installer (for a copy that cannot update in place)."""
+    """Download the installer (for a copy that cannot update in place), or
+    on Linux and macOS the whole new version."""
 
     _check_asset(url)
     if _require_signatures() and (not version or not signature_url):
@@ -418,8 +463,9 @@ def download(
 
     raw = unquote(urlsplit(url).path.rsplit('/', 1)[-1])
     name = re.sub(r'[^A-Za-z0-9._-]', '', raw).lstrip('.')
-    if not name.lower().endswith('.exe'):
-        name = 'Dannify-Setup.exe'
+    suffix = _DOWNLOAD_TYPES[osenv.PLATFORM]
+    if not name.lower().endswith(suffix):
+        name = 'Dannify-Setup.exe' if osenv.IS_WINDOWS else f'Dannify-update{suffix}'
     target = dest_dir / name
     partial = target.with_suffix(target.suffix + '.part')
     # Which file the partial copy is of, as the server named it. A dropped
@@ -480,7 +526,7 @@ def download(
     # finish the same wrong file.
     if _require_signatures():
         try:
-            _check_signature('installer', version, signing.sha256_file(partial), signature_url)
+            _check_signature(kind, version, signing.sha256_file(partial), signature_url)
         except Exception:
             partial.unlink(missing_ok=True)
             tag_file.unlink(missing_ok=True)
@@ -631,7 +677,10 @@ def discard_staged() -> None:
         shutil.rmtree(folder, ignore_errors=True)
 
 
-_DOWNLOADED = re.compile(r'^(?:delta-|Dannify-Setup-)(\d+(?:\.\d+)*)(?:\.exe)?(?:\.part(?:\.tag)?)?$')
+_DOWNLOADED = re.compile(
+    r'^(?:delta-|Dannify-Setup-|linux-dannify_|macos-Dannify-)(\d+(?:\.\d+)*)'
+    r'(?:[_-](?:amd64|arm64|x64))?(?:\.exe|\.deb|\.zip)?(?:\.part(?:\.tag)?)?$'
+)
 
 
 def prune_downloads(dest_dir: Path, current: str) -> list[str]:

@@ -41,6 +41,7 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from . import account
+from . import osenv
 from . import library as library_mod
 from . import lyrics as lyrics_mod
 from . import lyrics_index
@@ -2536,6 +2537,11 @@ async def update_download_endpoint(
             raise HTTPException(status_code=502, detail='update_failed') from exc
         return {'path': str(staged), 'version': info.get('version', ''), 'kind': 'staged'}
 
+    if not osenv.IS_WINDOWS and not info.get('self_update'):
+        # A Linux or macOS copy that cannot install over itself (run from
+        # source, or an app moved somewhere it cannot be replaced) is pointed
+        # at the download page instead.
+        raise HTTPException(status_code=409, detail='manual_update')
     # Only ever the address the release itself names. The interface used to
     # be able to send one of its own, and whatever came back was offered to
     # run as the installer.
@@ -2551,6 +2557,7 @@ async def update_download_endpoint(
             _progress,
             str(info.get('version') or ''),
             str(info.get('installer_signature_url') or ''),
+            str(info.get('installer_kind') or 'installer'),
         )
     except Exception as exc:
         logger.opt(exception=True).info('update download failed')

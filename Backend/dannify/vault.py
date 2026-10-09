@@ -190,16 +190,71 @@ def _dpapi(raw: bytes, entropy: Optional[bytes], unwrap: bool) -> bytes:
     return result
 
 
+# Linux and macOS wrap with a key from the system's secret store (see
+# keystore.py), tagged by where that key lives.
+_KEYSTORE_TAGS = {'secret-service': b'SSW1', 'keychain': b'KCW1', 'file': b'FKW1'}
+_TAG_STORES = {v: k for k, v in _KEYSTORE_TAGS.items()}
+
+
+def _wrap_stream(key: bytes, nonce: bytes, size: int) -> bytes:
+    seed = hashlib.blake2b(nonce, key=key, person=b'dnf-wrap-enc', digest_size=32).digest()
+    out = bytearray()
+    block = 0
+    while len(out) < size:
+        out += hashlib.blake2b(block.to_bytes(8, 'little'), key=seed, digest_size=64).digest()
+        block += 1
+    return bytes(out[:size])
+
+
+def _wrap_mac(key: bytes, tag: bytes, nonce: bytes, body: bytes) -> bytes:
+    return hashlib.blake2b(tag + nonce + body, key=key, person=b'dnf-wrap-mac', digest_size=32).digest()
+
+
+def _keystore_wrap(raw: bytes) -> Optional[bytes]:
+    """tag + nonce + mac + sealed bytes, or None with no store to use."""
+
+    from . import keystore  # noqa: PLC0415
+
+    for kind in dict.fromkeys((keystore.preferred(), 'file')):
+        key = keystore.wrapping_key(kind)
+        if key is None:
+            continue
+        tag, nonce = _KEYSTORE_TAGS[kind], os.urandom(16)
+        body = bytes(a ^ b for a, b in zip(raw, _wrap_stream(key, nonce, len(raw))))
+        return tag + nonce + _wrap_mac(key, tag, nonce, body) + body
+    return None
+
+
+def _keystore_unwrap(tag: bytes, rest: bytes) -> bytes:
+    import hmac  # noqa: PLC0415
+
+    from . import keystore  # noqa: PLC0415
+
+    key = keystore.wrapping_key(_TAG_STORES[tag], create=False)
+    if key is None:
+        raise OSError('the key store is not available')
+    nonce, mac, body = rest[:16], rest[16:48], rest[48:]
+    if len(nonce) != 16 or not hmac.compare_digest(mac, _wrap_mac(key, tag, nonce, body)):
+        raise ValueError('wrapped with another key')
+    return bytes(a ^ b for a, b in zip(body, _wrap_stream(key, nonce, len(body))))
+
+
 def _protect(raw: bytes) -> bytes:
     """Wrap the key so a copy of the file is useless anywhere else.
 
-    Everywhere but Windows it is stored as it is, which is honest: there is
-    nothing on those platforms that would make the difference without a
-    password the user has to type.
+    Windows wraps with DPAPI. Linux and macOS wrap with a key kept in the
+    system's secret store. Plain (RAW0) is only the last resort when nothing
+    at all can hold a key, and such entries are wrapped properly the next
+    time they are written (see _store_key and account.init).
     """
 
     if os.name != 'nt':
-        return b'RAW0' + raw
+        try:
+            wrapped = _keystore_wrap(raw)
+        except Exception:
+            logger.opt(exception=True).debug('could not protect a store entry')
+            wrapped = None
+        return wrapped if wrapped is not None else b'RAW0' + raw
     try:
         salt = _machine_entropy()
         if salt is not None:
@@ -216,6 +271,8 @@ def _unprotect(stored: bytes) -> bytes:
     tag, body = stored[:4], stored[4:]
     if tag == b'RAW0':
         return body
+    if tag in _TAG_STORES:
+        return _keystore_unwrap(tag, body)
     if tag == b'DPAP':
         return _dpapi(body, None, unwrap=True)
     if tag == b'DPA2':
