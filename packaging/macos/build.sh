@@ -9,7 +9,8 @@
 # Needs: Xcode's command line tools; a Python (PYTHON, default python3) with
 # Backend/requirements.txt and PyInstaller installed; the interface built
 # (frontend/dist); the media tool built (bash packaging/macos/build-media.sh).
-# QuickJS is downloaded here and checked against the checksum pinned below.
+# QuickJS-ng is built here from its release source, checked against the
+# checksum pinned below. Needs cmake.
 #
 # The app is signed ad hoc (no Apple Developer ID) and not notarised: see
 # README.md for what that means on first open. The files are not signed with
@@ -26,30 +27,35 @@ MACHINE="$(uname -m)"
 [ -f "$ROOT/frontend/dist/index.html" ] || { echo "build the interface first (frontend/dist)" >&2; exit 1; }
 [ -x "$HERE/media/dnfmedia" ] || { echo "build the media tool first: bash packaging/macos/build-media.sh" >&2; exit 1; }
 
-# QuickJS-ng (MIT), the JavaScript engine yt-dlp needs to play anything from
-# YouTube: the project's own release builds, one per processor.
-QJS_RELEASE="https://github.com/quickjs-ng/quickjs/releases/download/v0.17.0"
 case "$MACHINE" in
-  arm64)
-    ARCH=arm64
-    QJS_URL="$QJS_RELEASE/qjs-darwin-arm64"
-    QJS_SHA256="8be3ddfe3397d2e692e4e1e8972ee9d032a0a580505d2f8b4ea528cf1b651c11" ;;
-  x86_64)
-    ARCH=x64
-    QJS_URL="$QJS_RELEASE/qjs-darwin-x86_64"
-    QJS_SHA256="9e5e101b4fd13cda3204222ca9f8be35412c41dcdef3745829633b7a67245412" ;;
+  arm64) ARCH=arm64 ;;
+  x86_64) ARCH=x64 ;;
   *) echo "unsupported processor: $MACHINE" >&2; exit 1 ;;
 esac
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
+
+# QuickJS-ng (MIT), the JavaScript engine yt-dlp needs to play anything from
+# YouTube. The project's own macOS binaries are built for macOS 26 and later
+# only, so the same release is compiled here, from its source archive, for
+# the macOS this app supports.
+QJS_VERSION="0.17.0"
+QJS_URL="https://github.com/quickjs-ng/quickjs/archive/refs/tags/v${QJS_VERSION}.tar.gz"
+QJS_SHA256="559bc4c420475e55c7ab4510adbc562f55d7524d75e8e89d79ce4bb02f5687d9"
 
 BUILD="$HERE/build"
 DIST="$HERE/dist"
 rm -rf "$BUILD" "$DIST"
 mkdir -p "$BUILD" "$OUT" "$HERE/jsruntime"
 
-echo "== QuickJS"
-curl -fsSL --retry 3 -o "$BUILD/qjs" "$QJS_URL"
-echo "$QJS_SHA256  $BUILD/qjs" | shasum -a 256 -c -
-install -m 755 "$BUILD/qjs" "$HERE/jsruntime/dnfjs"
+echo "== QuickJS-ng ${QJS_VERSION}"
+curl -fsSL --retry 3 -o "$BUILD/quickjs.tar.gz" "$QJS_URL"
+echo "$QJS_SHA256  $BUILD/quickjs.tar.gz" | shasum -a 256 -c -
+tar xzf "$BUILD/quickjs.tar.gz" -C "$BUILD"
+cmake -S "$BUILD/quickjs-${QJS_VERSION}" -B "$BUILD/quickjs" -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" >/dev/null
+cmake --build "$BUILD/quickjs" --target qjs_exe -j "$(sysctl -n hw.ncpu)" >/dev/null
+install -m 755 "$BUILD/quickjs/qjs" "$HERE/jsruntime/dnfjs"
+strip -x "$HERE/jsruntime/dnfjs"
 codesign --force -s - "$HERE/jsruntime/dnfjs"
 echo 'print(6 * 7)' > "$BUILD/check.js"
 [ "$("$HERE/jsruntime/dnfjs" "$BUILD/check.js")" = "42" ] || { echo "QuickJS does not run here" >&2; exit 1; }

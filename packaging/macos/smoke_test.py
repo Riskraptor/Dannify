@@ -45,6 +45,7 @@ def step(text: str) -> None:
 
 def fail(text: str) -> None:
     print(f'\nFAILED: {text}', flush=True)
+    screenshot('failed')
     for data in DATA_DIRS:
         for name in ('dannify.log', 'updates/update.log', 'stdout.log'):
             path = data / name
@@ -56,6 +57,18 @@ def fail(text: str) -> None:
         print(f'\n--- {report}')
         print(report.read_text(errors='replace')[:6000])
     sys.exit(1)
+
+
+def screenshot(name: str) -> None:
+    """The screen as it is, for a person to look at afterwards (CI uploads
+    DANNIFY_SMOKE_SHOTS). Never a reason to fail."""
+
+    folder = os.environ.get('DANNIFY_SMOKE_SHOTS')
+    if not folder:
+        return
+    Path(folder).mkdir(parents=True, exist_ok=True)
+    subprocess.run(['/usr/sbin/screencapture', '-x', str(Path(folder) / f'{name}.png')],
+                   capture_output=True, timeout=30)
 
 
 def wait_until(check, timeout: float, what: str, step_s: float = 0.25):  # noqa: ANN001
@@ -178,9 +191,86 @@ def check_bundle(app: Path) -> None:
     if out.returncode != 0 or out.stdout.strip() != '2,4,6':
         fail(f'dnfjs: {out.returncode} {out.stdout!r} {out.stderr!r}')
     print('dnfmedia and dnfjs run')
-    for tool in (media, js):
-        print(tool.name, run(['/usr/bin/otool', '-l', str(tool)]).stdout.split('LC_BUILD_VERSION')[-1][:160]
-              .replace('\n', ' '))
+    oldest = tuple(int(p) for p in str(info.get('LSMinimumSystemVersion', '11.0')).split('.'))
+    newer = []
+    count = 0
+    for path in app.rglob('*'):
+        if path.is_symlink() or not path.is_file():
+            continue
+        for found in macho_minimums(path):
+            count += 1
+            if found > oldest:
+                newer.append(f'{path.relative_to(app)} needs macOS {".".join(map(str, found))}')
+    if newer:
+        fail('built for a newer macOS than the app says it supports:\n  ' + '\n  '.join(newer))
+    print(f'{count} programs and libraries, none needing more than macOS {".".join(map(str, oldest))}')
+
+
+_FAT = (0xCAFEBABE, 0xCAFEBABF)
+_THIN = {0xFEEDFACF: 32, 0xFEEDFACE: 28}  # header sizes, 64- and 32-bit
+
+
+def macho_minimums(path: Path) -> list:
+    """The oldest macOS each slice of a Mach-O file runs on (empty if it is
+    not one): LC_BUILD_VERSION or LC_VERSION_MIN_MACOSX."""
+
+    import struct
+
+    with open(path, 'rb') as fh:
+        head = fh.read(8)
+        if len(head) < 8:
+            return []
+        offsets = []
+        if struct.unpack('>I', head[:4])[0] in _FAT:
+            count = struct.unpack('>I', head[4:8])[0]
+            wide = struct.unpack('>I', head[:4])[0] == 0xCAFEBABF
+            for i in range(min(count, 16)):
+                fh.seek(8 + i * (32 if wide else 20))
+                entry = fh.read(32 if wide else 20)
+                offsets.append(struct.unpack('>Q', entry[8:16])[0] if wide
+                               else struct.unpack('>I', entry[8:12])[0])
+        else:
+            offsets.append(0)
+        found = []
+        for base in offsets:
+            fh.seek(base)
+            header = fh.read(32)
+            magic = struct.unpack('<I', header[:4])[0] if len(header) >= 32 else 0
+            if magic not in _THIN:
+                continue
+            ncmds, sizeofcmds = struct.unpack('<II', header[16:24])
+            fh.seek(base + _THIN[magic])
+            commands = fh.read(sizeofcmds)
+            at = 0
+            for _ in range(ncmds):
+                if at + 16 > len(commands):
+                    break
+                cmd, size = struct.unpack('<II', commands[at:at + 8])
+                if cmd in (0x32, 0x24):  # LC_BUILD_VERSION, LC_VERSION_MIN_MACOSX
+                    value = struct.unpack('<I', commands[at + (12 if cmd == 0x32 else 8):][:4])[0]
+                    found.append((value >> 16, (value >> 8) & 0xFF))
+                    break
+                at += size
+        return found
+
+
+def check_disk_image(dmg: Path) -> None:
+    step('the disk image')
+    mount = WORK / 'dmg'
+    mount.mkdir()
+    done = run(['/usr/bin/hdiutil', 'attach', '-nobrowse', '-readonly', '-mountpoint', str(mount), str(dmg)])
+    if done.returncode != 0:
+        fail(f'hdiutil attach: {done.stderr}')
+    try:
+        names = sorted(p.name for p in mount.iterdir())
+        print('holds', names)
+        if 'Dannify.app' not in names or not (mount / 'Applications').is_symlink():
+            fail('the disk image should hold Dannify.app and a link to Applications')
+        check = run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(mount / 'Dannify.app')])
+        if check.returncode != 0:
+            fail(f'the app in the disk image does not verify: {check.stderr}')
+    finally:
+        run(['/usr/bin/hdiutil', 'detach', str(mount)])
 
 
 def first_start(app: Path) -> None:
@@ -189,6 +279,7 @@ def first_start(app: Path) -> None:
     copy.start()
     print(f'up (process {copy.proc.pid}); watching it for 20s')
     time.sleep(20)
+    screenshot('first-start')
     if copy.proc.poll() is not None:
         fail(f'the app exited with {copy.proc.returncode} after starting')
     if not (copy.data / 'updates' / '.launched').is_file():
@@ -297,6 +388,9 @@ def main() -> None:
     if not app.is_dir():
         fail('the zip holds no Dannify.app')
     check_bundle(app)
+    dmg = archive.with_suffix('.dmg')
+    if dmg.is_file():
+        check_disk_image(dmg)
     first_start(app)
     started_by_launchservices(app)
     installed = good_update(app, archive)

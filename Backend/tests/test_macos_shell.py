@@ -49,7 +49,7 @@ def _fake_app(where: Path, version: str, body: str) -> Path:
 # A program that does what the real one does once its server answers
 # (updater.started): leave the marker, and say which version ran.
 _STARTS = ('mkdir -p "$DANNIFY_DATA_DIR/updates"\n'
-           'echo "{}" > "$DANNIFY_DATA_DIR/updates/.launched"\n'
+           'echo "{{}}" > "$DANNIFY_DATA_DIR/updates/.launched"\n'
            'echo {name} > "$DANNIFY_DATA_DIR/ran"\n')
 
 

@@ -30,6 +30,10 @@ _FULL_SIZE_CONTENT = 1 << 15  # NSWindowStyleMaskFullSizeContentView
 _TEXTURED = 1 << 8  # what pywebview adds for a frameless window; not wanted
 _FULLSCREEN_PRIMARY = 1 << 7  # NSWindowCollectionBehaviorFullScreenPrimary
 _BUTTONS = (0, 1, 2)  # close, minimise, zoom
+# The page's own title bar (--titlebar-h in frontend/src/index.css) is taller
+# than macOS's 28 points; the buttons are centred in it instead.
+_BAR_HEIGHT = 44
+_BUTTONS_X = 14
 _NOTES = (
     'NSWindowDidBecomeKeyNotification', 'NSWindowDidResignKeyNotification',
     'NSWindowDidMiniaturizeNotification', 'NSWindowDidDeminiaturizeNotification',
@@ -94,6 +98,7 @@ class MacApi:
         ns.setCollectionBehavior_(ns.collectionBehavior() | _FULLSCREEN_PRIMARY)
         ns.setMinSize_(AppKit.NSMakeSize(core.MIN_W, core.MIN_H))
         self._restore_frame(frame)
+        self._place_buttons()
 
         center = Foundation.NSNotificationCenter.defaultCenter()
         queue = Foundation.NSOperationQueue.mainQueue()
@@ -143,6 +148,34 @@ class MacApi:
             if button is not None:
                 button.setHidden_(not on)
 
+    def _place_buttons(self) -> None:
+        """Main thread. The window's buttons, centred in the page's title bar.
+
+        AppKit lays the title bar out again on every resize and on leaving
+        full screen, so this runs after each of those too.
+        """
+
+        ns = self._ns
+        if ns is None or self._fullscreen or self._mini:
+            return
+        buttons = [ns.standardWindowButton_(kind) for kind in _BUTTONS]
+        if any(b is None for b in buttons) or buttons[0].superview() is None:
+            return
+        bar_view = buttons[0].superview()
+        container = bar_view.superview()
+        if container is None:
+            return
+        bar = container.frame()
+        bar.size.height = _BAR_HEIGHT
+        bar.origin.y = ns.frame().size.height - _BAR_HEIGHT
+        container.setFrame_(bar)
+        step = buttons[1].frame().origin.x - buttons[0].frame().origin.x
+        for i, button in enumerate(buttons):
+            size = button.frame().size
+            # Centred both ways up, whichever way the bar counts.
+            y = (bar_view.frame().size.height - size.height) / 2
+            button.setFrameOrigin_(AppKit.NSMakePoint(_BUTTONS_X + i * step, y))
+
     def _on_window_note(self, note) -> None:  # noqa: ANN001
         """Main thread: the window changed; tell the page if that shows."""
 
@@ -160,6 +193,7 @@ class MacApi:
         self._minimized = bool(ns.isMiniaturized())
         self._fullscreen = bool(ns.styleMask() & _FULLSCREEN_MASK)
         self._maximized = bool(ns.isZoomed()) and not self._fullscreen and not self._mini
+        self._place_buttons()
         if (self._focused, self._minimized, self._fullscreen, self._maximized) != before:
             self._push_state()
 
@@ -319,6 +353,7 @@ class MacApi:
             core.write_prefs({'mac_mini_pos': [round(f.origin.x), round(f.origin.y)]})
             ns.setLevel_(AppKit.NSNormalWindowLevel)
             self._show_buttons(True)
+            self._place_buttons()
             if self._pre_mini:
                 (x, y, w, h), zoomed = self._pre_mini
                 ns.setFrame_display_animate_(AppKit.NSMakeRect(x, y, w, h), True, True)
@@ -583,14 +618,11 @@ class MacApi:
 
     # --- quitting, restarting, updating ---------------------------------------
     def app_quit(self) -> None:
-        self._quitting = True
+        """Quit for real, as Quit in the Dannify menu does, through the app
+        delegate's applicationShouldTerminate: and its clean-up."""
 
-        def run() -> None:
-            self._save_geometry()
-            self._closing = True
-            self._ns.close()  # pywebview stops the app once its window is gone
-        if self._ns is not None:
-            on_main(run)
+        self._quitting = True
+        on_main(lambda: AppKit.NSApp().terminate_(None))
 
     def app_restart(self) -> bool:
         """Start a new copy that waits for this one to go, then go."""
