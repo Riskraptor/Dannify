@@ -1,11 +1,11 @@
 #!/bin/sh
-# Dannify launcher for Ubuntu/Debian (/usr/bin/dannify).
+# Dannify (/usr/bin/dannify). Runs the app from its own environment in
+# /opt/dannify, as an installed copy: per-user folders, signed updates.
 set -eu
-APP_DIR="/opt/dannify"
-BACKEND="$APP_DIR/Backend"
-if [ -x "$APP_DIR/venv/bin/python3" ]; then
-  PY="$APP_DIR/venv/bin/python3"
-else
-  PY="python3"
+APP=/opt/dannify
+if [ ! -x "$APP/venv/bin/python3" ]; then
+  echo "Dannify is not set up completely. Reinstall it with:" >&2
+  echo "  sudo apt install --reinstall dannify" >&2
+  exit 1
 fi
-PYTHONPATH="$BACKEND:${PYTHONPATH:-}" exec "$PY" "$BACKEND/desktop_linux.py" "$@"
+DANNIFY_PACKAGED=1 exec "$APP/venv/bin/python3" "$APP/app/desktop.py" "$@"

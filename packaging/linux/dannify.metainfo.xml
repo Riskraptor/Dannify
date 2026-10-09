@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dannify</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Dannify</name>
+  <summary>Search, play and keep songs with artwork, tags and synced lyrics</summary>
+  <description>
+    <p>Dannify searches YouTube Music, plays it, and keeps the songs you save
+    as real files with artwork, tags and synced lyrics.</p>
+  </description>
+  <launchable type="desktop-id">dannify.desktop</launchable>
+  <url type="homepage">https://github.com/DANIELMWENDWA9451/Dannify</url>
+  <developer id="io.github.danielmwendwa9451"><name>Daniel Mwendwa</name></developer>
+  <content_rating type="oars-1.1"/>
+</component>

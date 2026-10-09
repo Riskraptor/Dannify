@@ -14,16 +14,16 @@ from pathlib import Path
 import pytest
 
 from dannify import streaming, updates
+from tests._shell_source import windows_tree
 
 BACKEND = Path(__file__).resolve().parents[1]
 
 
 def _load_from_desktop(*names: str) -> dict:
-    """Pull top-level definitions out of desktop.py without importing it
+    """Pull top-level definitions out of the Windows shell without importing it
     (importing it starts setting up the desktop shell)."""
 
-    source = (BACKEND / 'desktop.py').read_text(encoding='utf-8')
-    tree = ast.parse(source)
+    tree = windows_tree()
     wanted = [
         node for node in tree.body
         if (isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in names)
@@ -172,7 +172,7 @@ def test_the_relay_always_gives_its_slot_back(cdn):
 # ---------------------------------------------------------------------------
 def test_no_module_defines_the_same_name_twice():
     found = {}
-    for path in [BACKEND / 'main.py', BACKEND / 'desktop.py', *sorted((BACKEND / 'dannify').glob('*.py'))]:
+    for path in [BACKEND / 'main.py', BACKEND / 'desktop.py', *sorted((BACKEND / 'dannify').rglob('*.py'))]:
         tree = ast.parse(path.read_text(encoding='utf-8'))
         names = [
             n.name for n in tree.body
@@ -188,7 +188,7 @@ def test_no_module_defines_the_same_name_twice():
 def test_the_taskbar_guid_parses_the_taskbar_interface():
     import ctypes
 
-    tree = ast.parse((BACKEND / 'desktop.py').read_text(encoding='utf-8'))
+    tree = windows_tree()
     node = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == '_GUID')
     ns = {'ctypes': ctypes, 'ole32': ctypes.WinDLL('ole32')}
     exec(compile(ast.Module(body=[node], type_ignores=[]), 'desktop.py', 'exec'), ns)

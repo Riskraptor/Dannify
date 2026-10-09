@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Songs Dannify saved (.dnf) open in Dannify when double-clicked. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-dannify-track">
+    <comment>Dannify song</comment>
+    <icon name="dannify"/>
+    <glob pattern="*.dnf"/>
+  </mime-type>
+</mime-info>
