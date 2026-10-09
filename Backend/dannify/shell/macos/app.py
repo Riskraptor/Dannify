@@ -151,6 +151,7 @@ def main() -> None:
     api = MacApi(prefs, port, token, app_path)
     theme = api._theme
     hidden = '--minimized' in sys.argv[1:]
+    logger.info('Window {}', 'hidden until asked (started with --minimized)' if hidden else 'shown')
     w, h = _size(prefs)
     window = webview.create_window(
         core.APP_TITLE,
