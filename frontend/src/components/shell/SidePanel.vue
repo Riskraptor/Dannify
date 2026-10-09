@@ -43,6 +43,7 @@
       <button
         class="icon-btn ml-auto"
         :title="t('common.close') + ' (Esc)'"
+        :aria-label="t('common.close') + ' (Esc)'"
         @click="ui.closePanel()"
       >
         <Icon icon="ph:x" class="h-4 w-4" />
@@ -64,19 +65,20 @@
           class="icon-btn is-round press shrink-0"
           :class="{ 'is-liked': liked }"
           :title="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
+          :aria-label="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
           @click="account.toggleLike(row.raw)"
         >
           <Icon :icon="liked ? 'ph:heart-fill' : 'ph:heart'" class="h-[17px] w-[17px]" />
         </button>
       </div>
       <div class="sp-lyrics">
-        <LyricsPanel v-if="cur" />
+        <LyricsView v-if="cur" />
         <div v-else class="sp-empty">
           <Icon icon="ph:microphone-stage" class="mb-2 h-9 w-9 text-fg/25" />
           <p>{{ t('panel.lyricsIdle') }}</p>
         </div>
       </div>
-      <LyricsControls v-if="cur" bar class="sp-tools" />
+      <LyricsToolbar v-if="cur" bar class="sp-tools" />
     </template>
     <NowPlayingAbout v-else-if="tab === 'about'" />
     <QueueList v-else class="min-h-0 flex-1" />
@@ -92,8 +94,8 @@ import { useAccount } from '/src/model/account'
 import { queueRow, songVideoId } from '/src/model/tracks'
 import { useI18n } from '/src/i18n'
 import CoverImage from '../ui/CoverImage.vue'
-import LyricsPanel from '../LyricsPanel.vue'
-import LyricsControls from '../LyricsControls.vue'
+import LyricsView from '../lyrics/LyricsView.vue'
+import LyricsToolbar from '../lyrics/LyricsToolbar.vue'
 import QueueList from './QueueList.vue'
 import NowPlayingAbout from './NowPlayingAbout.vue'
 
@@ -236,6 +238,6 @@ function startResize(e) {
   justify-content: center;
   text-align: center;
   font-size: 13px;
-  color: rgb(var(--c-fg) / 0.45);
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 </style>

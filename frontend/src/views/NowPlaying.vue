@@ -4,7 +4,7 @@
     <div class="np-shade" aria-hidden="true" />
 
     <header class="np-top">
-      <button class="icon-btn np-btn" :title="`${t('common.close')} (Esc)`" @click="close">
+      <button class="icon-btn np-btn" :title="`${t('common.close')} (Esc)`" :aria-label="t('common.close')" @click="close">
         <Icon icon="ph:caret-down" class="h-5 w-5" />
       </button>
       <p class="np-top-label">{{ t('player.nowPlaying') }}</p>
@@ -21,6 +21,7 @@
           v-if="desktop.isDesktop"
           class="icon-btn np-btn"
           :title="`${win.fullscreen ? t('window.exitFullscreen') : t('window.fullscreen')} (F11)`"
+          :aria-label="win.fullscreen ? t('window.exitFullscreen') : t('window.fullscreen')"
           @click="desktop.toggleFullscreen()"
         >
           <Icon :icon="win.fullscreen ? 'ph:corners-in' : 'ph:corners-out'" class="h-5 w-5" />
@@ -59,11 +60,12 @@
             :class="{ 'is-active': inLibrary }"
             :disabled="inLibrary"
             :title="inLibrary ? t('player.inLibrary') : t('player.saveToLibrary')"
+            :aria-label="inLibrary ? t('player.inLibrary') : t('player.saveToLibrary')"
             @click="downloadRows([row])"
           >
             <Icon :icon="inLibrary ? 'ph:arrow-circle-down-fill' : 'ph:arrow-circle-down'" class="h-6 w-6" />
           </button>
-          <button class="icon-btn is-round np-btn h-10 w-10" :title="t('actions.more')" @click="onMore">
+          <button class="icon-btn is-round np-btn h-10 w-10" :title="t('actions.more')" :aria-label="t('actions.more')" @click="onMore">
             <Icon icon="ph:dots-three-bold" class="h-6 w-6" />
           </button>
         </div>
@@ -74,8 +76,8 @@
 
       <section class="np-right">
         <template v-if="tab === 'lyrics'">
-          <LyricsPanel large class="np-lyrics" />
-          <LyricsControls bar class="np-lyrics-tools" />
+          <LyricsView large class="np-lyrics" />
+          <LyricsToolbar bar class="np-lyrics-tools" />
         </template>
         <QueueList v-else class="np-queue" />
       </section>
@@ -96,8 +98,8 @@ import { useI18n } from '/src/i18n'
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import ArtistLinks from '/src/components/ui/ArtistLinks.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
-import LyricsPanel from '/src/components/LyricsPanel.vue'
-import LyricsControls from '/src/components/LyricsControls.vue'
+import LyricsView from '/src/components/lyrics/LyricsView.vue'
+import LyricsToolbar from '/src/components/lyrics/LyricsToolbar.vue'
 import QueueList from '/src/components/shell/QueueList.vue'
 
 const { t } = useI18n()
