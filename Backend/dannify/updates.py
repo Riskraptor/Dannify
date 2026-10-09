@@ -431,8 +431,14 @@ def self_updatable() -> bool:
     if osenv.IS_MAC:
         import sys  # noqa: PLC0415
 
-        exe = str(Path(sys.executable).resolve())
-        return bool(getattr(sys, 'frozen', False)) and '.app/Contents/' in exe
+        exe = Path(sys.executable).resolve()
+        if not (getattr(sys, 'frozen', False) and '.app/Contents/' in exe.as_posix()):
+            return False
+        # A copy macOS runs from a hidden read-only place (an app opened
+        # straight from Downloads), or from a folder this user cannot write
+        # to, cannot put a new version where it is: the download page it is.
+        app = exe.parents[2]
+        return '/AppTranslocation/' not in app.as_posix() and os.access(app.parent, os.W_OK)
     return osenv.packaged() and Path('/opt/dannify').is_dir() and bool(shutil.which('dpkg'))
 
 

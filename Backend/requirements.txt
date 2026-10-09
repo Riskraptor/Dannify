@@ -38,6 +38,20 @@ tinytag==2.3.2
     # via dannify
 proxy-tools==0.1.0
     # via pywebview
+pyobjc-core==12.2.2 ; sys_platform == 'darwin'
+    # via pywebview (the macOS window), and the macOS shell
+pyobjc-framework-cocoa==12.2.2 ; sys_platform == 'darwin'
+    # via pywebview
+pyobjc-framework-mediaplayer==12.2.2 ; sys_platform == 'darwin'
+    # via dannify (Now Playing and the media keys on macOS)
+pyobjc-framework-quartz==12.2.2 ; sys_platform == 'darwin'
+    # via pywebview
+pyobjc-framework-security==12.2.2 ; sys_platform == 'darwin'
+    # via pywebview
+pyobjc-framework-uniformtypeidentifiers==12.2.2 ; sys_platform == 'darwin'
+    # via pywebview
+pyobjc-framework-webkit==12.2.2 ; sys_platform == 'darwin'
+    # via pywebview
 pydantic==2.13.4
     # via fastapi
 pydantic-core==2.46.4

@@ -1,0 +1,127 @@
+# The Linux and macOS release files: the .deb, and Dannify.app as a .zip (what
+# the app updates itself from) and a .dmg (what people download).
+#
+# Nothing here is signed with the release key. That key never leaves the
+# release machine, which downloads these files, signs them and publishes
+# them with the Windows build (packaging/build.ps1, packaging/publish.ps1).
+# The macOS app is signed ad hoc only: there is no Apple Developer ID.
+name: Release builds
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-deb:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: version
+        run: echo "version=$(sed -n "s/^__version__ = '\(.*\)'/\1/p" Backend/dannify/__init__.py)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build the interface
+        working-directory: frontend
+        run: |
+          npm ci
+          npx vite build
+      - name: Build the package
+        run: bash packaging/linux/build-deb.sh out
+      - name: Check the package
+        run: |
+          dpkg-deb --info "out/linux-dannify_${{ steps.version.outputs.version }}_amd64.deb"
+          dpkg-deb --contents "out/linux-dannify_${{ steps.version.outputs.version }}_amd64.deb" | grep -q 'opt/dannify/jsruntime/dnfjs'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-dannify_${{ steps.version.outputs.version }}_amd64.deb
+          path: out/linux-dannify_${{ steps.version.outputs.version }}_amd64.deb
+          if-no-files-found: error
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          # The last Intel runner image GitHub offers.
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: version
+        run: echo "version=$(sed -n "s/^__version__ = '\(.*\)'/\1/p" Backend/dannify/__init__.py)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: Backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build the interface
+        working-directory: frontend
+        run: |
+          npm ci
+          npx vite build
+      - name: Python libraries
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r Backend/requirements.txt pyinstaller==6.22.3
+
+      # FFmpeg takes a while to build and only changes with its script.
+      - name: Media tool (cached)
+        id: media
+        uses: actions/cache@v4
+        with:
+          path: packaging/macos/media
+          key: dnfmedia-${{ matrix.arch }}-${{ env.MACOSX_DEPLOYMENT_TARGET }}-${{ hashFiles('packaging/macos/build-media.sh') }}
+      - name: Build the media tool
+        if: steps.media.outputs.cache-hit != 'true'
+        run: |
+          if [ "${{ matrix.arch }}" = "x64" ]; then brew install nasm; fi
+          bash packaging/macos/build-media.sh
+
+      - name: Build Dannify.app
+        run: PYTHON=python bash packaging/macos/build.sh out
+      - name: Smoke test
+        env:
+          DANNIFY_SMOKE_SHOTS: shots
+        run: python packaging/macos/smoke_test.py "out/macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.zip"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-${{ matrix.arch }}
+          path: shots
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.zip
+          path: out/macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          # Already compressed.
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.dmg
+          path: out/macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+          compression-level: 0

@@ -44,6 +44,14 @@ packaging/media/
 packaging/jsruntime/
 # The original, unrenamed copies these are built from.
 packaging/ffmpeg/
+# The same for macOS, and its build's working folders.
+packaging/macos/media/
+packaging/macos/jsruntime/
+packaging/macos/build/
+packaging/macos/dist/
+packaging/macos/out/
+# Release files downloaded from CI for a look.
+ci-artifacts/
 
 # Local working backups, not history.
 backups/

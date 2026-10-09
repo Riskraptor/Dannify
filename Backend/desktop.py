@@ -49,6 +49,14 @@ def _proof_of_work_worker() -> None:
 
 
 def entry() -> None:
+    if getattr(sys, 'frozen', False):
+        # multiprocessing starts its helper processes (the resource tracker)
+        # with sys.executable, which in a shipped build is the app itself.
+        # This runs the helper and exits; without it each one started as a
+        # second copy of the app and told the first to show its window.
+        import multiprocessing
+
+        multiprocessing.freeze_support()
     _proof_of_work_worker()
     if os.name == 'nt':
         from dannify.shell.windows.app import run
