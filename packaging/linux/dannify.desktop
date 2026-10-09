@@ -1,11 +1,26 @@
 [Desktop Entry]
 Type=Application
 Name=Dannify
-Comment=Search, play and keep tracks as real files with artwork, tags and synced lyrics
-Exec=dannify %U
+GenericName=Music Player
+Comment=Search, play and keep songs with artwork, tags and synced lyrics
+Exec=dannify %F
 Icon=dannify
 Terminal=false
 Categories=AudioVideo;Audio;Player;Music;
-Keywords=music;player;youtube;lyrics;
+Keywords=music;player;youtube;lyrics;songs;
 StartupWMClass=Dannify
-MimeType=x-scheme-handler/dannify;audio/mpeg;audio/flac;audio/ogg;audio/x-wav;
+StartupNotify=true
+MimeType=application/x-dannify-track;audio/mpeg;audio/mp4;audio/x-m4a;audio/flac;audio/ogg;audio/opus;audio/x-wav;
+Actions=PlayPause;Next;Previous;
+
+[Desktop Action PlayPause]
+Name=Play or pause
+Exec=dbus-send --session --type=method_call --dest=org.mpris.MediaPlayer2.dannify /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause
+
+[Desktop Action Next]
+Name=Next song
+Exec=dbus-send --session --type=method_call --dest=org.mpris.MediaPlayer2.dannify /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Next
+
+[Desktop Action Previous]
+Name=Previous song
+Exec=dbus-send --session --type=method_call --dest=org.mpris.MediaPlayer2.dannify /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Previous

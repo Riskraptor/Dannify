@@ -14,6 +14,7 @@ import types
 from pathlib import Path
 
 import pytest
+from tests._shell_source import windows_tree
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -31,11 +32,10 @@ _NAMES = (
 
 
 def _load_from_desktop(*names: str, **extra) -> dict:
-    """Pull top-level definitions out of desktop.py without importing it
+    """Pull top-level definitions out of the Windows shell without importing it
     (importing it starts setting up the desktop shell)."""
 
-    source = (BACKEND / 'desktop.py').read_text(encoding='utf-8')
-    tree = ast.parse(source)
+    tree = windows_tree()
     wanted = [
         node for node in tree.body
         if (isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in names)

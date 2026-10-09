@@ -1,0 +1,34 @@
+#!/bin/sh
+# Before the files go.
+#
+# On removal, every user's running Dannify is asked to quit, through the
+# socket each one listens on (the same way "dannify --quit" asks). On an
+# upgrade nothing is stopped: the app that started the upgrade restarts
+# itself as the new version once it is in place, and one left running by
+# hand carries on until it is closed.
+set -e
+
+APP=/opt/dannify
+
+case "$1" in
+  remove|deconfigure)
+    if command -v python3 >/dev/null 2>&1; then
+      python3 - <<'EOF' || true
+import glob, json, socket
+for path in glob.glob('/home/*/.local/share/Dannify/instance*.sock') + glob.glob('/run/user/*/dannify-*.sock'):
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(2)
+            s.connect(path)
+            s.sendall(json.dumps({'cmd': 'quit'}).encode() + b'\n')
+    except OSError:
+        pass
+EOF
+    fi
+    ;;
+esac
+
+# Bytecode compiled by postinst is not in the package's file list.
+find "$APP/app" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
+
+exit 0

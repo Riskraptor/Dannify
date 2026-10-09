@@ -91,7 +91,9 @@ hiddenimports = (
     ]
     # yt-dlp lazy-loads extractors by name at runtime
     + collect_submodules('yt_dlp')
-    + collect_submodules('dannify')
+    # The other platforms' shells stay out of the Windows program.
+    + collect_submodules('dannify', filter=lambda name: not name.startswith(
+        ('dannify.shell.linux', 'dannify.shell.macos')))
     + ['yt_dlp_ejs']
 )
 
@@ -112,6 +114,7 @@ a = Analysis(
         'pytest', '_pytest', 'pip', 'setuptools', 'wheel',
         # GPL: kept out of the program for good, even if it is installed.
         'mutagen',
+        'dannify.shell.linux', 'dannify.shell.macos', 'gi',
     ],
     noarchive=False,
     optimize=2,   # strip docstrings/asserts from the shipped bytecode

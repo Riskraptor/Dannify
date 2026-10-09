@@ -1,0 +1,30 @@
+#!/bin/sh
+# Set up the app's own Python environment, on every install and upgrade.
+#
+# Built fresh each time from the wheels in the package, so an upgrade always
+# brings the libraries the new version was built with, and no network is
+# needed. Built beside the old one and swapped in only once it is complete:
+# a failed upgrade leaves the previous environment working.
+set -e
+
+APP=/opt/dannify
+
+if [ "$1" = "configure" ]; then
+  rm -rf "$APP/venv.new"
+  python3 -m venv --system-site-packages "$APP/venv.new"
+  if ! "$APP/venv.new/bin/python3" -m pip install -q --disable-pip-version-check \
+      --no-index --find-links "$APP/wheels" -r "$APP/requirements.txt"; then
+    echo "Dannify: this Python has no bundled libraries; fetching them from PyPI." >&2
+    "$APP/venv.new/bin/python3" -m pip install -q --disable-pip-version-check -r "$APP/requirements.txt"
+  fi
+  rm -rf "$APP/venv"
+  mv "$APP/venv.new" "$APP/venv"
+  # Compiled once here: the app runs as the user, who cannot write to /opt.
+  "$APP/venv/bin/python3" -m compileall -q "$APP/app" >/dev/null 2>&1 || true
+
+  command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications || true
+  command -v update-mime-database >/dev/null 2>&1 && update-mime-database /usr/share/mime || true
+  command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q -f -t /usr/share/icons/hicolor || true
+fi
+
+exit 0

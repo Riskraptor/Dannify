@@ -6,13 +6,13 @@ from __future__ import annotations
 import ast
 import os
 from pathlib import Path
+from tests._shell_source import windows_tree
 
 BACKEND = Path(__file__).resolve().parents[1]
 
 
 def _load(*names: str, **extra) -> dict:
-    source = (BACKEND / 'desktop.py').read_text(encoding='utf-8')
-    tree = ast.parse(source)
+    tree = windows_tree()
     wanted = [
         node for node in tree.body
         if (isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in names)

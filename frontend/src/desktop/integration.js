@@ -7,9 +7,10 @@ import { useProgressTracker } from '/src/model/download'
 import { toast } from '/src/model/toast'
 import { t, currentLocale } from '/src/i18n'
 
-// Wires app state into Windows: taskbar progress while downloading, the
-// play/pause/next buttons under the taskbar thumbnail, and commands coming
-// back from those buttons.
+// Wires app state into the desktop: taskbar (or dock) progress while
+// downloading, the play/pause/next buttons under the Windows taskbar
+// thumbnail, the tray, the Linux media panel (MPRIS), and commands coming
+// back from all of them.
 
 let installed = false
 
@@ -19,8 +20,17 @@ export function installDesktopIntegration() {
   const player = usePlayer()
   const stats = useDownloadStats()
 
-  // Commands from the taskbar thumbnail toolbar (Python → JS).
-  window.__dannifyMedia = (cmd) => player.mediaCommand(String(cmd || ''))
+  // Commands from the taskbar buttons, the tray, media keys (Python → JS).
+  // "seek:<seconds>" comes from a media panel's timeline.
+  window.__dannifyMedia = (cmd) => {
+    const text = String(cmd || '')
+    if (text.startsWith('seek:')) {
+      const at = Number(text.slice(5))
+      if (Number.isFinite(at) && at >= 0) player.seek(at)
+      return
+    }
+    player.mediaCommand(text)
+  }
 
   // Downloads finishing cleanly is the expected outcome and the indicator
   // already shows it, so only a failure is worth interrupting for: that is
@@ -91,6 +101,8 @@ export function installDesktopIntegration() {
       hasTrack: !!player.currentTrack.value,
       title: player.currentTrack.value ? player.currentTrack.value.title : '',
       artist: player.currentTrack.value ? player.currentTrack.value.artist : '',
+      // For media panels (MPRIS): the rest of what they show.
+      ...mediaDetails(player),
       // Tooltips for the taskbar thumbnail buttons, in the UI language.
       labels: {
         prev: t('player.previous'),
@@ -103,9 +115,21 @@ export function installDesktopIntegration() {
       const key = JSON.stringify(s)
       if (key === lastPlayback) return
       lastPlayback = key
-      desktop.setPlaybackState(s)
+      // Where the song is now: read here, not watched, or every frame of
+      // playback would send the whole state again.
+      desktop.setPlaybackState({ ...s, position: Math.floor(Number(player.currentTime.value) || 0) })
     },
     { immediate: true }
+  )
+
+  // A seek inside the app moves the media panel's timeline too.
+  watch(
+    () => Math.round(player.currentTime.value / 15),
+    () => {
+      if (!player.currentTrack.value) return
+      const s = JSON.parse(lastPlayback || '{}')
+      desktop.setPlaybackState({ ...s, position: Math.floor(player.currentTime.value || 0) })
+    }
   )
 
   // Tray menu strings, in the UI language. Re-sent when the language
@@ -125,4 +149,16 @@ export function installDesktopIntegration() {
       }),
     { immediate: true }
   )
+}
+
+function mediaDetails(player) {
+  const track = player.currentTrack.value
+  if (!track) return { album: '', cover: '', duration: 0, key: '' }
+  const song = track._song || {}
+  return {
+    album: track.album || song.album_name || '',
+    cover: track.cover || song.cover_url || '',
+    duration: Math.floor(Number(player.duration.value) || Number(track.duration) || 0),
+    key: String(track.id || track.src || song.song_id || ''),
+  }
 }

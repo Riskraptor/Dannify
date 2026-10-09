@@ -1,0 +1,19 @@
+#!/bin/sh
+# After removal: the environment postinst made is not in the package's file
+# list, so dpkg would leave it behind. Users' own music and settings in their
+# home folders are theirs and stay.
+set -e
+
+APP=/opt/dannify
+
+case "$1" in
+  remove|purge)
+    rm -rf "$APP/venv" "$APP/venv.new"
+    find "$APP" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
+    rmdir --ignore-fail-on-non-empty "$APP" 2>/dev/null || true
+    command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications || true
+    command -v update-mime-database >/dev/null 2>&1 && update-mime-database /usr/share/mime || true
+    ;;
+esac
+
+exit 0
