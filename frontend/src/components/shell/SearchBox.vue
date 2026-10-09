@@ -15,7 +15,7 @@
       @keydown="onKey"
     />
     <span v-if="!query && !focused" class="sbx-hint">
-      <kbd class="kbd">Ctrl</kbd><kbd class="kbd">K</kbd>
+      <kbd class="kbd">{{ platform === 'macos' ? '⌘' : 'Ctrl' }}</kbd><kbd class="kbd">K</kbd>
     </span>
     <span v-else-if="searching" class="sbx-busy"><span class="spinner h-3.5 w-3.5" /></span>
     <button
@@ -70,6 +70,7 @@ import { useRecent } from '/src/model/recent'
 import { useSearchManager } from '/src/model/search'
 import { useSearchState } from '/src/model/explore'
 import { useI18n } from '/src/i18n'
+import { platform } from '/src/desktop/bridge'
 
 const { t } = useI18n()
 const router = useRouter()
