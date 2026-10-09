@@ -436,3 +436,75 @@ def test_the_app_delegate_answers_appkit_in_its_own_types():
     assert kind.application_openFiles_.signature[:1] == b'v'
     assert delegate.applicationShouldHandleReopen_hasVisibleWindows_(None, False) and api.shown == 1
     assert delegate.applicationDockMenu_(None).numberOfItems() > 0
+
+
+@MAC
+def test_the_bridge_drives_a_real_window():
+    import WebKit
+
+    from dannify.shell.macos.api import MacApi
+    from dannify.shell.macos.cocoa import AppKit
+
+    AppKit.NSApplication.sharedApplication()
+    style = (AppKit.NSWindowStyleMaskTitled | AppKit.NSWindowStyleMaskClosable
+             | AppKit.NSWindowStyleMaskMiniaturizable | AppKit.NSWindowStyleMaskResizable
+             | AppKit.NSWindowStyleMaskFullSizeContentView)
+    rect = AppKit.NSMakeRect(80, 80, 900, 640)
+    ns = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+        rect, style, AppKit.NSBackingStoreBuffered, False)
+    ns.setReleasedWhenClosed_(False)
+    ns.setTitlebarAppearsTransparent_(True)
+    view = WebKit.WKWebView.alloc().initWithFrame_configuration_(
+        rect, WebKit.WKWebViewConfiguration.alloc().init())
+    ns.setContentView_(view)
+    api = MacApi({}, 0, 'key', None)
+    api._ns, api._view = ns, view
+    try:
+        state = api.win_state()
+        assert state['platform'] == 'macos' and state['nativeFrame'] is True
+
+        # The buttons, centred in the page's 44-point bar.
+        api._place_buttons()
+        close = ns.standardWindowButton_(0)
+        assert close.frame().origin.x == 14
+        assert close.superview().superview().frame().size.height == 44
+
+        # Zoom: the page's own, and a minimum window that grows with it.
+        api.win_set_zoom(1.2)
+        assert abs(view.pageZoom() - 1.2) < 1e-6
+        assert ns.minSize().width >= core.MIN_W * 1.2 - 0.5
+        assert ns.frame().size.width >= core.MIN_W * 1.2 - 0.5
+
+        api.win_set_on_top(True)
+        assert ns.level() == AppKit.NSFloatingWindowLevel
+        api.win_set_on_top(False)
+        assert ns.level() == AppKit.NSNormalWindowLevel
+
+        # The compact player: small, floating, without the buttons, growing upwards.
+        before = ns.frame()
+        assert api.win_set_mini(True)['mini'] is True
+        small = ns.frame()
+        assert (small.size.width, small.size.height) == (core.MINI_W, core.MINI_H)
+        assert ns.level() == AppKit.NSFloatingWindowLevel and close.isHidden()
+        api.win_set_mini_size(300)
+        grown = ns.frame()
+        assert grown.size.height == 300 and grown.origin.y == small.origin.y
+        assert api.win_set_mini(False)['mini'] is False
+        back = ns.frame()
+        assert (back.size.width, back.size.height) == (before.size.width, before.size.height)
+        assert not close.isHidden() and ns.level() == AppKit.NSNormalWindowLevel
+
+        # The rest of what the page calls while it plays.
+        api.taskbar_progress(0.5)
+        api.taskbar_progress(0, 'none')
+        api.taskbar_playback({'playing': True, 'hasTrack': True, 'title': 'Inauma', 'artist': 'Bien',
+                              'album': 'Bien', 'duration': 200, 'position': 5, 'key': 'k'})
+        assert api.tray_set({'closeToTray': True})['closeToTray'] is True
+        api.tray_labels({'play': 'Lire'})
+        api.app_set_theme('light')
+        assert isinstance(api.clipboard_read(), str)
+        assert api.shell_open_external('ftp://example.com/') is False
+        api.win_start_drag()  # no button held: nothing to drag
+    finally:
+        api._shutdown()
+        ns.close()
