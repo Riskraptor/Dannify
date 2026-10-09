@@ -48,7 +48,7 @@ SOFTWARE.
 | websockets | BSD-3-Clause |
 | yt-dlp | Unlicense (public domain) |
 | yt-dlp challenge solver scripts (yt-dlp-ejs) | Unlicense, with the parts it bundles under MIT and ISC |
-| QuickJS-ng (`dnfjs.exe`), the JavaScript engine those scripts run in | MIT |
+| QuickJS-ng (`dnfjs.exe`, `dnfjs` on macOS), the JavaScript engine those scripts run in | MIT |
 | ytmusicapi | MIT |
 | requests | Apache-2.0 |
 | urllib3 | MIT |
@@ -58,6 +58,7 @@ SOFTWARE.
 | Loguru | MIT |
 | tinytag | MIT |
 | Python.NET (pythonnet), clr-loader | MIT |
+| PyObjC (macOS only) | MIT |
 | Microsoft Edge WebView2 SDK libraries (`Microsoft.Web.WebView2.Core.dll`, `Microsoft.Web.WebView2.WinForms.dll`, `WebView2Loader.dll`) | Microsoft WebView2 SDK licence, which allows them to ship with apps |
 | Vue, Vue Router | MIT |
 | axios, uuid | MIT |
@@ -66,16 +67,17 @@ SOFTWARE.
 
 ### FFmpeg and LAME
 
-Dannify's media tool (`dnfmedia.exe`) is FFmpeg 7.1.2 with the LAME MP3
-encoder, built as a separate program that Dannify runs. FFmpeg is licensed
+Dannify's media tool (`dnfmedia.exe`, `dnfmedia` on macOS) is FFmpeg 7.1.2
+with the LAME MP3 encoder, built as a separate program that Dannify runs. FFmpeg is licensed
 under the GNU Lesser General Public License, version 2.1 or later, and LAME
 under the GNU Library General Public License, version 2 or later; it is built
 without any of FFmpeg's GPL-only or non-free parts. Their source code is
 available from <https://ffmpeg.org> and <https://lame.sourceforge.io>, and the
 exact configuration used to build the media tool is available from the author
-on request.
+on request. On macOS it uses the system's own Secure Transport for https.
 
 ### Not shipped
 
 The Microsoft Edge WebView2 Runtime, which draws Dannify's window, is part of
-Windows and is not distributed with Dannify.
+Windows and is not distributed with Dannify. On macOS the window is drawn by
+the system's own WebKit, which is not distributed with Dannify either.
