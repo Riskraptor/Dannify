@@ -47,3 +47,6 @@ packaging/ffmpeg/
 
 # Local working backups, not history.
 backups/
+
+# Downloaded and checked at build time (packaging/linux/build-deb.sh)
+packaging/linux/jsruntime/

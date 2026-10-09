@@ -1,7 +1,8 @@
 # Dannify
 
-A music player for Windows. Search for anything, play it straight away, and
-keep the tracks you want as real files with artwork, tags and synced lyrics.
+A music player for Windows, Linux and macOS. Search for anything, play it
+straight away, and keep the tracks you want as real files with artwork, tags
+and synced lyrics.
 
 I built it because every other option was either a browser tab pretending to
 be an app, or a downloader with no player attached. This is one program: a
@@ -38,8 +39,18 @@ quitting.
 
 ## Install
 
-Installers are on the [downloads
-page](https://github.com/DANIELMWENDWA9451/Dannify/releases).
+Everything is on the [downloads
+page](https://github.com/DANIELMWENDWA9451/Dannify/releases):
+
+- **Windows 10 and 11:** `Dannify-Setup-<version>.exe`.
+- **Ubuntu, Debian, Mint and the like:** `linux-dannify_<version>_amd64.deb`,
+  installed with `sudo apt install ./linux-dannify_<version>_amd64.deb`
+  (see [packaging/linux](packaging/linux/README-UBUNTU.md)).
+- **macOS:** `macos-Dannify-<version>-arm64.dmg` for Apple silicon, `-x64` for
+  Intel Macs. The app is not notarized by Apple, so the first time, right-click
+  it and choose Open (see [packaging/macos](packaging/macos/README.md)).
+
+Every copy updates itself from signed releases.
 
 ## Building it
 
@@ -135,8 +146,12 @@ everywhere else. Bump it, build, then publish:
 pwsh packaging\publish.ps1 -Notes "what changed"
 ```
 
-That uploads the installer and the update package as a new release on this
-repository; installed copies update from its latest release.
+Pushing the tag starts the release workflow, which builds the Linux `.deb`
+and the macOS apps on GitHub's machines. `publish.ps1` waits for it, downloads
+those builds, signs them here with the offline release key (it never goes
+near GitHub), checks every file against the key installed copies trust, and
+uploads everything as one release. Each platform takes only its own files
+from it; installed copies update from the latest release.
 
 ### Signed releases
 
@@ -144,9 +159,12 @@ From 4.7.0 every installed copy refuses an update that is not signed with
 Dannify's release key. A SHA-256 only shows a download was not damaged; it
 comes from the same release as the files, so it cannot show who made them.
 The signature (Ed25519, `Backend/dannify/signing.py`) covers the package list,
-which names every file's hash, and the installer. `build.ps1` signs both and
-then checks them against the public key in `updates.py` before anything can
-be published. `publish.ps1` checks again and uploads the `.sig` files.
+which names every file's hash, the installer, the Linux package and the macOS
+app. What is signed names the kind of file, its platform and processor, so a
+signature can never be passed off for another platform's file.
+`build.ps1` signs the Windows files and `publish.ps1` the others; both check
+them against the public key in `updates.py` before anything can be
+published.
 
 ```powershell
 python packaging\release_key.py new      # once, ever: prints the PUBLIC_KEY line
@@ -154,8 +172,9 @@ python packaging\release_key.py public   # what updates.py must carry
 ```
 
 The private key lives in `%USERPROFILE%\.dannify\release-signing.key`, or in
-`DANNIFY_RELEASE_KEY` for a CI secret, and never in the repository. **Back it
-up offline.** If you lose it, installed copies can only be moved to a new key
+`DANNIFY_RELEASE_KEY`, on the release machine only: never in the repository and
+never in a CI secret. **Back it up offline.** If you lose it, installed copies
+can only be moved to a new key
 by installing by hand. If it leaks, anyone can sign an update.
 
 Windows code signing is separate and optional: set `DANNIFY_SIGN_THUMBPRINT`

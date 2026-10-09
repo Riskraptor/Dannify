@@ -13,7 +13,7 @@
                                                    in updates.py (no private key)
 
 The private key is read from the DANNIFY_RELEASE_KEY environment variable
-(64 hex characters; that is how a CI secret hands it over) or else from
+(64 hex characters) or else from
 %USERPROFILE%\\.dannify\\release-signing.key. It is never written inside the
 repository. Lose it and installed copies can no longer be updated except by
 installing by hand; leak it and anyone can sign an update. Keep a backup
