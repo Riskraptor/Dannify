@@ -43,6 +43,8 @@ jobs:
         run: |
           dpkg-deb --info "out/linux-dannify_${{ steps.version.outputs.version }}_amd64.deb"
           dpkg-deb --contents "out/linux-dannify_${{ steps.version.outputs.version }}_amd64.deb" | grep -q 'opt/dannify/jsruntime/dnfjs'
+      - name: Install, start, quit and remove it
+        run: sudo bash packaging/linux/smoke_test.sh "out/linux-dannify_${{ steps.version.outputs.version }}_amd64.deb"
       - uses: actions/upload-artifact@v4
         with:
           name: linux-dannify_${{ steps.version.outputs.version }}_amd64.deb
