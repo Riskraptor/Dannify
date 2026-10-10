@@ -73,13 +73,19 @@ def _require(token: Optional[str]) -> None:
 
 
 def _folder(rid: str) -> Path:
-    if not _ID.match(rid):
-        raise HTTPException(status_code=404, detail='no such report')
+    name = _rid_dirname(rid)
     for day in sorted(DATA.glob('*'), reverse=True):
-        candidate = day / rid
+        candidate = day / name
         if candidate.is_dir():
             return candidate
     raise HTTPException(status_code=404, detail='no such report')
+
+
+def _rid_dirname(rid: str) -> str:
+    if not _ID.match(rid):
+        raise HTTPException(status_code=404, detail='no such report')
+    # Canonical numeric form for storage paths: no path separators, no dots.
+    return f'{int(rid, 36):025d}'
 
 
 def _notify(meta: dict[str, Any]) -> None:
@@ -133,11 +139,12 @@ async def receive(
         'diagnostics': False,
     }
     day = DATA / time.strftime('%Y-%m-%d', time.gmtime())
-    folder = day / rid
-    if folder.exists():
+    folder = day / _rid_dirname(rid)
+    try:
+        folder.mkdir(parents=True)
+    except FileExistsError:
         # The app retries a report it could not confirm; the first one counts.
         return {'id': rid, 'status': 'already received'}
-    folder.mkdir(parents=True)
     if diagnostics is not None:
         data = await diagnostics.read(MAX_ZIP + 1)
         if len(data) > MAX_ZIP:

@@ -2,6 +2,7 @@
 
 import io
 import sys
+import time
 import zipfile
 from pathlib import Path
 
@@ -57,3 +58,20 @@ def test_one_address_cannot_flood_it(client, monkeypatch):
     codes = [client.post('/reports', data={'id': f'FLOOD00{i}', 'description': 'long enough text'}).status_code
              for i in range(5)]
     assert codes[:3] == [201, 201, 201] and codes[3:] == [429, 429]
+
+
+def test_duplicate_report_race_returns_already_received(client, monkeypatch):
+    import server
+
+    real_mkdir = Path.mkdir
+    today = time.strftime('%Y-%m-%d', time.gmtime())
+    race_name = server._rid_dirname('RACE1234')
+
+    def race(self, *args, **kwargs):  # noqa: ANN001
+        if self.name == race_name and self.parent.name == today:
+            raise FileExistsError
+        return real_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(server.Path, 'mkdir', race)
+    r = client.post('/reports', data={'id': 'RACE1234', 'description': 'long enough text'})
+    assert r.status_code == 201 and r.json()['status'] == 'already received'

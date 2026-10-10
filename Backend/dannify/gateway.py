@@ -62,6 +62,7 @@ def install(app) -> None:  # noqa: ANN001
     import time as _time
 
     _COOKIE = 'dnf_session'
+    _URL_KEY_PATHS = {'/', '/index.html'}
     # Nothing is reachable without the session key, including the readiness
     # probe: an open endpoint is an open door, and it told anyone who knocked
     # what was behind it. The shell sends the key like any other caller.
@@ -78,10 +79,11 @@ def install(app) -> None:  # noqa: ANN001
             """The key this request carries, and whether it came in the URL."""
             from urllib.parse import parse_qs
 
-            query = parse_qs(scope.get('query_string', b'').decode('latin-1'))
-            in_url = (query.get('k') or [''])[0]
-            if in_url:
-                return in_url, True
+            if scope.get('path', '') in _URL_KEY_PATHS:
+                query = parse_qs(scope.get('query_string', b'').decode('latin-1'))
+                in_url = (query.get('k') or [''])[0]
+                if in_url:
+                    return in_url, True
             for name, value in scope.get('headers') or ():
                 if name == b'x-dannify-key':
                     return value.decode('latin-1'), False
@@ -128,10 +130,14 @@ def install(app) -> None:  # noqa: ANN001
                     if from_url:
                         # Hand the window a cookie so every later asset,
                         # audio range request and websocket carries the key.
+                        secure = '; Secure' if _is_https(scope) else ''
                         message.setdefault('headers', [])
                         message['headers'].append((
                             b'set-cookie',
-                            f'{_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax'.encode(),
+                            (
+                                f'{_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; '
+                                f'Max-Age=43200{secure}'
+                            ).encode(),
                         ))
                     if not quiet:
                         _log_response(scope, message['status'], started)
@@ -148,6 +154,14 @@ def install(app) -> None:  # noqa: ANN001
                 else:
                     host = host.rsplit(':', 1)[0] if host.count(':') == 1 else host
                 return host in ('127.0.0.1', 'localhost', '::1')
+        return False
+
+    def _is_https(scope) -> bool:
+        if scope.get('scheme') == 'https':
+            return True
+        for name, value in scope.get('headers') or ():
+            if name == b'x-forwarded-proto':
+                return value.decode('latin-1').split(',', 1)[0].strip().lower() == 'https'
         return False
 
     async def _refuse(scope, send) -> None:
