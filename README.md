@@ -54,7 +54,7 @@ Every copy updates itself from signed releases.
 
 ## Building it
 
-You need Python 3.14, Node 20 or newer, and the .NET SDK (8 or newer) for
+You need Python 3.14, Node 26 or newer, and the .NET SDK (8 or newer) for
 the installer.
 
 ```powershell

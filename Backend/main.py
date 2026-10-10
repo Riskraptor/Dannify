@@ -647,14 +647,15 @@ def main() -> None:
         lan = _local_ip()
         logger.log(
             'SUCCESS',
-            'Open on this device:  http://localhost:{}/?k={}',
-            args.port, key,
+            'Open on this device:  http://localhost:{}',
+            args.port,
         )
         logger.log(
             'SUCCESS',
-            'Open on your network: http://{}:{}/?k={}  (phone, TV, other PCs)',
-            lan, args.port, key,
+            'Open on your network: http://{}:{}  (phone, TV, other PCs)',
+            lan, args.port,
         )
+        print(f'Dannify access key (share only on your LAN): {key}', file=sys.stderr)
     else:
         logger.info(
             'Listening on http://{}:{}', args.host, args.port
