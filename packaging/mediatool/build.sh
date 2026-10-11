@@ -14,6 +14,7 @@
 set -euo pipefail
 
 FFMPEG_VERSION="${FFMPEG_VERSION:-7.1.2}"
+FFMPEG_SHA256="089bc60fb59d6aecc5d994ff530fd0dcb3ee39aa55867849a2bbc4e555f9c304"
 LAME_VERSION="3.100"
 HOST=x86_64-w64-mingw32
 JOBS="$(nproc)"
@@ -41,7 +42,7 @@ cd /work
 
 echo "== FFmpeg ${FFMPEG_VERSION}"
 wget -q "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"
-wget -q "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz.asc" || true
+echo "${FFMPEG_SHA256}  ffmpeg-${FFMPEG_VERSION}.tar.xz" | sha256sum -c -
 tar xf "ffmpeg-${FFMPEG_VERSION}.tar.xz"
 cd "ffmpeg-${FFMPEG_VERSION}"
 
