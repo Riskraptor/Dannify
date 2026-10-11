@@ -38,7 +38,7 @@ param(
     [switch]$DryRun,
     # With -DryRun: take the builds from this workflow run rather than the
     # tag's own, to try the whole thing out on a branch.
-    [string]$FromRun = ''
+    [Alias('FromRun')][string]$Run = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -99,12 +99,12 @@ if ($Platforms -contains 'macos') {
         $wanted += "macos-Dannify-$version-$arch.zip", "macos-Dannify-$version-$arch.dmg"
     }
 }
-if ($FromRun -and -not $DryRun) { throw '-FromRun is for -DryRun only: a release carries the builds of its own tag' }
+if ($Run -and -not $DryRun) { throw '-Run is for -DryRun only: a release carries the builds of its own tag' }
 if ($wanted) {
     $run = $null
-    if ($FromRun) {
-        $run = & $gh run view $FromRun --repo $Repo --json databaseId,status,conclusion | ConvertFrom-Json
-        if (-not $run -or $run.status -ne 'completed') { throw "workflow run $FromRun has not finished" }
+    if ($Run) {
+        $run = & $gh run view $Run --repo $Repo --json databaseId,status,conclusion | ConvertFrom-Json
+        if (-not $run -or $run.status -ne 'completed') { throw "workflow run $Run has not finished" }
     } else {
         $sha = (& git -c safe.directory=* -C $root rev-list -n 1 $tag).Trim()
         if (-not $sha) { throw "no tag $tag here; push it first" }
