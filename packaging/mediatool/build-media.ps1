@@ -3,7 +3,10 @@
 # packaging\build.ps1 bundles.
 #
 #   pwsh -File F:\Projects\Dannify\packaging\mediatool\build-media.ps1
-param([string]$FfmpegVersion = '7.1.2')
+param(
+    [string]$FfmpegVersion = '7.1.2',
+    [string]$FfmpegSha256 = '089bc60fb59d6aecc5d994ff530fd0dcb3ee39aa55867849a2bbc4e555f9c304'
+)
 $ErrorActionPreference = 'Stop'
 
 $here = $PSScriptRoot
@@ -17,6 +20,7 @@ $name = 'dannify-mediatool-build'
 docker rm -f $name 2>$null | Out-Null
 docker run -d --name $name `
     -e FFMPEG_VERSION=$FfmpegVersion `
+    -e FFMPEG_SHA256=$FfmpegSha256 `
     -v "${here}:/src:ro" -v "${out}:/out" `
     ubuntu:24.04 bash /src/build.sh | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "could not start the build container ($LASTEXITCODE)" }

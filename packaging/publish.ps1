@@ -101,38 +101,39 @@ if ($Platforms -contains 'macos') {
 }
 if ($Run -and -not $DryRun) { throw '-Run is for -DryRun only: a release carries the builds of its own tag' }
 if ($wanted) {
-    $run = $null
-    if ($Run) {
-        $run = & $gh run view $Run --repo $Repo --json databaseId,status,conclusion | ConvertFrom-Json
-        if (-not $run -or $run.status -ne 'completed') { throw "workflow run $Run has not finished" }
+    $requestedRun = $Run
+    $workflowRun = $null
+    if ($requestedRun) {
+        $workflowRun = & $gh run view $requestedRun --repo $Repo --json databaseId,status,conclusion | ConvertFrom-Json
+        if (-not $workflowRun -or $workflowRun.status -ne 'completed') { throw "workflow run $requestedRun has not finished" }
     } else {
         $sha = (& git -c safe.directory=* -C $root rev-list -n 1 $tag).Trim()
         if (-not $sha) { throw "no tag $tag here; push it first" }
         Write-Host "Waiting for the release workflow on $tag ($($sha.Substring(0, 9)))" -ForegroundColor Cyan
         $deadline = (Get-Date).AddMinutes($WaitMinutes)
     }
-    while (-not $run) {
+    while (-not $workflowRun) {
         $runs = & $gh run list --repo $Repo --workflow release.yml --limit 30 --json databaseId,headSha,status,conclusion,event | ConvertFrom-Json
-        $run = $runs | Where-Object { $_.headSha -eq $sha -and $_.event -in @('push', 'workflow_dispatch') } | Select-Object -First 1
-        if ($run -and $run.status -ne 'completed') {
+        $workflowRun = $runs | Where-Object { $_.headSha -eq $sha -and $_.event -in @('push', 'workflow_dispatch') } | Select-Object -First 1
+        if ($workflowRun -and $workflowRun.status -ne 'completed') {
             if ((Get-Date) -gt $deadline) { throw 'the release workflow did not finish in time' }
-            & $gh run watch $run.databaseId --repo $Repo --exit-status --interval 30 | Out-Null
-            $run = $null
+            & $gh run watch $workflowRun.databaseId --repo $Repo --exit-status --interval 30 | Out-Null
+            $workflowRun = $null
             continue
         }
-        if (-not $run) {
+        if (-not $workflowRun) {
             if ((Get-Date) -gt $deadline) { throw "no release workflow run for $tag" }
             Start-Sleep -Seconds 20
         }
     }
-    if ($run.conclusion -ne 'success') { throw "the release workflow for $tag ended: $($run.conclusion)" }
+    if ($workflowRun.conclusion -ne 'success') { throw "the release workflow for $tag ended: $($workflowRun.conclusion)" }
 
     $ci = Join-Path $work "ci-$version"
     if (Test-Path $ci) { Remove-Item $ci -Recurse -Force }
     # Only what this release carries: the run also keeps screenshots and
     # parts of its own, and every megabyte comes down this machine's line.
     $names = $wanted | ForEach-Object { '--name', $_ }
-    & $gh run download $run.databaseId --repo $Repo --dir $ci @names
+    & $gh run download $workflowRun.databaseId --repo $Repo --dir $ci @names
     if ($LASTEXITCODE -ne 0) { throw 'could not download the workflow builds' }
     foreach ($name in $wanted) {
         $found = Get-ChildItem -Path $ci -Recurse -File -Filter $name | Select-Object -First 1
