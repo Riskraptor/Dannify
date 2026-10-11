@@ -3,7 +3,7 @@
     python packaging/release_key.py new            make the key (once, ever)
     python packaging/release_key.py public         print the public half
     python packaging/release_key.py sign <kind> <version> <file>
-                                                   write <file>.sig
+                                                   write <file>.dsig
     python packaging/release_key.py verify <kind> <version> <file>
     python packaging/release_key.py sign-release <file>...
                                                    sign each, the kind and version
@@ -96,7 +96,7 @@ def sign_file(kind: str, version: str, path: Path, secret: bytes) -> Path:
     # written: a signature that does not verify must never be published.
     if not signing.verify(signing.public_key(secret), signing.statement(kind, version, digest), signature):
         raise SystemExit('the signature did not verify; nothing written')
-    out = path.with_name(path.name + '.sig')
+    out = path.with_name(path.name + signing.SIGNATURE_SUFFIX)
     out.write_text(signature.hex() + '\n', encoding='ascii')
     return out
 
@@ -132,7 +132,7 @@ def main(argv: list[str]) -> int:
         for name in argv[1:]:
             path = Path(name)
             kind, version = _described(path)
-            sig = path.with_name(path.name + '.sig')
+            sig = path.with_name(path.name + signing.SIGNATURE_SUFFIX)
             ok = sig.is_file() and signing.verify_release(
                 public, kind, version, signing.sha256_file(path), sig.read_text(encoding='ascii')
             )
@@ -146,7 +146,7 @@ def main(argv: list[str]) -> int:
         if command == 'sign':
             print(f'  signed {path.name} -> {sign_file(kind, version, path, load_secret()).name}')
             return 0
-        sig = path.with_name(path.name + '.sig')
+        sig = path.with_name(path.name + signing.SIGNATURE_SUFFIX)
         public = os.getenv('DANNIFY_RELEASE_PUBLIC', '').strip() or signing.public_key(load_secret()).hex()
         ok = sig.is_file() and signing.verify_release(
             public, kind, version, signing.sha256_file(path), sig.read_text(encoding='ascii')

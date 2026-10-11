@@ -361,10 +361,10 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
                 'package_url': _asset(assets, 'package-', '.zip') if own is None else '',
                 # The signatures that go with them (see signing.py).
                 'package_signature_url': (
-                    _asset(assets, 'package-', '.json.sig') if own is None else ''
+                    _asset(assets, 'package-', '.json' + signing.SIGNATURE_SUFFIX) if own is None else ''
                 ),
                 'installer_signature_url': (
-                    _asset(assets, installer_name + '.sig', '') if installer_name else ''
+                    _asset(assets, installer_name + signing.SIGNATURE_SUFFIX, '') if installer_name else ''
                 ),
             }
         )

@@ -71,11 +71,16 @@ That runs the backend and interface tests, then leaves you
 `Backend\dist\Dannify\`, the installer `packaging\out\Dannify-Setup-<version>.exe`,
 and the update package (`package-<version>.json` and `.zip`) beside it, all
 signed (see [Signed releases](#signed-releases)). Building the installer needs
-the release key; `-SkipInstaller` builds the app folder without it.
+the release key; `-SkipInstaller` builds the app folder without it, and
+`-Unsigned` builds everything and leaves the signing to `publish.ps1`, which
+is how the release workflow builds on GitHub's Windows machine.
 
 Two binaries are not in the repo because they are redistributables, not
 source: the media encoder at `packaging\media\dnfmedia.exe` and the JS engine
-at `packaging\jsruntime\dnfjs.exe`. Notes in `packaging\config\README.md`.
+at `packaging\jsruntime\dnfjs.exe`. The release workflow makes both: the
+first is cross-compiled by `packaging/mediatool/build.sh`, the second is
+QuickJS-ng's own Windows build, checked against its published checksum.
+Notes in `packaging\config\README.md`.
 
 ## Working on it
 
@@ -140,18 +145,22 @@ new version, and `migrate` does it from a 3.x folder.
 ## Releases
 
 The version lives in `Backend/dannify/__init__.py`; the build stamps it
-everywhere else. Bump it, build, then publish:
+everywhere else. A release is cut from any machine with PowerShell, the
+project's Python environment (`Backend/venv`) and the release key; today that
+is a Linux one. Bump the version, merge, then tag and publish:
 
-```powershell
-pwsh packaging\publish.ps1 -Notes "what changed"
+```bash
+git tag v<version> && git push origin v<version>
+pwsh packaging/publish.ps1 -Notes "what changed"
 ```
 
-Pushing the tag starts the release workflow, which builds the Linux `.deb`
-and the macOS apps on GitHub's machines. `publish.ps1` waits for it, downloads
-those builds, signs them here with the offline release key (it never goes
-near GitHub), checks every file against the key installed copies trust, and
-uploads everything as one release. Each platform takes only its own files
-from it; installed copies update from the latest release.
+Pushing the tag starts the release workflow, which builds every platform on
+GitHub's machines: the Windows setup and update package, the Linux `.deb` and
+the macOS apps. `publish.ps1` waits for it, downloads those builds, signs
+them here with the offline release key (it never goes near GitHub), checks
+every file against the key installed copies trust, and uploads everything as
+one release. Each platform takes only its own files from it; installed copies
+update from the latest release. `-DryRun` does all of it but the upload.
 
 ### Signed releases
 
@@ -162,9 +171,9 @@ The signature (Ed25519, `Backend/dannify/signing.py`) covers the package list,
 which names every file's hash, the installer, the Linux package and the macOS
 app. What is signed names the kind of file, its platform and processor, so a
 signature can never be passed off for another platform's file.
-`build.ps1` signs the Windows files and `publish.ps1` the others; both check
-them against the public key in `updates.py` before anything can be
-published.
+`publish.ps1` signs every file (`build.ps1` signs the Windows ones itself
+when it is run on a desk without `-Unsigned`); both check them against the
+public key in `updates.py` before anything can be published.
 
 ```powershell
 python packaging\release_key.py new      # once, ever: prints the PUBLIC_KEY line

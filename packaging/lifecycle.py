@@ -425,7 +425,7 @@ def serve(version, notes='Faster starts.\nA new look for the queue.', folder=Non
             if '/dl/' in self.path:
                 return self._file()
             base = f'http://127.0.0.1:{self.server.server_port}/dl/'
-            names = (f'package-{version}.json', f'package-{version}.json.sig', f'package-{version}.zip')
+            names = (f'package-{version}.json', f'package-{version}.json.dsig', f'package-{version}.zip')
             assets = [{'name': n, 'browser_download_url': base + n, 'size': (source / n).stat().st_size}
                       for n in names if (source / n).is_file()]
             body = json.dumps({'tag_name': f'v{version}', 'name': f'Dannify {version}', 'body': notes,

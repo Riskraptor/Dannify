@@ -28,6 +28,14 @@ _SQRT_M1 = pow(2, (_P - 1) // 4, _P)
 
 STATEMENT_HEADER = b'dannify-release-v1'
 
+# What a signature file is called: the signed file's name with this on the
+# end. It was ".sig" while releases were signed with the first key. Copies of
+# 4.7.0 and 4.8.0 trust only that key and look for ".sig": finding none they
+# stop before a byte of the update is fetched, where a signature they cannot
+# check has them download the whole thing, throw it away and try again within
+# the hour. So not ".sig", and nothing beginning with it: they match the start.
+SIGNATURE_SUFFIX = '.dsig'
+
 
 def _sha512_int(*parts: bytes) -> int:
     return int.from_bytes(hashlib.sha512(b''.join(parts)).digest(), 'little')
@@ -175,7 +183,7 @@ def statement(kind: str, version: str, sha256_hex: str) -> bytes:
 
 
 def parse_signature(text: str) -> bytes:
-    """A ``.sig`` file: the 64-byte signature as hex, whitespace ignored."""
+    """A signature file: the 64-byte signature as hex, whitespace ignored."""
 
     cleaned = ''.join(str(text or '').split())
     try:

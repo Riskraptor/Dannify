@@ -1,10 +1,11 @@
-# The Linux and macOS release files: the .deb, and Dannify.app as a .zip (what
-# the app updates itself from) and a .dmg (what people download).
+# Every platform's release files: the Windows setup and the package installed
+# copies update from, the Linux .deb, and Dannify.app as a .zip (what the app
+# updates itself from) and a .dmg (what people download).
 #
 # Nothing here is signed with the release key. That key never leaves the
 # release machine, which downloads these files, signs them and publishes
-# them with the Windows build (packaging/build.ps1, packaging/publish.ps1).
-# The macOS app is signed ad hoc only: there is no Apple Developer ID.
+# them (packaging/publish.ps1). The macOS app is signed ad hoc only: there is
+# no Apple Developer ID.
 name: Release builds
 
 on:
@@ -50,6 +51,106 @@ jobs:
           name: linux-dannify_${{ steps.version.outputs.version }}_amd64.deb
           path: out/linux-dannify_${{ steps.version.outputs.version }}_amd64.deb
           if-no-files-found: error
+
+  # dnfmedia.exe, the media tool the Windows app bundles: FFmpeg for Windows,
+  # cross-compiled in a Linux container exactly as
+  # packaging/mediatool/build-media.ps1 does it on a desk. It takes a while
+  # and only changes with its script.
+  windows-media:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Media tool (cached)
+        id: media
+        uses: actions/cache@v4
+        with:
+          path: packaging/media
+          key: dnfmedia-windows-${{ hashFiles('packaging/mediatool/build.sh') }}
+      - name: Build the media tool
+        if: steps.media.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p packaging/media "$RUNNER_TEMP/media-out"
+          docker run --rm -v "$PWD/packaging/mediatool:/src:ro" -v "$RUNNER_TEMP/media-out:/out" \
+            ubuntu:24.04 bash /src/build.sh
+          cp "$RUNNER_TEMP/media-out/dnfmedia.exe" packaging/media/dnfmedia.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dnfmedia-windows
+          path: packaging/media/dnfmedia.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  windows:
+    needs: windows-media
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: version
+        shell: bash
+        run: echo "version=$(sed -n "s/^__version__ = '\(.*\)'/\1/p" Backend/dannify/__init__.py)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: Backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Python libraries
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r Backend/requirements.txt -r packaging/requirements-windows-build.txt
+      - name: Interface libraries
+        working-directory: frontend
+        run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dnfmedia-windows
+          path: packaging/media
+      # QuickJS-ng's own Windows build (MIT), checked against the checksum
+      # its release publishes. Never committed: see .gitignore.
+      - name: JS engine
+        shell: pwsh
+        run: |
+          $url = 'https://github.com/quickjs-ng/quickjs/releases/download/v0.17.0/qjs-windows-x86_64.exe'
+          $want = '2aeabf0092c3262d6b2609824418f7dd7ed1f1df939f73b2b15645230cac0d77'
+          New-Item -ItemType Directory -Force packaging/jsruntime | Out-Null
+          Invoke-WebRequest $url -OutFile packaging/jsruntime/dnfjs.exe
+          $got = (Get-FileHash packaging/jsruntime/dnfjs.exe -Algorithm SHA256).Hash.ToLower()
+          if ($got -ne $want) { throw "QuickJS does not match its checksum ($got)" }
+      - name: Build Dannify and its installer
+        shell: pwsh
+        run: ./packaging/build.ps1 -SkipTests -Unsigned
+      # The setup as a person gets it: installed, started, quit and removed,
+      # in a sandbox that touches no real install, registry entry or library.
+      # Nobody has a Windows desk to try a build on before it goes out.
+      - name: Install, start and remove it
+        shell: pwsh
+        run: python packaging/lifecycle.py install launch uninstall
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dannify-Setup-${{ steps.version.outputs.version }}.exe
+          path: packaging/out/Dannify-Setup-${{ steps.version.outputs.version }}.exe
+          if-no-files-found: error
+          # Already compressed.
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ steps.version.outputs.version }}.json
+          path: packaging/out/package-${{ steps.version.outputs.version }}.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ steps.version.outputs.version }}.zip
+          path: packaging/out/package-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+          compression-level: 0
 
   macos:
     strategy:

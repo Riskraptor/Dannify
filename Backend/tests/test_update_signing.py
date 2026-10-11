@@ -13,7 +13,8 @@ from tests.test_updates_inplace import NEW, Release, installed  # noqa: F401  (f
 SECRET = bytes.fromhex('4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb')
 PUBLIC = signing.public_key(SECRET).hex()
 OTHER = bytes.fromhex('c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7')
-SIG_URL = 'https://github.com/DANIELMWENDWA9451/Dannify/releases/download/v4.1.0/package-4.1.0.json.sig'
+SIG = signing.SIGNATURE_SUFFIX
+SIG_URL = 'https://github.com/DANIELMWENDWA9451/Dannify/releases/download/v4.1.0/package-4.1.0.json' + SIG
 SETUP_URL = 'https://github.com/o/r/releases/download/v4.1.0/Dannify-Setup-4.1.0.exe'
 
 
@@ -30,7 +31,7 @@ def signed(monkeypatch):
 def _serve(monkeypatch, release: Release, signature: str) -> dict:
     info = release.install(monkeypatch)
     text = json.dumps(release.manifest)
-    monkeypatch.setattr(updates, '_get_text', lambda url: signature if url.endswith('.sig') else text)
+    monkeypatch.setattr(updates, '_get_text', lambda url: signature if url.endswith(SIG) else text)
     info['package_signature_url'] = SIG_URL
     return info
 
@@ -100,7 +101,7 @@ def test_a_signed_installer_is_handed_over(tmp_path, monkeypatch, signed):
     body = b'MZ' + b'x' * 500
     monkeypatch.setattr(updates.urllib.request, 'urlopen', lambda *a, **k: _Reply(body))
     monkeypatch.setattr(updates, '_get_text', lambda url: _sig('installer', '4.1.0', body))
-    got = updates.download(SETUP_URL, tmp_path, None, '4.1.0', SETUP_URL + '.sig')
+    got = updates.download(SETUP_URL, tmp_path, None, '4.1.0', SETUP_URL + SIG)
     assert got.read_bytes() == body
 
 
@@ -109,7 +110,7 @@ def test_a_tampered_installer_is_deleted_not_kept(tmp_path, monkeypatch, signed)
     monkeypatch.setattr(updates.urllib.request, 'urlopen', lambda *a, **k: _Reply(body))
     monkeypatch.setattr(updates, '_get_text', lambda url: _sig('installer', '4.1.0', b'MZ genuine'))
     with pytest.raises(RuntimeError):
-        updates.download(SETUP_URL, tmp_path, None, '4.1.0', SETUP_URL + '.sig')
+        updates.download(SETUP_URL, tmp_path, None, '4.1.0', SETUP_URL + SIG)
     assert list(tmp_path.iterdir()) == []
 
 
@@ -134,14 +135,14 @@ def test_the_shipped_key_is_a_real_key():
 
 def test_check_finds_the_signatures(monkeypatch):
     base = 'https://github.com/o/r/releases/download/v4.1.0/'
-    names = ['Dannify-Setup-4.1.0.exe', 'Dannify-Setup-4.1.0.exe.sig', 'package-4.1.0.json',
-             'package-4.1.0.json.sig', 'package-4.1.0.zip']
+    names = ['Dannify-Setup-4.1.0.exe', 'Dannify-Setup-4.1.0.exe' + SIG, 'package-4.1.0.json',
+             'package-4.1.0.json' + SIG, 'package-4.1.0.zip']
     assets = [{'name': n, 'browser_download_url': base + n, 'size': 1} for n in names]
     monkeypatch.setattr(updates, '_fetch_latest', lambda: {'tag_name': 'v4.1.0', 'assets': assets})
     monkeypatch.setattr(layout, 'skipped_version', lambda: '')
     got = updates.check('4.0.0', force=True)
     assert got['download_url'] == base + 'Dannify-Setup-4.1.0.exe'
-    assert got['installer_signature_url'] == base + 'Dannify-Setup-4.1.0.exe.sig'
+    assert got['installer_signature_url'] == base + 'Dannify-Setup-4.1.0.exe' + SIG
     assert got['package_manifest_url'] == base + 'package-4.1.0.json'
-    assert got['package_signature_url'] == base + 'package-4.1.0.json.sig'
+    assert got['package_signature_url'] == base + 'package-4.1.0.json' + SIG
     assert got['package_url'] == base + 'package-4.1.0.zip'

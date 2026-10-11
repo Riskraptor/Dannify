@@ -1,0 +1,14 @@
+# What the Windows program is built with, on top of Backend/requirements.txt:
+# the versions 4.8.0 was built with, on the desk it came from.
+#
+# pywebview pulls pythonnet in by itself and names no version, so a build
+# takes whatever is newest that day. 3.2 no longer carries the 96 .NET facade
+# files 3.1 puts beside its runtime, and PyInstaller's own files change with
+# every release of it. The release workflow is the only place a Windows build
+# is made now, and nobody has a Windows desk to find out on what a change like
+# that does to a real install. These move when somebody decides they should.
+pyinstaller==6.20.0
+pyinstaller-hooks-contrib==2026.6
+pythonnet==3.1.0
+clr_loader==0.3.1
+cffi==2.0.0

@@ -2,17 +2,23 @@
 #
 #   pwsh packaging\build.ps1              # full build
 #   pwsh packaging\build.ps1 -SkipTests   # skip the test runs
+#   pwsh packaging\build.ps1 -Unsigned    # everything but the release signatures
+#
+# -Unsigned is how the release workflow builds on GitHub's machines: the
+# release key never goes there, so what it makes comes down unsigned and is
+# signed on the release machine by publish.ps1, like the Linux and macOS files.
 #
 # Output:
 #   Backend\dist\Dannify\                    the app folder (installed as <root>\app)
 #   packaging\out\Dannify-Setup-<v>.exe      the installer: our own, see installer\
 #   packaging\out\package-<v>.json/.zip      what installed copies update from
-#   packaging\out\*.sig                      release signatures (release_key.py)
+#   packaging\out\*.dsig                     release signatures (release_key.py)
 
 [CmdletBinding()]
 param(
     [switch]$SkipTests,
-    [switch]$SkipInstaller
+    [switch]$SkipInstaller,
+    [switch]$Unsigned
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,6 +28,8 @@ $backend = Join-Path $root 'Backend'
 $installer = Join-Path $root 'installer'
 $out = Join-Path $PSScriptRoot 'out'
 $python = Join-Path $backend 'venv\Scripts\python.exe'
+# No environment of its own on a build machine: the Python that was set up.
+if (-not (Test-Path $python)) { $python = (Get-Command python).Source }
 
 # One source of truth for the version: the package itself.
 $version = (Select-String -Path (Join-Path $backend 'dannify\__init__.py') `
@@ -41,7 +49,7 @@ if (-not (Test-Path $dotnet)) { throw 'the .NET SDK is needed to build the insta
 
 # Without the release key there is no point building: nothing it makes could
 # be installed as an update. Found out now rather than after PyInstaller.
-if (-not $SkipInstaller) {
+if (-not $SkipInstaller -and -not $Unsigned) {
     & $python (Join-Path $PSScriptRoot 'release_key.py') public | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'no release signing key (see packaging\release_key.py)' }
 }
@@ -188,6 +196,12 @@ if ($env:DANNIFY_SIGN_THUMBPRINT) {
     Write-Host "  signed by $($cert.Subject)"
 } else {
     Write-Host "`n  (no DANNIFY_SIGN_THUMBPRINT: the installer is not code-signed; SmartScreen will warn)" -ForegroundColor Yellow
+}
+
+if ($Unsigned) {
+    $file = Get-Item $setup
+    Write-Host ("Installer: {0} ({1:N1} MB), checked, NOT signed for release: publish.ps1 signs it" -f $file.Name, ($file.Length / 1MB)) -ForegroundColor Yellow
+    return
 }
 
 # Dannify's own release signatures: what installed copies check every update
