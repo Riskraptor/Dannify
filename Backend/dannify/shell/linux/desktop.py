@@ -12,9 +12,9 @@ from typing import Callable, Optional
 from loguru import logger
 
 from ..core import HOTKEYS
-from .gtk import Gdk, Gio, GLib, Gtk
+from .gtk import APP_ID, Gdk, Gio, GLib, Gtk
 
-DESKTOP_ID = 'dannify.desktop'
+DESKTOP_ID = f'{APP_ID}.desktop'
 
 
 def _spawn(args: list[str]) -> bool:

@@ -17,7 +17,7 @@ from loguru import logger
 
 from .. import core
 from . import desktop, login, updater
-from .gtk import Gdk, Gtk, find_webview, on_ui
+from .gtk import Gdk, Gtk, WebKit2, find_webview, on_ui
 from .mpris import Mpris
 from .tray import Tray
 
@@ -25,6 +25,9 @@ _EDGES = {
     'n': 'NORTH', 's': 'SOUTH', 'e': 'EAST', 'w': 'WEST',
     'ne': 'NORTH_EAST', 'nw': 'NORTH_WEST', 'se': 'SOUTH_EAST', 'sw': 'SOUTH_WEST',
 }
+
+# A page lost again within this many seconds of being reloaded is not retried.
+_PAGE_RETRY_AFTER = 30.0
 
 
 class LinuxApi:
@@ -54,6 +57,7 @@ class LinuxApi:
         self._staged: Optional[Path] = None
         self._login: Optional[login.LoginWindow] = None
         self._restarting = False
+        self._page_lost_at = float('-inf')
         self._tray = Tray(icon, self._tray_command)
         self._mpris = Mpris(self._media, self.win_show, self.app_quit,
                            os.environ.get('DANNIFY_INSTANCE', ''))
@@ -70,6 +74,9 @@ class LinuxApi:
             self._gtk.set_icon_from_file(str(self._icon))
         except Exception:
             pass
+        if self._view is not None:
+            self._view.connect('decide-policy', self._on_navigation)
+            self._view.connect('web-process-terminated', self._on_page_lost)
         self._gtk.set_size_request(core.MIN_W, core.MIN_H)
         self._gtk.connect('window-state-event', self._on_window_state)
         self._gtk.connect('focus-in-event', lambda *_: self._set_focus(True))
@@ -80,6 +87,50 @@ class LinuxApi:
         if self._global_hotkeys:
             self._hotkeys_taken = self._hotkeys.register()
         self._mpris.start()
+
+    def _on_navigation(self, _view, decision, kind) -> bool:  # noqa: ANN001
+        """GTK thread. Our own interface may start a song without a click.
+
+        WebKit lets a page make sound only once somebody has clicked in it.
+        A song double-clicked in the file manager arrives when nobody has:
+        it loaded and then sat there paused, where on Windows it plays. Only
+        for the interface this app serves, on its own port.
+        """
+
+        try:
+            if kind != WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
+                return False
+            action = decision.get_navigation_action()
+            uri = action.get_request().get_uri() or ''
+            if action.get_frame_name() or not uri.startswith(f'http://127.0.0.1:{self._port}/'):
+                return False
+            decision.use_with_policies(WebKit2.WebsitePolicies(autoplay=WebKit2.AutoplayPolicy.ALLOW))
+            return True
+        except Exception:
+            logger.opt(exception=True).debug('the page keeps the usual rule for starting sound')
+            return False
+
+    def _on_page_lost(self, view, reason) -> None:  # noqa: ANN001
+        """GTK thread. The page's process is gone (it crashed, or the system
+        took it for memory): load the interface again.
+
+        Nothing did, and the window stayed up and empty until Dannify was
+        quit and started again. The interface picks its queue and its place
+        in the song back up by itself. A page that goes twice in a row is
+        not going to stay, so the second time says so instead of looping.
+        """
+
+        if self._closing:
+            return
+        now = time.monotonic()
+        again = now - self._page_lost_at < _PAGE_RETRY_AFTER
+        self._page_lost_at = now
+        logger.warning('the page stopped ({}); {}', getattr(reason, 'value_nick', reason),
+                       'not loading it again' if again else 'loading it again')
+        if again:
+            view.load_html(core.failed_html(self._theme), None)
+        else:
+            view.load_uri(core.app_url(self._port, self._token))
 
     def _set_focus(self, on: bool) -> bool:
         self._focused = on
