@@ -15,12 +15,23 @@ import pytest
 from dannify import layout, osenv, release_assets, signing, updates
 
 BASE = 'https://github.com/DANIELMWENDWA9451/Dannify/releases/download/v4.8.0/'
-WINDOWS = ['Dannify-Setup-4.8.0.exe', 'Dannify-Setup-4.8.0.exe.sig',
-           'package-4.8.0.json', 'package-4.8.0.json.sig', 'package-4.8.0.zip']
-LINUX = ['linux-dannify_4.8.0_amd64.deb', 'linux-dannify_4.8.0_amd64.deb.sig']
-MACOS = ['macos-Dannify-4.8.0-arm64.zip', 'macos-Dannify-4.8.0-arm64.zip.sig',
-         'macos-Dannify-4.8.0-x64.zip', 'macos-Dannify-4.8.0-x64.zip.sig',
-         'macos-Dannify-4.8.0-arm64.dmg', 'macos-Dannify-4.8.0-x64.dmg']
+SIG = signing.SIGNATURE_SUFFIX
+
+
+def _files(sig):
+    windows = ['Dannify-Setup-4.8.0.exe', 'Dannify-Setup-4.8.0.exe' + sig,
+               'package-4.8.0.json', 'package-4.8.0.json' + sig, 'package-4.8.0.zip']
+    linux = ['linux-dannify_4.8.0_amd64.deb', 'linux-dannify_4.8.0_amd64.deb' + sig]
+    macos = ['macos-Dannify-4.8.0-arm64.zip', 'macos-Dannify-4.8.0-arm64.zip' + sig,
+             'macos-Dannify-4.8.0-x64.zip', 'macos-Dannify-4.8.0-x64.zip' + sig,
+             'macos-Dannify-4.8.0-arm64.dmg', 'macos-Dannify-4.8.0-x64.dmg']
+    return windows, linux, macos
+
+
+# A release as one is made now, and as 4.8.0 itself was: its signatures were
+# called .sig, which is the name copies of 4.7.0 and 4.8.0 look for.
+WINDOWS, LINUX, MACOS = _files(SIG)
+OLD_WINDOWS, OLD_LINUX, OLD_MACOS = _files('.sig')
 
 
 def _release(order):
@@ -31,6 +42,8 @@ def _release(order):
 
 
 ORDERS = [LINUX + MACOS + WINDOWS, MACOS + WINDOWS + LINUX, WINDOWS + LINUX + MACOS]
+OLD_ORDERS = [OLD_LINUX + OLD_MACOS + OLD_WINDOWS, OLD_MACOS + OLD_WINDOWS + OLD_LINUX,
+              OLD_WINDOWS + OLD_LINUX + OLD_MACOS]
 
 
 def _updater_470():
@@ -43,7 +56,7 @@ def _updater_470():
     return module
 
 
-@pytest.mark.parametrize('order', ORDERS)
+@pytest.mark.parametrize('order', OLD_ORDERS)
 def test_a_4_7_0_windows_copy_takes_only_the_windows_files(monkeypatch, order):
     old = _updater_470()
     monkeypatch.setattr(old, 'PUBLIC_KEY', '')
@@ -56,6 +69,26 @@ def test_a_4_7_0_windows_copy_takes_only_the_windows_files(monkeypatch, order):
     assert got['package_manifest_url'] == BASE + 'package-4.8.0.json'
     assert got['package_url'] == BASE + 'package-4.8.0.zip'
     assert got['package_signature_url'] == BASE + 'package-4.8.0.json.sig'
+
+
+@pytest.mark.parametrize('order', ORDERS)
+def test_a_copy_that_trusts_the_first_key_fetches_nothing_of_a_release_made_now(monkeypatch, tmp_path, order):
+    # 4.7.0 and 4.8.0 cannot check a release signed with the second key.
+    # Finding no signature under the name they look for, they stop before a
+    # byte of the update comes down; one they found and could not check would
+    # have them fetch all of it first, on every try.
+    assert not SIG.startswith('.sig')  # they match the start of the name
+    old = _updater_470()
+    monkeypatch.setattr(old, '_fetch_latest', lambda: _release(order))
+    monkeypatch.setattr(layout, 'skipped_version', lambda: '')
+    got = old.check('4.7.0', force=True)
+    assert got['available'] and got['download_url'] == BASE + 'Dannify-Setup-4.8.0.exe'
+    assert got['installer_signature_url'] == '' and got['package_signature_url'] == ''
+    fetched = []
+    monkeypatch.setattr(old.urllib.request, 'urlopen', lambda *a, **k: fetched.append(a))
+    with pytest.raises(RuntimeError):
+        old.download(got['download_url'], tmp_path, None, got['version'], got['installer_signature_url'])
+    assert fetched == [] and list(tmp_path.iterdir()) == []
 
 
 def test_no_other_platform_file_looks_like_a_windows_one():
@@ -89,7 +122,7 @@ def test_each_platform_finds_only_its_own_update(monkeypatch, order, platform, m
     monkeypatch.setattr(updates, '_fetch_latest', lambda: _release(order))
     got = updates.check('4.7.0', force=True)
     assert got['available'] and got['download_url'] == BASE + want
-    assert got['installer_signature_url'] == BASE + want + '.sig'
+    assert got['installer_signature_url'] == BASE + want + SIG
     assert got['installer_kind'] == kind
     if platform == 'windows':
         assert got['package_url'] == BASE + 'package-4.8.0.zip'
@@ -107,13 +140,13 @@ def test_a_release_without_this_platform_offers_nothing_to_download(monkeypatch)
 
 def test_every_release_file_is_signed_as_its_own_platform_and_arch():
     kinds = {name: release_assets.describe(name) for name in WINDOWS + LINUX + MACOS
-             if not name.endswith('.sig') and not name.endswith('.zip') or name.startswith('macos-')}
+             if not name.endswith(SIG) and not name.endswith('.zip') or name.startswith('macos-')}
     assert kinds['Dannify-Setup-4.8.0.exe'] == ('installer', '4.8.0')
     assert kinds['package-4.8.0.json'] == ('package', '4.8.0')
     assert kinds['linux-dannify_4.8.0_amd64.deb'] == ('installer-linux-deb-amd64', '4.8.0')
     assert kinds['macos-Dannify-4.8.0-arm64.zip'] == ('app-macos-zip-arm64', '4.8.0')
     assert kinds['macos-Dannify-4.8.0-x64.dmg'] == ('installer-macos-dmg-x64', '4.8.0')
-    assert release_assets.describe('linux-dannify_4.8.0_amd64.deb.sig') is None
+    assert release_assets.describe('linux-dannify_4.8.0_amd64.deb' + SIG) is None
 
 
 def test_a_signature_never_carries_over_to_another_platform():
