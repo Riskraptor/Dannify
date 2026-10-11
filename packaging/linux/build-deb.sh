@@ -118,7 +118,7 @@ Depends: python3 (>= 3.10), python3-venv, python3-gi, gir1.2-gtk-3.0,
  gir1.2-webkit2-4.1 | gir1.2-webkit2-4.0, ffmpeg, gstreamer1.0-plugins-good,
  gstreamer1.0-libav, libsecret-tools, pkexec | policykit-1, xdg-utils
 Recommends: gir1.2-ayatanaappindicator3-0.1 | gir1.2-appindicator3-0.1,
- gir1.2-keybinder-3.0, gnome-keyring | kwalletmanager
+ gir1.2-keybinder-3.0, gnome-keyring | kwalletmanager, gstreamer1.0-plugins-bad
 Description: Music player: search, play and keep songs with lyrics
  Dannify searches YouTube Music, plays it, and keeps the songs you save as
  real files with artwork, tags and synced lyrics. It has a tray icon, media

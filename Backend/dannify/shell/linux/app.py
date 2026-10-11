@@ -67,6 +67,9 @@ def main() -> None:
         instance.send({'cmd': 'show', 'file': opening})
         sys.exit(0)
 
+    # First: it names the app for the desktop, and has to before GTK starts.
+    from . import gtk  # noqa: F401, I001
+
     import webview
 
     from .api import LinuxApi
