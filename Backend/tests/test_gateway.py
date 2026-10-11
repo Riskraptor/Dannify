@@ -104,7 +104,10 @@ def test_the_gate(tmp_path):
     assert out['key_in_api_query'] == 404
     assert 'HttpOnly' in out['cookie_attrs']
     assert 'SameSite=Strict' in out['cookie_attrs']
-    assert 'Max-Age=43200' in out['cookie_attrs']
+    # A cookie for as long as the window is open, not for a number of hours:
+    # the window gets its key once and is left open for days.
+    assert 'max-age' not in out['cookie_attrs'].lower()
+    assert 'expires' not in out['cookie_attrs'].lower()
     assert 'Secure' in out['cookie_attrs']
     # No origin is invited to read responses with the user's cookie.
     assert out['cors_header'] == ''

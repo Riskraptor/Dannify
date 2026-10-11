@@ -655,7 +655,14 @@ def main() -> None:
             'Open on your network: http://{}:{}  (phone, TV, other PCs)',
             lan, args.port,
         )
-        print(f'Dannify access key (share only on your LAN): {key}', file=sys.stderr)
+        # The addresses that work carry the key. Here only, not in the log
+        # above: that goes to a file that is kept.
+        print(
+            'With its access key (share only on your network):\n'
+            f'  http://localhost:{args.port}/?k={key}\n'
+            f'  http://{lan}:{args.port}/?k={key}',
+            file=sys.stderr,
+        )
     else:
         logger.info(
             'Listening on http://{}:{}', args.host, args.port

@@ -130,14 +130,19 @@ def install(app) -> None:  # noqa: ANN001
                     if from_url:
                         # Hand the window a cookie so every later asset,
                         # audio range request and websocket carries the key.
+                        #
+                        # No Max-Age or Expires: it lasts as long as the window
+                        # does. The window is given its key once, when it
+                        # opens, and nothing hands it another. With twelve
+                        # hours on it, a Dannify left open overnight (in the
+                        # tray, or on a laptop that slept) woke up refused on
+                        # every request: no library, no playback, until it was
+                        # restarted. The key itself dies with the process.
                         secure = '; Secure' if _is_https(scope) else ''
                         message.setdefault('headers', [])
                         message['headers'].append((
                             b'set-cookie',
-                            (
-                                f'{_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; '
-                                f'Max-Age=43200{secure}'
-                            ).encode(),
+                            f'{_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict{secure}'.encode(),
                         ))
                     if not quiet:
                         _log_response(scope, message['status'], started)

@@ -133,6 +133,32 @@ jobs:
       - name: Install, start and remove it
         shell: pwsh
         run: python packaging/lifecycle.py install launch uninstall
+      # The other way somebody who has Dannify gets a build, and the only way
+      # for a copy of 4.7.0 or 4.8.0, which cannot take a release signed with
+      # the second key: this setup, run over the release before it while that
+      # one is open, on a library the old one made. The library, its keys,
+      # the settings and the song must all come through.
+      - name: The setup over the release before it
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $previous = (gh release view --repo $env:GITHUB_REPOSITORY --json tagName --jq .tagName).TrimStart('v')
+          if ($previous -eq '${{ steps.version.outputs.version }}') {
+              Write-Host "$previous is the latest release: nothing before it to install over"
+              exit 0
+          }
+          # Its setup, and its list of files to check the install against.
+          gh release download "v$previous" --repo $env:GITHUB_REPOSITORY --dir packaging/out `
+            --pattern "Dannify-Setup-$previous.exe" --pattern "package-$previous.json"
+          if ($LASTEXITCODE -ne 0) { throw "could not fetch the $previous setup" }
+          # The test songs are made with a full FFmpeg; the one the app
+          # bundles has no tone generator.
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg --no-progress -y | Out-Null }
+          $env:LIFE_FFMPEG = (Get-Command ffmpeg).Source
+          $env:LIFE_NAME = 'over'
+          $env:LIFE_FROM = $previous
+          python packaging/lifecycle.py setup_over_previous
       - uses: actions/upload-artifact@v4
         with:
           name: Dannify-Setup-${{ steps.version.outputs.version }}.exe
