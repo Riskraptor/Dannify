@@ -56,7 +56,12 @@ _USER_AGENT = 'Dannify-Updater'
 # Every release from 4.7.0 on is signed; a copy with this key refuses any
 # update that is not. Releases up to 4.6.2 were not signed, which is fine:
 # this check only ever applies to what comes after the copy doing it.
-PUBLIC_KEY = '987db4ce83dddd6720451a0c4b09e5d505cf07b6a4bd20fa91a25e1d779d1f7a'
+#
+# The second key. 4.7.0 and 4.8.0 were signed with the first (987db4ce…),
+# whose private half was lost with the machine it was on. Copies of those
+# two versions trust only that one, so they cannot take a later release by
+# themselves: it has to be installed over them by hand, once.
+PUBLIC_KEY = 'e6946c1597fd9f26d2c0f87da91a5cf06e318ef92af3bca9899b72c8f905f5b8'
 
 _lock = threading.Lock()
 _cache: dict[str, Any] = {'at': 0.0, 'result': None}

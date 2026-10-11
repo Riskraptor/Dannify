@@ -171,11 +171,16 @@ python packaging\release_key.py new      # once, ever: prints the PUBLIC_KEY lin
 python packaging\release_key.py public   # what updates.py must carry
 ```
 
-The private key lives in `%USERPROFILE%\.dannify\release-signing.key`, or in
-`DANNIFY_RELEASE_KEY`, on the release machine only: never in the repository and
-never in a CI secret. **Back it up offline.** If you lose it, installed copies
-can only be moved to a new key
-by installing by hand. If it leaks, anyone can sign an update.
+The private key lives in `.dannify/release-signing.key` in the home folder
+(`~` on Linux, `%USERPROFILE%` on Windows), or in `DANNIFY_RELEASE_KEY`, on the
+release machine only: never in the repository and never in a CI secret.
+**Back it up offline.** If you lose it, installed copies can only be moved to
+a new key by installing by hand. If it leaks, anyone can sign an update.
+
+That has happened once: the key 4.7.0 and 4.8.0 were signed with was lost
+with the machine it was on. Copies of those two versions cannot take a later
+release by themselves; the release after 4.8.0 has to be installed over them
+by hand.
 
 Windows code signing is separate and optional: set `DANNIFY_SIGN_THUMBPRINT`
 to a code-signing certificate in `CurrentUser\My` and `build.ps1` signs the
