@@ -66,7 +66,9 @@ OUT = REPO / 'packaging' / 'out'
 # The release users are upgrading from, as it shipped.
 PREVIOUS = os.environ.get('LIFE_FROM', '4.0.0')
 PREVIOUS_SETUP = OUT / f'Dannify-Setup-{PREVIOUS}.exe'
-FFMPEG = REPO / 'packaging' / 'ffmpeg' / 'ffmpeg.exe'
+# A full FFmpeg, to make the test songs with: the one beside the repository
+# on a desk, or wherever LIFE_FFMPEG says (the release workflow's machine).
+FFMPEG = Path(os.environ.get('LIFE_FFMPEG') or REPO / 'packaging' / 'ffmpeg' / 'ffmpeg.exe')
 
 user32, gdi32, kernel32 = ctypes.windll.user32, ctypes.windll.gdi32, ctypes.windll.kernel32
 try:
