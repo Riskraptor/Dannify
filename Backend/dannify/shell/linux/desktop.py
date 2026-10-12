@@ -12,7 +12,7 @@ from typing import Callable, Optional
 from loguru import logger
 
 from ..core import HOTKEYS
-from .gtk import APP_ID, Gdk, Gio, GLib, Gtk
+from .gtk import APP_ID, Gdk, Gio, GLib, Gtk, WebKit2
 
 DESKTOP_ID = f'{APP_ID}.desktop'
 
@@ -200,6 +200,56 @@ class Hotkeys:
             except Exception:
                 pass
         self._bound = []
+
+
+# ---------------------------------------------------------------------------
+# One media player on the desktop, not two
+# ---------------------------------------------------------------------------
+# Run in the page before anything of its own. WebKit puts a media player on
+# the session bus for any page that plays sound, beside the one in mpris.py:
+# two "Dannify" entries in the desktop's media panel, WebKit's with no icon
+# and no way to bring the window forward. It has no switch for that, but it
+# publishes nothing while the page's media session has an empty title
+# (MediaSessionGLib::ensureMprisSessionRegistered). So whatever the interface
+# sets, WebKit is handed details with no title; the interface's own reach the
+# desktop through mpris.py as before, and it reads back what it set.
+#
+# On the prototype, not on navigator.mediaSession itself: that object is made
+# again whenever the page has let go of it, and an override kept on it went
+# with it, a few seconds into the first song.
+_QUIET_MEDIA_SESSION = """
+(function () {
+  try {
+    if (typeof MediaSession !== 'function' || typeof MediaMetadata !== 'function') return;
+    var own = Object.getOwnPropertyDescriptor(MediaSession.prototype, 'metadata');
+    if (!own || !own.set) return;
+    var untitled = new MediaMetadata({ title: '' });
+    var theirs = null;
+    Object.defineProperty(MediaSession.prototype, 'metadata', {
+      configurable: true,
+      enumerable: own.enumerable,
+      get: function () { return theirs; },
+      set: function (value) { theirs = value; own.set.call(this, untitled); },
+    });
+    if (navigator.mediaSession) own.set.call(navigator.mediaSession, untitled);
+  } catch (e) {}
+})();
+"""
+
+
+def one_media_player(view) -> None:  # noqa: ANN001
+    """GTK thread, before the interface loads: keep WebKit's own media player
+    off the session bus, so the desktop shows the shell's and only that."""
+
+    try:
+        view.get_user_content_manager().add_script(WebKit2.UserScript.new(
+            _QUIET_MEDIA_SESSION,
+            WebKit2.UserContentInjectedFrames.TOP_FRAME,
+            WebKit2.UserScriptInjectionTime.START,
+            None, None,
+        ))
+    except Exception:
+        logger.opt(exception=True).debug('the page keeps its own media player')
 
 
 def prefer_dark(dark: bool) -> None:
