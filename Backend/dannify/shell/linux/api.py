@@ -75,6 +75,7 @@ class LinuxApi:
         except Exception:
             pass
         if self._view is not None:
+            desktop.one_media_player(self._view)
             self._view.connect('decide-policy', self._on_navigation)
             self._view.connect('web-process-terminated', self._on_page_lost)
         self._gtk.set_size_request(core.MIN_W, core.MIN_H)
