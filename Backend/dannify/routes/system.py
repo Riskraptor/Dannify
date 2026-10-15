@@ -9,7 +9,7 @@ import contextlib
 from collections import deque
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query, WebSocket, WebSocketDisconnect
 from loguru import logger
@@ -105,7 +105,10 @@ def health() -> dict[str, Any]:
     # invitation to go poking at it. Whether it was sealed elsewhere or cut
     # short, the fix is the same.
     if not vault.ready():
-        problems.append({'code': 'storage_unavailable'})
+        # Which way it is unavailable decides what can be done about it (see
+        # recover_storage_endpoint): 'unreadable' has keys none of which open
+        # on this account, 'unwritable' could not make one.
+        problems.append({'code': 'storage_unavailable', 'state': vault.state()})
     elif broken:
         problems.append({
             'code': 'songs_unplayable',
@@ -138,6 +141,40 @@ def health() -> dict[str, Any]:
         'problems': problems,
         'version': state.version,
     }
+
+
+@router.post('/api/storage/recover')
+async def recover_storage_endpoint(payload: Optional[dict[str, Any]] = Body(None)) -> dict[str, Any]:
+    """Get saved music working again from the message that says it is not.
+
+    ``{"action": "retry"}`` looks for the keys again, as at startup: a keyring
+    that was locked then may be open now. ``{"action": "fresh"}`` is for keys
+    that will never open on this account. It adds a new one beside them and
+    removes nothing (see vault.start_fresh), so new songs can be saved and
+    the old ones repaired.
+    """
+
+    body = payload if isinstance(payload, dict) else {}
+    action = body.get('action')
+    if action not in ('retry', 'fresh'):
+        raise HTTPException(status_code=400, detail='action must be retry or fresh')
+    if vault.ready():
+        return {'ok': True, 'state': vault.state()}
+    if not state.data_dir:
+        raise HTTPException(status_code=409, detail='no data folder')
+    data_dir = Path(state.data_dir)
+    root = Path(state.download_dir) if state.download_dir else None
+    run = vault.reopen if action == 'retry' else vault.start_fresh
+    try:
+        result = await asyncio.to_thread(run, data_dir, root)
+    except Exception:
+        logger.opt(exception=True).error('could not recover saved music ({})', action)
+        result = vault.state()
+    if vault.ready():
+        logger.info('saved music is available again ({})', action)
+        library_mod.invalidate_cache()
+        await state.connections.broadcast({'type': 'library_changed'})
+    return {'ok': vault.ready(), 'state': result}
 
 
 # ---------------------------------------------------------------------------

@@ -29,23 +29,31 @@
       <Icon icon="ph:x" class="h-3.5 w-3.5" />
     </button>
 
-    <!-- Suggestions: recent searches -->
+    <!-- Suggestions: what was searched for before, then ways YouTube Music
+         would finish what is being typed -->
     <div
       v-if="focused && suggestions.length"
       class="sbx-pop menu-surface"
       @mousedown.prevent
     >
-      <p class="sbx-pop-head">{{ t('search.recent') }}</p>
+      <p v-if="!needle" class="sbx-pop-head">{{ t('search.recent') }}</p>
+      <!-- The pointer moving picks a row, not the list opening under a
+           pointer that was resting there: that used to move the arrow keys'
+           place, and Down then went to the sixth suggestion, not the first. -->
       <button
         v-for="(s, i) in suggestions"
         :key="s.value + i"
         class="sbx-item"
         :class="{ 'is-active': i === active }"
-        @mouseenter="active = i"
+        @mousemove="active = i"
         @click="submit(s.value)"
       >
         <Icon :icon="s.icon" class="h-4 w-4 shrink-0 text-fg/50" />
-        <span class="min-w-0 flex-1 truncate">{{ s.label }}</span>
+        <!-- What was typed is already known: the rest is what is offered. -->
+        <span class="min-w-0 flex-1 truncate">
+          <template v-if="s.typed"><span class="sbx-typed">{{ s.typed }}</span>{{ s.rest }}</template>
+          <template v-else>{{ s.label }}</template>
+        </span>
         <span
           v-if="s.removable"
           class="sbx-remove"
@@ -65,6 +73,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
+import API from '/src/model/api'
 import { useUi } from '/src/model/ui'
 import { useRecent } from '/src/model/recent'
 import { useSearchManager } from '/src/model/search'
@@ -88,12 +97,67 @@ let liveTimer = null
 
 const searching = computed(() => !!searchState.value.searching)
 
+const needle = computed(() => (query.value || '').trim().toLowerCase())
+
+// Ways to finish what is being typed, from YouTube Music. Asked for a moment
+// after each keystroke, and an answer to an earlier one is dropped: typed
+// quickly, they would otherwise arrive out of order and offer "sau" its
+// completions under "sauti sol".
+const online = ref([])
+// What they are completions of. Until the answer for what is typed now is
+// in, the last one's are kept only where they still fit it.
+const onlineFor = ref('')
+let suggestTimer = null
+let suggestAsk = null
+function askSuggestions(text) {
+  clearTimeout(suggestTimer)
+  if (suggestAsk) suggestAsk.abort()
+  suggestAsk = null
+  if (!focused.value || text.length < 2) {
+    online.value = []
+    return
+  }
+  suggestTimer = setTimeout(async () => {
+    const ask = (suggestAsk = typeof AbortController === 'function' ? new AbortController() : null)
+    try {
+      const res = await API.searchSuggest(text, ask ? ask.signal : undefined)
+      if (ask && ask.signal.aborted) return
+      online.value = (res.data && res.data.suggestions) || []
+      onlineFor.value = text.toLowerCase()
+    } catch {
+      // Offline, or too slow to be useful: nothing is offered.
+    }
+  }, 140)
+}
+
+const MAX_SUGGESTIONS = 6
 const suggestions = computed(() => {
-  const needle = (query.value || '').trim().toLowerCase()
-  return recent.searches.value
-    .filter((s) => !needle || (s.toLowerCase().includes(needle) && s.toLowerCase() !== needle))
-    .slice(0, 6)
+  const typed = needle.value
+  const recents = recent.searches.value
+    .filter((s) => !typed || (s.toLowerCase().includes(typed) && s.toLowerCase() !== typed))
+    .slice(0, typed ? 2 : MAX_SUGGESTIONS)
     .map((s) => ({ value: s, label: s, icon: 'ph:clock-counter-clockwise', removable: true }))
+  if (!typed) return recents
+  const have = new Set(recents.map((s) => s.value.toLowerCase()))
+  const fresh = onlineFor.value === typed
+  const more = online.value
+    .filter((s) => {
+      const low = s.toLowerCase()
+      return !have.has(low) && low !== typed && (fresh || low.includes(typed))
+    })
+    .slice(0, MAX_SUGGESTIONS - recents.length)
+    .map((s) => {
+      const continues = s.toLowerCase().startsWith(typed)
+      return {
+        value: s,
+        label: s,
+        icon: 'ph:magnifying-glass',
+        removable: false,
+        typed: continues ? s.slice(0, typed.length) : '',
+        rest: continues ? s.slice(typed.length) : '',
+      }
+    })
+  return recents.concat(more)
 })
 
 function submit(value) {
@@ -118,6 +182,7 @@ watch(query, (q) => {
   active.value = -1
   clearTimeout(liveTimer)
   const text = (q || '').trim()
+  askSuggestions(text)
   if (!focused.value || text.length < 2) return
   liveTimer = setTimeout(
     () => goSearch(text, route.name === 'Search'),
@@ -141,6 +206,7 @@ function onBlur() {
   // typing and then clicking Library straight away was followed, half a
   // second later, by being taken back to Search.
   clearTimeout(liveTimer)
+  clearTimeout(suggestTimer)
 }
 
 function onKey(e) {
@@ -278,6 +344,9 @@ watch(
 }
 .sbx-item.is-active {
   background: rgb(var(--c-tint) / 0.08);
+}
+.sbx-typed {
+  color: rgb(var(--c-fg) / var(--fg-58));
 }
 .sbx-remove {
   display: grid;

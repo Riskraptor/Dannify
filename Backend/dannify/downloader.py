@@ -419,6 +419,13 @@ class Downloader:
             )
 
         song = enrich_from_match(song, match)
+        if not song.get('album_name'):
+            # The search often has nothing to say about the album, and a song
+            # saved without one sits loose in the library for good: a repair
+            # brought every song back that way. Its recording usually knows.
+            from .details import _with_album  # noqa: PLC0415
+
+            song = _with_album(song, video_id)
         stage(2.0, 'Preparing')
 
         basename = self._format_basename(song)
@@ -751,6 +758,10 @@ class Downloader:
             ]
             if ids:
                 meta['artist_ids'] = ids
+            # Which album this is on YouTube Music: what lets the album's page
+            # in the library open the whole of it online.
+            if song.get('album_id'):
+                meta['album_id'] = str(song['album_id'])
             header_details(final_path, song, meta)
             target = target_dir / f'{basename}{vault.SUFFIX}'
             sealed = vault.seal(final_path, target, meta)
@@ -801,11 +812,13 @@ def _remember(root: Path, sealed: Path, song: dict, video_id: str) -> None:
     except ValueError:
         return
     artists = song.get('artists') or []
-    vault.note_track(root, rel, {
+    vault.note_track(root, rel, vault.index_entry({
         'title': song.get('name', '') or '',
         'artist': artists[0] if artists else '',
+        'album': song.get('album_name') or '',
+        'album_id': song.get('album_id') or '',
         'video_id': video_id,
-    })
+    }))
 
 
 def _is_image(data: bytes) -> bool:

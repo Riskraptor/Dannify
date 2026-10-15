@@ -596,6 +596,64 @@ def key_path() -> Optional[Path]:
     return _key_path
 
 
+def reopen(data_dir: Path, root: Optional[Path] = None) -> str:
+    """Look for the keys again, exactly as at startup. Returns state().
+
+    Saved music that would not open when the app started is not always lost.
+    A keyring still locked when the app was started at login, or a Secret
+    Service that was not up yet, comes good a minute later, and the person
+    reading the message should not have to quit the app to find that out.
+    """
+
+    from . import keystore  # noqa: PLC0415
+
+    keystore.forget_cache()
+    init(data_dir)
+    if root is not None and _master is not None:
+        try:
+            attach(root)
+        except Exception:
+            logger.opt(exception=True).warning('could not join {}', root)
+    return _state
+
+
+def start_fresh(data_dir: Path, root: Optional[Path] = None) -> str:
+    """Let songs be saved again when none of the keys here will open.
+
+    Only for 'unreadable': this installation has keys and not one of them
+    opens on this account (a new PC, a new Windows account, a profile put
+    back from a backup). Until now that was a dead end. Nothing could be
+    saved, nothing could be repaired, and the advice was a restart that
+    changed nothing.
+
+    Nothing is taken away. Every key already kept stays where it is, so if
+    the account or the keyring they belong to comes back, the songs sealed
+    with them open again. A new key goes in beside them and new songs are
+    sealed with it. The songs that still will not open can then be repaired,
+    which downloads them again (see repair.py). Returns state().
+    """
+
+    global _master, _keys, _state
+    if _state != 'unreadable' or _master is not None:
+        return _state
+    store = Path(data_dir) / STORE
+    master = secrets.token_bytes(32)
+    if not _store_key(store, master, chosen=True):
+        logger.error('could not start afresh in {}', store)
+        return _state
+    _master, _keys, _state = master, [], 'ready'
+    logger.warning(
+        'Saved music from before would not open on this account; new songs '
+        'are sealed with a new key, kept beside the old ones'
+    )
+    if root is not None:
+        try:
+            attach(root)
+        except Exception:
+            logger.opt(exception=True).warning('could not join {}', root)
+    return _state
+
+
 # ---------------------------------------------------------------------------
 # The cipher
 # ---------------------------------------------------------------------------
@@ -1282,14 +1340,23 @@ def _note(root: Path, sealed: Path, meta: dict[str, Any]) -> None:
     The header is encrypted like everything else, so without this a lost key
     would leave a folder nobody could even take an inventory of. The video id
     goes in as well: it is what lets a locked track be downloaded again as
-    exactly the same recording, rather than whatever a search turns up.
+    exactly the same recording, rather than whatever a search turns up. The
+    album too, so a locked track comes back on the album it was on.
     """
 
-    note_track(root, sealed.relative_to(root).as_posix(), {
+    note_track(root, sealed.relative_to(root).as_posix(), index_entry(meta))
+
+
+def index_entry(meta: dict[str, Any]) -> dict[str, str]:
+    """What the plain index keeps about a sealed track (see _note)."""
+
+    return {
         'title': str(meta.get('title') or ''),
         'artist': str(meta.get('artist') or ''),
+        'album': str(meta.get('album') or '')[:200],
+        'album_id': str(meta.get('album_id') or '')[:64],
         'video_id': str(meta.get('video_id') or ''),
-    })
+    }
 
 
 def _tags_of(path: Path) -> dict[str, Any]:

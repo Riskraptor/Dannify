@@ -53,6 +53,9 @@
       <!-- Playback -->
       <SettingsPlayback v-show="showPane('playback')" @vue:updated="onSectionUpdated" />
 
+      <!-- What the app remembers of what was played -->
+      <SettingsHistory v-show="showPane('playback')" @vue:updated="onSectionUpdated" />
+
       <!-- Library -->
       <SettingsLibrary v-show="showPane('library')" @vue:updated="onSectionUpdated" />
 
@@ -96,6 +99,7 @@ import SettingsAccount from '/src/components/settings/SettingsAccount.vue'
 import SettingsAppearance from '/src/components/settings/SettingsAppearance.vue'
 import SettingsSystem from '/src/components/settings/SettingsSystem.vue'
 import SettingsPlayback from '/src/components/settings/SettingsPlayback.vue'
+import SettingsHistory from '/src/components/settings/SettingsHistory.vue'
 import SettingsLibrary from '/src/components/settings/SettingsLibrary.vue'
 import SettingsDownloads from '/src/components/settings/SettingsDownloads.vue'
 import SettingsStorage from '/src/components/settings/SettingsStorage.vue'
