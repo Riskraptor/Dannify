@@ -274,6 +274,11 @@ def build_app() -> FastAPI:
     except Exception:
         logger.opt(exception=True).warning('could not join the music folder')
     _updates.init(DATABASE_DIR)
+    # ListenBrainz, for whoever connected it (see scrobble.py): listens that
+    # were still waiting to go are sent from here.
+    from dannify import scrobble as _scrobble
+
+    _scrobble.init(DATABASE_DIR)
     # This version is running, so whatever was downloaded to get here, or to
     # get to an older one, has done its job. A newer one still waiting stays.
     try:

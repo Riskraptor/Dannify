@@ -205,23 +205,24 @@ def _merged(known: Optional[dict[str, Any]], song: dict[str, Any]) -> dict[str, 
     return out
 
 
-def record(
+def checked(
     track: Any,
     seconds: Any,
     started: Any = None,
     now: Optional[float] = None,
-) -> bool:
-    """Keep one listen. False when it was a skip, or it is already kept."""
+) -> Optional[tuple[dict[str, Any], int, int]]:
+    """``(song, started, seconds)`` for a listen that counts, put right where
+    the window's clock was wrong; None for a skip or something unreadable."""
 
     song = playlists.clean_track(track)
     if song is None:
-        return False
+        return None
     try:
         heard = int(float(seconds))
     except (TypeError, ValueError):
-        return False
+        return None
     if not counts(heard, song.get('duration') or 0):
-        return False
+        return None
     heard = min(heard, MAX_SECONDS)
     now = time.time() if now is None else now
     try:
@@ -230,6 +231,25 @@ def record(
         at = 0
     if at < _EARLIEST or at > now + 300:
         at = int(now - heard)
+    return song, at, heard
+
+
+def record(
+    track: Any,
+    seconds: Any,
+    started: Any = None,
+    now: Optional[float] = None,
+) -> bool:
+    """Keep one listen. False when it was a skip, or it is already kept."""
+
+    found = checked(track, seconds, started, now)
+    return keep(found) if found is not None else False
+
+
+def keep(found: tuple[dict[str, Any], int, int]) -> bool:
+    """Keep a listen checked() has passed. False when it is already kept."""
+
+    song, at, heard = found
     key = song_key(song)
     with _lock:
         _load()

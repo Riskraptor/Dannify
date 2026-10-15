@@ -5,28 +5,69 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from .. import listens as listens_mod
+from .. import scrobble
 
 router = APIRouter()
 
 
+def _take(payload: dict[str, Any]) -> bool:
+    found = listens_mod.checked(payload.get('track'), payload.get('seconds'), payload.get('started'))
+    if found is None:
+        return False
+    song, at, seconds = found
+    # ``keep: false`` is a listen for ListenBrainz only: the history is
+    # paused, and what is paused is the history, not the account.
+    if payload.get('keep', True) is False:
+        scrobble.submit(song, at, seconds)
+        return False
+    recorded = listens_mod.keep(found)
+    # Only a listen kept now: one already kept was sent when it was.
+    if recorded:
+        scrobble.submit(song, at, seconds)
+    return recorded
+
+
 @router.post('/api/listens')
 async def listen_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
-    """One listen, from the window: ``{track, seconds, started}``.
+    """One listen, from the window: ``{track, seconds, started, keep}``.
 
     ``recorded`` is false for a skip and for one already kept; either way
     the window has nothing left to hand over.
     """
 
-    recorded = await asyncio.to_thread(
-        listens_mod.record,
-        payload.get('track'),
-        payload.get('seconds'),
-        payload.get('started'),
-    )
-    return {'recorded': recorded}
+    body = payload if isinstance(payload, dict) else {}
+    return {'recorded': await asyncio.to_thread(_take, body)}
+
+
+@router.get('/api/listenbrainz')
+def listenbrainz_status_endpoint() -> dict[str, Any]:
+    return scrobble.status()
+
+
+@router.post('/api/listenbrainz/connect')
+async def listenbrainz_connect_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """Connect with the person's ListenBrainz user token.
+
+    400 when ListenBrainz does not accept it, 503 when it cannot be asked.
+    """
+
+    token = (payload or {}).get('token') if isinstance(payload, dict) else None
+    try:
+        return await asyncio.to_thread(scrobble.connect, str(token or ''))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='invalid') from exc
+    except ConnectionError as exc:
+        raise HTTPException(status_code=503, detail='unreachable') from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail='not kept') from exc
+
+
+@router.post('/api/listenbrainz/disconnect')
+async def listenbrainz_disconnect_endpoint() -> dict[str, Any]:
+    return await asyncio.to_thread(scrobble.disconnect)
 
 
 @router.get('/api/listens/stats')

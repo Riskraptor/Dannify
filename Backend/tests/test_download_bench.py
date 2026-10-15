@@ -246,3 +246,58 @@ def test_a_different_recording_with_the_same_name_does_not_replace_the_first(mus
     assert again == second
     heads = {n: vault.inspect(music / n)[0]['video_id'] for n in (first, second)}
     assert heads == {first: 'aaaaaaaaaaa', second: 'bbbbbbbbbbb'}
+
+
+def test_a_refused_stream_address_falls_back_to_a_full_extraction(music, monkeypatch):
+    # The address the fast resolver hands over can be refused with a 403 when
+    # the bytes are asked for. Playback re-resolved; downloads just failed.
+    from dannify import streaming
+
+    asked: list[tuple[str, bool]] = []
+    forgotten: list[str] = []
+
+    class Refusing(_FakeYDL):
+        def download(self, urls):
+            asked.append((urls[0], 'extractor_args' in self.opts))
+            if urls[0].startswith('https://rr1---sn.googlevideo.com/'):
+                raise downloader.yt_dlp.utils.DownloadError(
+                    'ERROR: unable to download video data: HTTP Error 403: Forbidden'
+                )
+            Path(self.opts['outtmpl'] % {'ext': 'mp3'}).write_bytes(MP3)
+
+    _FakeYDL.music = music
+    monkeypatch.setattr(downloader.yt_dlp, 'YoutubeDL', Refusing)
+    monkeypatch.setattr(
+        streaming, 'resolve_for_download', lambda vid: 'https://rr1---sn.googlevideo.com/videoplayback?id=1'
+    )
+    monkeypatch.setattr(streaming, 'forget_direct', forgotten.append)
+
+    d = downloader.Downloader(music)
+    name = d.download({'name': 'Lonely', 'artists': ['Ayra Starr'], 'youtube_id': 'vIFpnbJrgWE',
+                       'album_name': '19 & Dangerous', 'cover_url': 'c'})
+
+    assert name == 'Ayra Starr - Lonely.dnf'
+    assert asked == [
+        ('https://rr1---sn.googlevideo.com/videoplayback?id=1', False),
+        ('https://music.youtube.com/watch?v=vIFpnbJrgWE', True),  # with its client list back
+    ]
+    assert forgotten == ['vIFpnbJrgWE']
+
+
+def test_other_download_failures_are_not_retried(music, monkeypatch):
+    from dannify import streaming
+
+    calls: list[str] = []
+
+    class Gone(_FakeYDL):
+        def download(self, urls):
+            calls.append(urls[0])
+            raise downloader.yt_dlp.utils.DownloadError('ERROR: Video unavailable')
+
+    _FakeYDL.music = music
+    monkeypatch.setattr(downloader.yt_dlp, 'YoutubeDL', Gone)
+    monkeypatch.setattr(streaming, 'resolve_for_download', lambda vid: 'https://rr1---sn.googlevideo.com/x')
+    with pytest.raises(downloader.yt_dlp.utils.DownloadError):
+        downloader.Downloader(music).download({'name': 'X', 'artists': ['A'], 'youtube_id': 'aaaaaaaaaaa',
+                                               'album_name': 'Y', 'cover_url': 'c'})
+    assert len(calls) == 1

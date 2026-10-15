@@ -4,17 +4,23 @@ import { ref } from 'vue'
 import config from '/src/config.js'
 import { pageIsStale } from '/src/model/staleness'
 
-import { v4 as uuidv4 } from 'uuid'
-
-console.log('using env:', process.env)
-console.log('using config: ', config)
-
 const API = axios.create({
   baseURL: `${config.PROTOCOL}//${config.BACKEND}:${config.PORT}${config.BASEURL}`,
 })
 
-const sessionID = uuidv4()
-console.log('session ID: ', sessionID)
+// Names this window to the live channel. randomUUID is only there on a
+// secure page, and a phone on the LAN opens the app over plain http, so the
+// same thing is made by hand from random bytes when it is missing.
+function makeSessionId() {
+  const c = globalThis.crypto
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID()
+  const b = c.getRandomValues(new Uint8Array(16))
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
+const sessionID = makeSessionId()
 
 getVersion()
 
@@ -417,6 +423,16 @@ function health() {
 }
 
 // Saved tracks that will not play, downloaded again in place.
+// ListenBrainz, for whoever connects it (Backend/dannify/scrobble.py).
+function listenBrainzStatus() {
+  return API.get('/api/listenbrainz')
+}
+function connectListenBrainz(token) {
+  return API.post('/api/listenbrainz/connect', { token })
+}
+function disconnectListenBrainz() {
+  return API.post('/api/listenbrainz/disconnect')
+}
 // Saved music that will not open at all: look again ('retry'), or let new
 // songs be saved beside the ones that will not ('fresh').
 function recoverStorage(action) {
@@ -476,6 +492,9 @@ export default {
   downloadBatch,
   health,
   recoverStorage,
+  listenBrainzStatus,
+  connectListenBrainz,
+  disconnectListenBrainz,
   repairStatus,
   repairTracks,
   repairStop,

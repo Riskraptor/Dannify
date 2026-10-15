@@ -16,8 +16,10 @@ import { notePlayed } from '/src/model/support'
 // for years. This watches the player, counts the time each song really spent
 // playing (listenMeter.js), and hands each listen over as it ends.
 //
-// Nothing is sent anywhere else. It stays on this computer, it can be
-// switched off, and one listen or all of them can be taken out again.
+// It stays on this computer, it can be switched off, and one listen or all of
+// them can be taken out again. Nothing is sent anywhere else unless
+// ListenBrainz is connected in Settings, and then only the listens, which go
+// on from the app (scrobble.py) even while the history itself is paused.
 
 const KEEP_KEY = 'dn.listenHistory'
 const PENDING_KEY = 'dn.listens'
@@ -46,6 +48,12 @@ function writeStored(key, value) {
 export const keeping = ref(readStored(KEEP_KEY, true) !== false)
 /** Goes up whenever the history changes; pages showing it read it again. */
 export const listensEpoch = ref(0)
+/** Whether listens go on to ListenBrainz (connected in Settings). */
+export const scrobbling = ref(false)
+/** Listens are counted when either wants them. */
+function counting() {
+  return keeping.value || scrobbling.value
+}
 
 // Listens that have ended and are waiting to be handed over, and the one
 // still going as it stood a moment ago. Read back at the next start, so a
@@ -104,8 +112,10 @@ function keep(listen) {
   notedAt = 0
   // Counted whether or not the history is kept: it is only a number.
   notePlayed()
-  const payload = keeping.value ? payloadOf(listen) : null
+  const payload = counting() ? payloadOf(listen) : null
   if (payload) {
+    // For the history, or for ListenBrainz alone while the history is paused.
+    payload.keep = keeping.value
     waiting.push(payload)
     if (waiting.length > MAX_WAITING) waiting.splice(0, waiting.length - MAX_WAITING)
   }
@@ -123,15 +133,16 @@ function report() {
     duration: duration.value,
   })
   if (finished) keep(finished)
-  if (!keeping.value) return
+  if (!counting()) return
   const sofar = meter.peek()
   if (sofar && sofar.seconds - notedAt >= NOTE_EVERY) note(sofar)
 }
 
 function note(sofar = meter.peek()) {
-  if (!keeping.value) return
+  if (!counting()) return
   const payload = payloadOf(sofar)
   if (!payload) return
+  payload.keep = keeping.value
   openNote = payload
   notedAt = payload.seconds
   save()
@@ -154,6 +165,9 @@ export function startListening() {
   })
   window.addEventListener('pagehide', () => note())
   window.addEventListener('beforeunload', () => note())
+  API.listenBrainzStatus()
+    .then((res) => setScrobbling(!!(res.data && res.data.connected)))
+    .catch(() => {})
   if (waiting.length) {
     save()
     drain()
@@ -164,10 +178,21 @@ export function setKeeping(on) {
   keeping.value = !!on
   writeStored(KEEP_KEY, keeping.value)
   if (!on) {
-    openNote = null
-    waiting.length = 0
+    // What was waiting for the history is not kept now. It still goes to
+    // ListenBrainz when that is connected.
+    if (scrobbling.value) {
+      waiting.forEach((p) => (p.keep = false))
+      if (openNote) openNote.keep = false
+    } else {
+      openNote = null
+      waiting.length = 0
+    }
     save()
   }
+}
+
+export function setScrobbling(on) {
+  scrobbling.value = !!on
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +241,8 @@ export function useListens() {
   return {
     keeping,
     setKeeping,
+    scrobbling,
+    setScrobbling,
     listensEpoch,
     fetchStats,
     fetchHistory,
