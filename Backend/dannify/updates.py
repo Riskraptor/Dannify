@@ -342,6 +342,13 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
                 None,
             )
         available = bool(tag) and is_newer(tag, current_version)
+        # A release without this platform's files (one platform built ahead of
+        # the others) is not an update here. Offered anyway, it was a button
+        # that could only ever say the update could not be fetched.
+        if own is not None and installer is None:
+            available = False
+        elif own is None and installer is None and not _asset(assets, 'package-', '.json'):
+            available = False
         # A version that could not start on this PC was rolled back by the
         # launcher; offering it again would only go round in circles.
         if available and tag == layout.skipped_version():

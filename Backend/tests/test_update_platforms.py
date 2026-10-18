@@ -136,6 +136,27 @@ def test_a_release_without_this_platform_offers_nothing_to_download(monkeypatch)
     got = updates.check('4.7.0', force=True)
     assert got['version'] == '4.8.0' and not got['download_url']
     assert not got['installer_signature_url']
+    # Not offered at all: an update button that can only fail is worse than
+    # none, and the next release with this platform's files is offered as usual.
+    assert not got['available']
+
+
+@pytest.mark.parametrize('platform,machine,offered', [
+    ('windows', 'AMD64', True),
+    ('linux', 'x86_64', False),
+    ('macos', 'arm64', False),
+    ('macos', 'x86_64', False),
+])
+def test_a_release_of_one_platform_is_offered_only_there(monkeypatch, platform, machine, offered):
+    _as(monkeypatch, platform, machine)
+    monkeypatch.setattr(updates, '_fetch_latest', lambda: _release(WINDOWS))
+    assert updates.check('4.7.0', force=True)['available'] is offered
+
+
+def test_a_windows_release_with_nothing_to_install_is_not_offered(monkeypatch):
+    _as(monkeypatch, 'windows', 'AMD64')
+    monkeypatch.setattr(updates, '_fetch_latest', lambda: _release(LINUX + MACOS))
+    assert not updates.check('4.7.0', force=True)['available']
 
 
 def test_every_release_file_is_signed_as_its_own_platform_and_arch():

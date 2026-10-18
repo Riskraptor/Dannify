@@ -218,10 +218,16 @@ def test_the_installer_download_refuses_a_short_file(tmp_path, monkeypatch):
 
 
 def test_a_version_rolled_back_here_is_not_offered_again(tmp_path, monkeypatch):
+    def release(version):
+        names = [f'Dannify-Setup-{version}.exe', f'package-{version}.json', f'package-{version}.zip']
+        return {'tag_name': f'v{version}', 'assets': [
+            {'name': n, 'browser_download_url': f'https://github.com/x/y/releases/download/v{version}/{n}'}
+            for n in names]}
+
     monkeypatch.setattr(layout, 'skipped_version', lambda: '4.1.0')
-    monkeypatch.setattr(updates, '_fetch_latest', lambda: {'tag_name': 'v4.1.0', 'assets': []})
+    monkeypatch.setattr(updates, '_fetch_latest', lambda: release('4.1.0'))
     assert updates.check('4.0.0', force=True)['available'] is False
-    monkeypatch.setattr(updates, '_fetch_latest', lambda: {'tag_name': 'v4.2.0', 'assets': []})
+    monkeypatch.setattr(updates, '_fetch_latest', lambda: release('4.2.0'))
     assert updates.check('4.0.0', force=True)['available'] is True
 
 

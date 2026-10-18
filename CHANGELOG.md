@@ -58,6 +58,8 @@ page](https://github.com/DANIELMWENDWA9451/Dannify/releases).
   could not load, and loads by itself once you are back online.
 - The support note counted every song that started, skips included; it counts
   real listens now.
+- A release that does not yet have the files for your system is no longer
+  offered as an update that can only fail to download.
 
 ### Under the hood
 
