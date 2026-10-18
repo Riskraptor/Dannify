@@ -58,6 +58,7 @@
   <DialogHost />
   <ToastHost />
   <ShortcutsDialog />
+  <CommandPalette />
   <ReportDialog />
   <LyricsEditor :open="submitOpen" @close="submitOpen = false" />
   <Onboarding />
@@ -79,6 +80,7 @@ import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
 import ReportDialog from '/src/components/ui/ReportDialog.vue'
 import ShortcutsDialog from './components/ui/ShortcutsDialog.vue'
+import CommandPalette from './components/ui/CommandPalette.vue'
 import LyricsEditor from './components/lyrics/LyricsEditor.vue'
 import Onboarding from './components/Onboarding.vue'
 import { startOnboarding } from './model/onboarding'
@@ -125,6 +127,10 @@ const cachedViews = [
   'ExploreCollection',
   'Downloads',
   'Liked',
+  'Stats',
+  'History',
+  'Albums',
+  'Album',
 ]
 
 function viewKey(r) {

@@ -179,6 +179,8 @@ def _read_tags(path: Path) -> dict[str, Any]:
             # Who the song credits, by their YouTube Music id: what tells two
             # artists with one name apart, and finds the right one online.
             'artist_ids': _clean_ids(head.get('artist_ids')),
+            # The album on YouTube Music, for songs saved since it was kept.
+            'album_id': str(head.get('album_id') or '')[:64],
             'problem': problem,
         }
 
@@ -236,6 +238,7 @@ def _read_tags(path: Path) -> dict[str, Any]:
         'track_number': track_number,
         'video_id': video_id,
         'artist_ids': [],
+        'album_id': '',
         'problem': '',
     }
 
@@ -428,6 +431,130 @@ def _artist_entry(name: str, members: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _image_size(data: bytes) -> Optional[tuple[int, int]]:
+    """Width and height of a JPEG, PNG or WebP, read from its first bytes."""
+
+    if data[:8] == b'\x89PNG\r\n\x1a\n' and len(data) >= 24:
+        return int.from_bytes(data[16:20], 'big'), int.from_bytes(data[20:24], 'big')
+    if data[:4] == b'RIFF' and data[8:12] == b'WEBP' and len(data) >= 30:
+        kind = data[12:16]
+        if kind == b'VP8X':
+            return 1 + int.from_bytes(data[24:27], 'little'), 1 + int.from_bytes(data[27:30], 'little')
+        if kind == b'VP8 ':
+            return int.from_bytes(data[26:28], 'little') & 0x3FFF, int.from_bytes(data[28:30], 'little') & 0x3FFF
+        if kind == b'VP8L':
+            bits = int.from_bytes(data[21:25], 'little')
+            return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+        return None
+    if data[:2] != b'\xff\xd8':
+        return None
+    at = 2
+    while at + 9 < len(data):
+        if data[at] != 0xFF:
+            return None
+        marker = data[at + 1]
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+            at += 2
+            continue
+        length = int.from_bytes(data[at + 2:at + 4], 'big')
+        # Start of frame (any kind but DHT, JPG and DAC): the size is in it.
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            return int.from_bytes(data[at + 7:at + 9], 'big'), int.from_bytes(data[at + 5:at + 7], 'big')
+        at += 2 + length
+    return None
+
+
+# Whether a saved song's artwork is square, by file and when it was saved.
+_square: dict[tuple[str, float], bool] = {}
+
+
+def _square_art(base: Path, tr: dict[str, Any]) -> bool:
+    """Whether a song's artwork is an album cover rather than a video frame.
+
+    A song saved from its music video carries a 16:9 frame of the video. As an
+    album's picture, cut to a square, it was a strip out of the middle of
+    somebody's face with half a title across it.
+    """
+
+    stamp = (tr['file'], float(tr.get('added') or 0))
+    if stamp in _square:
+        return _square[stamp]
+    from . import vault  # noqa: PLC0415  (circular at import)
+
+    path = base / tr['file']
+    try:
+        found = vault.cover(path) if path.suffix.lower() == vault.SUFFIX else _tags.cover(path)
+        size = _image_size(found[0]) if found else None
+    except Exception:
+        size = None
+    square = bool(size) and size[1] > 0 and abs(size[0] - size[1]) <= 0.06 * max(size)
+    if len(_square) > 20000:
+        _square.clear()
+    _square[stamp] = square
+    return square
+
+
+def _album_list(tracks: list[dict[str, Any]], base: Optional[Path] = None) -> list[dict[str, Any]]:
+    """Every album there are songs from, with those songs in album order.
+
+    An album is the songs that share an album name and an artist page (the
+    track's ``group``): "Greatest Hits" by two people is two albums, and an
+    album whose songs are tagged "Sauti Sol" and "SAUTI SOL" is one. Its id
+    on YouTube Music is whichever of its songs knows it.
+
+    One song whose album is named after it is a single, not an album: the
+    artist page files those under Singles, and a page of one-song "albums"
+    each called after its only song would be the library again, with bigger
+    pictures. A single from an EP of the same name is kept once the EP has a
+    second song saved.
+    """
+
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    for tr in tracks:
+        name = (tr.get('album') or '').strip()
+        if not name:
+            continue
+        who = tr.get('group') or tr.get('artist') or 'Unknown Artist'
+        entry = groups.setdefault(
+            (fold(name) or name.casefold(), who),
+            {'name': name, 'artist': who, 'album_id': '', 'tracks': []},
+        )
+        entry['tracks'].append(tr)
+        entry['album_id'] = entry['album_id'] or tr.get('album_id') or ''
+
+    albums = []
+    for entry in groups.values():
+        members = entry['tracks']
+        if len(members) == 1 and fold(members[0].get('title') or '') == fold(entry['name']):
+            continue
+        members.sort(key=lambda t: (t.get('track_number') or 999, (t.get('title') or '').casefold()))
+        holder: dict[str, Any] = {}
+        for tr in members:
+            _pick_cover(holder, tr)
+        # The album's own cover when one of its first few songs has it: an
+        # album saved after one of its songs was saved from the video.
+        if base is not None:
+            playable = [tr for tr in members if not tr.get('problem')]
+            for tr in playable[:4]:
+                if _square_art(base, tr):
+                    holder['cover'], holder['cover_v'] = tr['file'], int(tr.get('added') or 0)
+                    break
+        albums.append({
+            'name': entry['name'],
+            'artist': entry['artist'],
+            'album_id': entry['album_id'],
+            'count': len(members),
+            'duration': sum(int(tr.get('duration') or 0) for tr in members),
+            # When its newest song was saved: "recently added" for albums.
+            'added': max(float(tr.get('added') or 0) for tr in members),
+            'cover': holder.get('cover', ''),
+            'cover_v': holder.get('cover_v', 0),
+            'tracks': members,
+        })
+    albums.sort(key=lambda a: (a['name'].casefold(), a['artist'].casefold()))
+    return albums
+
+
 def _build(base: Path) -> dict[str, Any]:
     tracks: list[dict[str, Any]] = []
     if base.exists():
@@ -472,6 +599,7 @@ def _build(base: Path) -> dict[str, Any]:
     return {
         'tracks': tracks,
         'artists': artist_list,
+        'albums': _album_list(tracks, base),
         'total': len(tracks),
         # O(1) lookup tables for the "is this song already downloaded?" check.
         'by_video_id': {
@@ -622,6 +750,34 @@ def artists(base: Path) -> list[dict[str, Any]]:
         {'name': a['name'], 'count': a['count'], 'cover': a['cover'], 'cover_v': a.get('cover_v', 0)}
         for a in data['artists']
     ]
+
+
+def albums(base: Path) -> list[dict[str, Any]]:
+    """Every album in the library, without its songs (see _album_list)."""
+
+    return [{k: v for k, v in a.items() if k != 'tracks'} for a in _get(base).get('albums', [])]
+
+
+def album_detail(base: Path, artist: str, name: str) -> Optional[dict[str, Any]]:
+    """One album, songs and all, by its artist page and its name.
+
+    The way they are written does not have to match exactly: a link made
+    from a song's own tags ("BENSOUL", "midnight train") still finds it.
+    """
+
+    found = _get(base).get('albums', [])
+    for a in found:
+        if a['artist'].casefold() == artist.casefold() and a['name'].casefold() == name.casefold():
+            return a
+    want_artist, want_name = fold(artist), fold(name)
+    if not want_name:
+        return None
+    for a in found:
+        if fold(a['name']) == want_name and (
+            fold(a['artist']) == want_artist or _same_artist(a['artist'], artist)
+        ):
+            return a
+    return None
 
 
 def artist_hints(base: Path, names: list[str]) -> dict[str, dict[str, list[str]]]:

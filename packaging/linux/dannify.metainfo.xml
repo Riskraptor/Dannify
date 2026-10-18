@@ -7,7 +7,9 @@
   <summary>Search, play and keep songs with artwork, tags and synced lyrics</summary>
   <description>
     <p>Dannify searches YouTube Music, plays it, and keeps the songs you save
-    as real files with artwork, tags and synced lyrics.</p>
+    in your library to play offline, with artwork, tags and synced lyrics.</p>
+    <p>Your library is organised by song, artist, album and playlist, with a
+    listening history and stats, and listens can go on to ListenBrainz.</p>
   </description>
   <launchable type="desktop-id">dannify.desktop</launchable>
   <url type="homepage">https://github.com/DANIELMWENDWA9451/Dannify</url>

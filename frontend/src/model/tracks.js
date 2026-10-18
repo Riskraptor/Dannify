@@ -4,6 +4,7 @@ import { usePlayer, songToTrack } from '/src/model/player'
 import { useAccount } from '/src/model/account'
 import { useDownloadManager, useProgressTracker } from '/src/model/download'
 import { useLibraryIndex } from '/src/model/libraryIndex'
+import { albumOf, albumRoute } from '/src/model/library'
 import { toast } from '/src/model/toast'
 import { confirmDialog } from '/src/model/dialog'
 import { desktop } from '/src/desktop/bridge'
@@ -36,7 +37,7 @@ export function localRow(tr) {
     artistText: tr.artist_display || tr.artist || names.join(', '),
     primaryArtist: tr.artist || names[0] || '',
     album: tr.album || '',
-    albumId: '',
+    albumId: tr.album_id || '',
     duration: tr.duration || 0,
     // The file's date rides along so the address changes when the file
     // does. A repaired track is a new file at the same path, and without
@@ -425,7 +426,12 @@ export function goToArtist(row) {
 }
 
 export function goToAlbum(row) {
-  if (row.albumId) {
+  // A saved song's album is in the library: its page there has what is saved
+  // of it, and the rest of it one click on.
+  const saved = row.kind === 'local' ? albumOf(row.raw) : null
+  if (saved) {
+    router.push(albumRoute(saved))
+  } else if (row.albumId) {
     router.push({ name: 'ExploreAlbum', params: { id: row.albumId } })
   } else if (row.album) {
     const who = row.primaryArtist ? `${row.primaryArtist} ` : ''
@@ -454,6 +460,33 @@ export function youtubeLink(row) {
 }
 
 // ---------------------------------------------------------------------------
+// The song in the player (keyboard shortcuts and the command palette)
+// ---------------------------------------------------------------------------
+
+/** The song in the player as a row, or null when nothing is loaded. */
+export function currentRow() {
+  const player = usePlayer()
+  const track = player.currentTrack.value
+  return track ? queueRow(track, player.currentIndex.value) : null
+}
+
+/** Like the song in the player, or take the like back. */
+export function likeCurrent() {
+  const row = currentRow()
+  if (!row || !songVideoId(row)) return false
+  useAccount().toggleLike(row.raw)
+  return true
+}
+
+/** Save the song in the player to the library. */
+export function saveCurrent() {
+  const row = currentRow()
+  if (!row) return false
+  downloadRows([row])
+  return true
+}
+
+// ---------------------------------------------------------------------------
 // Context menu
 // ---------------------------------------------------------------------------
 
@@ -461,7 +494,8 @@ export function youtubeLink(row) {
  * Build the right-click menu for one or more rows.
  * ctx: { source: rows the selection came from (for "Play" semantics),
  *        queue: true when invoked from the queue panel,
- *        playlist: { remove(rows) } on a playlist's own page }
+ *        playlist: { remove(rows) } on a playlist's own page,
+ *        history: { remove(rows) } on the History page }
  */
 export function trackMenu(rows, ctx = {}) {
   if (!rows || !rows.length) return []
@@ -531,6 +565,11 @@ export function trackMenu(rows, ctx = {}) {
       label: t('playlists.removeFrom'),
       icon: 'ph:minus-circle',
       action: () => ctx.playlist.remove(rows),
+    },
+    ctx.history && {
+      label: t('home.removeFromHistory'),
+      icon: 'ph:clock-counter-clockwise',
+      action: () => ctx.history.remove(rows),
     },
     ctx.queue &&
       single && {

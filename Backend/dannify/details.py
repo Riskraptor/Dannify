@@ -62,6 +62,8 @@ def _fresh_details(song: dict[str, Any], video_id: str) -> tuple[Optional[dict[s
     if not match or not video_id:
         return None, video_id or ''
     fresh = providers.enrich_from_match({**song, 'youtube_id': video_id}, match)
+    if exact and not fresh.get('album_name'):
+        fresh = _with_album(fresh, video_id)
     credits = [
         a for a in (match.get('artists') or [])
         if isinstance(a, dict) and a.get('name')
@@ -77,6 +79,61 @@ def _fresh_details(song: dict[str, Any], video_id: str) -> tuple[Optional[dict[s
             {'name': str(a['name']), 'id': str(a['id'])} for a in credits if a.get('id')
         ]
     return fresh, video_id
+
+
+def _with_album(song: dict[str, Any], video_id: str) -> dict[str, Any]:
+    """*song* with the album it is on, when the lookup that found it had none.
+
+    Songs saved one at a time before 4.9 lost their album on the way in, and
+    the search a refresh starts with often has nothing to say about it either.
+    The recording's own watch page usually does. A song saved from its music
+    video has no album even there, so the last word goes to the song results:
+    one with the same title by the same artist is that song as an album track,
+    and its album is the one this belongs on. Only the album is taken from it,
+    never the recording.
+    """
+
+    from . import providers  # noqa: PLC0415
+    from .repair import _confident, _norm  # noqa: PLC0415
+
+    try:
+        recording = providers.watch_track(video_id) or {}
+    except Exception:
+        logger.opt(exception=True).debug('album lookup failed for {}', song.get('name'))
+        return song
+    album = recording.get('album')
+    if not (isinstance(album, dict) and album.get('name')):
+        album = None
+        # What the recording calls itself ("Brighter Days (feat. Soweto
+        # Gospel Choir)") picks out the album track better than a title
+        # that was shortened when it was saved.
+        titles = [t for t in (recording.get('title'), song.get('name')) if t]
+        artists = ' '.join(song.get('artists') or [])
+        try:
+            results = providers._ytm().search(
+                f'{artists} {titles[0] if titles else ""}'.strip(), filter='songs', limit=10,
+            ) or []
+        except Exception:
+            logger.opt(exception=True).debug('album search failed for {}', song.get('name'))
+            results = []
+        named = [
+            r for r in results
+            if isinstance(r, dict) and isinstance(r.get('album'), dict) and r['album'].get('name')
+        ]
+        wanted = {_norm(t) for t in titles}
+        exact = [
+            r for r in named
+            if _norm(r.get('title')) in wanted and _confident({**song, 'name': r.get('title')}, r)
+        ]
+        close = [r for r in named if _confident(song, r)]
+        best = (exact or close or [None])[0]
+        album = best['album'] if best else None
+    if not album:
+        return song
+    out = {**song, 'album_name': str(album['name'])}
+    if album.get('id'):
+        out['album_id'] = str(album['id'])
+    return out
 
 
 def refresh(root: Path, path: Path, lyrics_providers: Optional[list[str]] = None) -> tuple[str, str]:
@@ -145,6 +202,9 @@ def refresh(root: Path, path: Path, lyrics_providers: Optional[list[str]] = None
         ids = fresh.get('artist_ids') or head.get('artist_ids')
         if ids:
             meta['artist_ids'] = ids
+        album_id = fresh.get('album_id') or head.get('album_id')
+        if album_id:
+            meta['album_id'] = str(album_id)
 
         # A song kept as something other than MP4 could not be retagged: its
         # fresh details and artwork go straight into the header instead.

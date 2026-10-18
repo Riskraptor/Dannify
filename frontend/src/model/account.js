@@ -4,6 +4,7 @@ import API from '/src/model/api'
 import { desktop } from '/src/desktop/bridge'
 import { toast } from '/src/model/toast'
 import { t } from '/src/i18n'
+import { failedForNetwork } from '/src/model/connectivity'
 
 // Signed-in YouTube Music account: profile, liked songs and the like/unlike
 // action. Signing in happens in a real Google window opened by the desktop
@@ -15,6 +16,8 @@ const busy = ref(false)
 const liked = shallowRef([]) // big list: no deep reactivity needed
 const likedIds = ref(new Set())
 const likedLoaded = ref(false)
+// '' | 'offline' | 'error': why the last load of liked songs did not work.
+const likedError = ref('')
 const playlists = shallowRef([]) // the account's own YouTube Music playlists
 const following = shallowRef([]) // artists the account follows
 const followingIds = ref(new Set())
@@ -63,8 +66,11 @@ async function loadLiked(force = false) {
     liked.value = res.data.songs || []
     likedIds.value = new Set(liked.value.map((s) => s.song_id || s.video_id))
     likedLoaded.value = true
-  } catch {
-    // stay silent: likes are an extra, not a requirement
+    likedError.value = ''
+  } catch (err) {
+    // Nothing is said anywhere else: likes are an extra. Liked Songs itself
+    // says it, though, or a failed load reads as having liked nothing.
+    likedError.value = (await failedForNetwork(err)) ? 'offline' : 'error'
   }
 }
 
@@ -274,6 +280,7 @@ export function useAccount() {
     liked,
     likedIds,
     likedLoaded,
+    likedError,
     playlists,
     following,
     followingIds,

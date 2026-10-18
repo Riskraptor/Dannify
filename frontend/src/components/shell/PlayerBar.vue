@@ -541,7 +541,7 @@ function onTrackMenu(e) {
   padding: 0 3px;
   border-radius: 999px;
   background: rgb(var(--c-accent));
-  color: rgb(var(--c-on-accent, 0 0 0));
+  color: rgb(var(--c-accent-fg));
   font-size: 9.5px;
   font-weight: 800;
   line-height: 14px;

@@ -74,6 +74,14 @@
         <div v-for="n in 10" :key="n" class="skeleton h-14" />
       </div>
       <EmptyState
+        v-else-if="account.likedError.value && !rows.length"
+        :icon="account.likedError.value === 'offline' ? 'ph:wifi-slash' : 'ph:warning-circle'"
+        :title="account.likedError.value === 'offline' ? t('net.offlineTitle') : t('net.loadFailed')"
+        :text="account.likedError.value === 'offline' ? t('net.offlinePage') : t('net.loadFailedText')"
+      >
+        <button class="btn btn-pill" :disabled="busy" @click="reload">{{ t('common.retry') }}</button>
+      </EmptyState>
+      <EmptyState
         v-else-if="!rows.length"
         icon="ph:heart"
         :title="t('account.likedEmptyTitle')"
@@ -88,6 +96,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { whenOnline } from '/src/model/connectivity'
 import { Icon } from '@iconify/vue'
 import { usePlayer } from '/src/model/player'
 import { useAccount } from '/src/model/account'
@@ -148,6 +157,12 @@ async function reload() {
   } finally {
     busy.value = false
   }
+  // Offline, it loads by itself once the connection is back. One waiter,
+  // however many times it was tried meanwhile.
+  if (account.likedError.value === 'offline') whenOnline(retryOnline)
+}
+function retryOnline() {
+  if (account.likedError.value) reload()
 }
 
 onMounted(() => {

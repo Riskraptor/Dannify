@@ -19,6 +19,10 @@ const ExploreArtist = () => import('/src/views/ExploreArtist.vue')
 const ExploreCollection = () => import('/src/views/ExploreCollection.vue')
 const Settings = () => import('/src/views/Settings.vue')
 const Mood = () => import('/src/views/Mood.vue')
+const Stats = () => import('/src/views/Stats.vue')
+const History = () => import('/src/views/History.vue')
+const Albums = () => import('/src/views/Albums.vue')
+const Album = () => import('/src/views/Album.vue')
 
 const routes = [
   { path: '/', name: 'Home', component: Home },
@@ -26,7 +30,11 @@ const routes = [
   { path: '/library', name: 'Library', component: Library },
   { path: '/artists', name: 'Artists', component: Artists },
   { path: '/artists/:name', name: 'Artist', component: Artist },
+  { path: '/albums', name: 'Albums', component: Albums },
+  { path: '/albums/:artist/:name', name: 'Album', component: Album },
   { path: '/liked', name: 'Liked', component: Liked },
+  { path: '/stats', name: 'Stats', component: Stats },
+  { path: '/history', name: 'History', component: History },
   { path: '/playlists/:id', name: 'Playlist', component: Playlist },
   { path: '/downloads', name: 'Downloads', component: Downloads, alias: '/download' },
   { path: '/now-playing', name: 'NowPlaying', component: NowPlaying, alias: '/player' },
@@ -80,7 +88,7 @@ router.afterEach((to, from) => {
 
 // Fetch the other pages once things are quiet, so none waits on its file.
 function warmPages() {
-  for (const load of [Search, Artists, Artist, Downloads, Liked, Playlist, NowPlaying, ExploreArtist, ExploreCollection, Settings, Mood]) {
+  for (const load of [Search, Artists, Artist, Downloads, Liked, Playlist, NowPlaying, ExploreArtist, ExploreCollection, Settings, Mood, Stats, History, Albums, Album]) {
     load().catch(() => {})
   }
 }

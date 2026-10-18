@@ -125,6 +125,9 @@ function focusSearch() {
 // Keyboard-shortcut cheat sheet (Ctrl+/).
 const shortcutsOpen = ref(false)
 
+// The command palette (Ctrl+Shift+P).
+const paletteOpen = ref(false)
+
 export function useUi() {
   return {
     viewport,
@@ -147,5 +150,6 @@ export function useUi() {
     searchFocusTick,
     focusSearch,
     shortcutsOpen,
+    paletteOpen,
   }
 }

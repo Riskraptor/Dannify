@@ -55,7 +55,7 @@
 }
 .settings .eq-chip.is-active {
   background: rgb(var(--c-accent));
-  color: rgb(var(--c-on-accent, 0 0 0));
+  color: rgb(var(--c-accent-fg));
 }
 .settings .eq-bands {
   display: grid;

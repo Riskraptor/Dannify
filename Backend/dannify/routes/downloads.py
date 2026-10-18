@@ -58,6 +58,24 @@ def _merge_client_track_hints(
     yr = hints.get('year')
     if isinstance(yr, str) and yr.strip():
         base['year'] = yr.strip()
+    # The album the song was saved from. Looked up again by its video alone,
+    # a song often comes back with no album at all, and a whole album saved
+    # from its own page went into the library as that many loose singles. The
+    # lookup's own answer stands where it has one: it is what YouTube says
+    # the recording is on, and a song can be on more than one album.
+    name = hints.get('album_name')
+    if isinstance(name, str) and name.strip() and not str(base.get('album_name') or '').strip():
+        base['album_name'] = name.strip()
+        album_id = hints.get('album_id')
+        if isinstance(album_id, str) and album_id.strip():
+            base['album_id'] = album_id.strip()
+    elif not base.get('album_id'):
+        # Its album was known either way; the page it came from also knew
+        # which one that is online, when it is the same album.
+        album_id = hints.get('album_id')
+        same = str(hints.get('album_name') or '').strip().casefold() == str(base.get('album_name') or '').strip().casefold()
+        if same and isinstance(album_id, str) and album_id.strip():
+            base['album_id'] = album_id.strip()
 
 
 def _song_for_download(url: str) -> dict[str, Any]:

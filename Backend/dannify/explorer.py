@@ -93,6 +93,7 @@ def clear_cache() -> None:
 
     with _lock:
         _cache.clear()
+        _suggest_cache.clear()
 
 
 # The home feed is personal and changes through the day: cache it briefly
@@ -245,6 +246,45 @@ def mood_playlists(params: str) -> list[dict[str, Any]]:
     if cards:
         _cache_put(key, cards)
     return cards
+
+
+# ---------------------------------------------------------------------------
+# Suggestions: what the search box offers while something is being typed
+# ---------------------------------------------------------------------------
+
+_SUGGEST_TTL = 60 * 20
+# A cache of its own. One is asked for on nearly every keystroke, and in the
+# shared one a minute of typing would push out the artist and album pages
+# that cost a real round trip to get back.
+_suggest_cache: "OrderedDict[str, tuple[float, list[str]]]" = OrderedDict()
+
+
+def suggest(query: str, limit: int = 8) -> list[str]:
+    """What YouTube Music would finish *query* as, most likely first."""
+
+    q = ' '.join((query or '').split())
+    if not q:
+        return []
+    limit = max(1, min(int(limit), 20))
+    key = q.casefold()
+    with _lock:
+        hit = _suggest_cache.get(key)
+        if hit and time.time() - hit[0] < _SUGGEST_TTL:
+            _suggest_cache.move_to_end(key)
+            return hit[1][:limit]
+    out: list[str] = []
+    seen = {key}  # what was typed is not a suggestion
+    for row in _ytm().get_search_suggestions(q) or []:
+        text = ' '.join(row.split()) if isinstance(row, str) else ''
+        if text and text.casefold() not in seen:
+            seen.add(text.casefold())
+            out.append(text)
+    with _lock:
+        _suggest_cache[key] = (time.time(), out)
+        _suggest_cache.move_to_end(key)
+        while len(_suggest_cache) > 400:
+            _suggest_cache.popitem(last=False)
+    return out[:limit]
 
 
 class SearchUnavailable(ConnectionError):

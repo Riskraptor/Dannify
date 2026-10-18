@@ -68,7 +68,10 @@ def install(app) -> None:  # noqa: ANN001
     # what was behind it. The shell sends the key like any other caller.
     _OPEN_PATHS: set[str] = set()
     _QUIET_PREFIXES = ('/assets/', '/cover', '/favicon', '/downloads/')
-    _QUIET_EXACT = {'/list', '/api/queue', '/api/version', '/api/settings', '/api/net'}
+    # Suggestions are asked for on nearly every keystroke in the search box.
+    _QUIET_EXACT = {
+        '/list', '/api/queue', '/api/version', '/api/settings', '/api/net', '/api/explore/suggest',
+    }
 
     class _Gateway:
         def __init__(self, inner):

@@ -135,7 +135,7 @@
             :class="{ 'is-round': r.round }"
             :src="r.cover"
             :fallback="r.fallback || ''"
-            :kind="r.round ? 'artist' : 'playlist'"
+            :kind="r.round ? 'artist' : r.kind === 'album' ? 'album' : 'playlist'"
             :round="r.round"
             radius="sm"
             :size="44"
@@ -183,7 +183,7 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
 import { useUi } from '/src/model/ui'
-import { useLibrary } from '/src/model/library'
+import { useLibrary, albumTracks, albumRoute } from '/src/model/library'
 import { useAccount } from '/src/model/account'
 import { useDownloadStats } from '/src/model/downloadStats'
 import { openContextMenu } from '/src/model/contextMenu'
@@ -341,9 +341,9 @@ const rows = computed(() => {
   // runs out of stack with a library of a couple of hundred thousand.
   let out = []
 
-  if (f !== 'artists') {
+  if (f !== 'artists' && f !== 'albums') {
     for (const pin of pins.value) {
-      if (f === 'playlists' && pin.id === 'artists') continue
+      if (f === 'playlists' && (pin.id === 'artists' || pin.id === 'albums' || pin.id === 'stats')) continue
       if (!match(pin.label)) continue
       out.push({ key: 'pin:' + pin.id, kind: 'pin', to: pin.to, title: pin.label, sub: pin.sub,
         icon: pin.icon, tile: pin.tile, badge: pin.pinned ? 'ph:push-pin-fill' : '' })
@@ -382,7 +382,7 @@ const rows = computed(() => {
     }
   }
 
-  if (f !== 'playlists') {
+  if (f !== 'playlists' && f !== 'albums') {
     const everyone = f === 'artists' || q
     const followed = followedArtists.value
       .filter((a) => match(a.name))
@@ -416,8 +416,46 @@ const rows = computed(() => {
       })
     }
   }
+
+  // Albums: every one under their chip, and the ones that match a search.
+  // Not in the list otherwise: with an album for every few songs, they would
+  // bury the playlists and artists it is for.
+  if (f === 'albums' || (q && !f)) {
+    const found = q ? albumsByRecent.value.filter((a) => match(a.name) || match(a.artist)) : albumsByRecent.value
+    const ordered = sort.value === 'alpha' ? sortedBy(found, (a) => a.name, (a) => a.artist) : found
+    out = out.concat(
+      ordered.map((a) => ({
+        key: `al:${a.artist}|${a.name}`,
+        kind: 'album',
+        to: albumRoute(a),
+        title: a.name,
+        sub: `${t('albums.label')} · ${a.artist}`,
+        cover: a.cover ? API.coverFileURL(a.cover, a.cover_v) : '',
+        menu: (e) => onAlbumMenu(e, a),
+      }))
+    )
+  }
   return out
 })
+
+const albumsByRecent = computed(() =>
+  sortedBy(lib.albums.value, { by: (a) => a.added || 0, desc: true }, (a) => a.name)
+)
+
+function onAlbumMenu(e, a) {
+  const rows = () => albumTracks(a).map(localRow)
+  openContextMenu(e, [
+    { label: t('actions.play'), icon: 'ph:play', action: () => playRows(rows(), 0, { toggle: false }) },
+    { label: t('actions.shuffle'), icon: 'ph:shuffle', action: () => shuffleRows(rows()) },
+    { divider: true },
+    { label: t('albums.open'), icon: 'ph:vinyl-record', action: () => router.push(albumRoute(a)) },
+    {
+      label: t('actions.goToArtist'),
+      icon: 'ph:user',
+      action: () => router.push({ name: 'Artist', params: { name: a.artist } }),
+    },
+  ])
+}
 
 function artistRows(name) {
   return lib.tracks.value
@@ -445,6 +483,7 @@ const FILTER_KEY = 'dn.libFilter'
 const filters = [
   { id: 'playlists', label: 'nav.filterPlaylists' },
   { id: 'artists', label: 'nav.filterArtists' },
+  { id: 'albums', label: 'nav.filterAlbums' },
 ]
 function readFilter() {
   try {
@@ -503,6 +542,24 @@ const pins = computed(() => {
       sub: t('nav.artistCount', { count: lib.artists.value.length }),
       icon: 'ph:users-three-fill',
       tile: 'tile-artists',
+      pinned: true,
+    },
+    lib.albums.value.length > 0 && {
+      id: 'albums',
+      to: { name: 'Albums' },
+      label: t('albums.title'),
+      sub: t('nav.albumCount', { count: lib.albums.value.length }),
+      icon: 'ph:vinyl-record-fill',
+      tile: 'tile-albums',
+      pinned: true,
+    },
+    {
+      id: 'stats',
+      to: { name: 'Stats' },
+      label: t('stats.nav'),
+      sub: t('stats.navSub'),
+      icon: 'ph:chart-bar-fill',
+      tile: 'tile-stats',
       pinned: true,
     },
   ].filter(Boolean)
