@@ -3,6 +3,8 @@ album order, and found again however their link was written."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from dannify import library
@@ -123,3 +125,42 @@ def test_a_sealed_song_reads_its_album_id(monkeypatch, tmp_path):
     assert library._read_tags(path)['album_id'] == 'MPREb_9'
     head.pop('album_id')
     assert library._read_tags(path)['album_id'] == ''
+
+
+# ---------------------------------------------------------------------------
+# The album's picture
+# ---------------------------------------------------------------------------
+def _jpeg(width, height):
+    sof = b'\xff\xc0\x00\x11\x08' + height.to_bytes(2, 'big') + width.to_bytes(2, 'big') + b'\x03' + bytes(9)
+    return b'\xff\xd8' + b'\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00' + sof + b'\xff\xd9'
+
+
+@pytest.mark.parametrize('data,size', [
+    (_jpeg(1280, 720), (1280, 720)),
+    (_jpeg(544, 544), (544, 544)),
+    (b'\x89PNG\r\n\x1a\n' + b'\x00\x00\x00\rIHDR' + (600).to_bytes(4, 'big') + (600).to_bytes(4, 'big'), (600, 600)),
+    (b'not an image', None),
+    (b'', None),
+])
+def test_image_size(data, size):
+    assert library._image_size(data) == size
+
+
+def test_an_album_wears_its_own_cover_not_a_video_frame(tmp_path, monkeypatch):
+    # The first song was saved from its music video (a 16:9 frame); the rest
+    # came with the album and carry its square cover.
+    tracks = [
+        {'file': 'A - One.dnf', 'title': 'One', 'artist': 'A', 'album': 'LP', 'track_number': 1, 'added': 1},
+        {'file': 'A - Two.dnf', 'title': 'Two', 'artist': 'A', 'album': 'LP', 'track_number': 2, 'added': 2},
+    ]
+    art = {'A - One.dnf': _jpeg(1280, 720), 'A - Two.dnf': _jpeg(544, 544)}
+    from dannify import vault
+
+    monkeypatch.setattr(vault, 'cover', lambda path: (art[Path(path).name], 'image/jpeg'))
+    library._square.clear()
+
+    [album] = library._album_list(tracks, tmp_path)
+    assert album['cover'] == 'A - Two.dnf'
+    # Without a folder to look in, the first song's picture, as before.
+    [album] = library._album_list(tracks)
+    assert album['cover'] == 'A - One.dnf'
