@@ -33,10 +33,8 @@ API.getSettings()
 export function useSettingsManager() {
   const isSaved = ref()
   function saveSettings() {
-    console.log('Saving settings:', settings.value)
     API.setSettings(settings.value).then((res) => {
       if (res.status === 200) {
-        console.log('Saved!')
         isSaved.value = true
         setTimeout(() => {
           isSaved.value = null

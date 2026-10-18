@@ -590,10 +590,19 @@ def enrich_from_match(
         match,
     )
     enriched = dict(song)
-    if not enriched.get('album_name'):
-        album = match.get('album') or {}
-        if isinstance(album, dict) and album.get('name'):
+    album = match.get('album') or {}
+    if isinstance(album, dict) and album.get('name'):
+        if not enriched.get('album_name'):
             enriched['album_name'] = album['name']
+        # Which album it is on YouTube Music, when it is this same album:
+        # what lets the library's album page open the whole of it online.
+        if (
+            not enriched.get('album_id')
+            and album.get('id')
+            and _norm_compact_title(enriched.get('album_name'))
+            == _norm_compact_title(album['name'])
+        ):
+            enriched['album_id'] = str(album['id'])
     if not enriched.get('cover_url'):
         thumbs = match.get('thumbnails') or []
         if thumbs:

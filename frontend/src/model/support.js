@@ -53,7 +53,11 @@ export function loadSupport() {
   return loading
 }
 
-/** A song played to a point that counts (see player.js). */
+/**
+ * A song listened to for long enough to count: the same rule as History and
+ * Stats (see listenMeter.js). Counting every song that started counted every
+ * skip, and the note asking for support came round far too soon.
+ */
 export function notePlayed() {
   plays.value += 1
   write(PLAYS_KEY, plays.value)

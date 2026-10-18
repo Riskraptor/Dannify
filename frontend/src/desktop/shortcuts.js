@@ -6,6 +6,8 @@ import { copyText, readText } from '/src/model/clipboard'
 import { useOnboarding } from '/src/model/onboarding'
 import { t } from '/src/i18n'
 import { ensureFullWindow } from '/src/desktop/fullWindow'
+import { usePlayer } from '/src/model/player'
+import { likeCurrent, saveCurrent } from '/src/model/tracks'
 
 // App-wide keyboard shortcuts and right-click behaviour. Playback keys
 // (Space, arrows, M/N/P/S/R) live in model/player.js.
@@ -48,6 +50,24 @@ export function setZoom(v) {
   desktop.setZoom(v)
 }
 
+// Keys that act on the song in the player, with nothing held down: L likes
+// it, and a digit goes that many tenths of the way through it (5 is the
+// middle), the way every video player has taught people to expect. Returns
+// whether the key was one of them and did something.
+function onSongKey(e, key) {
+  // Not while something sits on top of the app (a question, the lyrics
+  // editor): its keys are its own.
+  if (e.target && e.target.closest && e.target.closest('[aria-modal="true"]')) return false
+  const player = usePlayer()
+  if (player.noAutoAdvance.value || !player.currentTrack.value) return false
+  if (key === 'l' && !e.shiftKey) return likeCurrent()
+  if (!e.shiftKey && key.length === 1 && key >= '0' && key <= '9' && player.duration.value > 0) {
+    player.seekRatio(Number(key) / 10)
+    return true
+  }
+  return false
+}
+
 function onKeyDown(e) {
   if (e.defaultPrevented) return
   const ui = useUi()
@@ -67,6 +87,13 @@ function onKeyDown(e) {
   if (ctrl && key === ',') {
     e.preventDefault()
     router.push({ name: 'Settings' })
+    return
+  }
+  if (ctrl && e.shiftKey && !e.altKey && key === 'p') {
+    e.preventDefault()
+    ensureFullWindow().then(() => {
+      ui.paletteOpen.value = !ui.paletteOpen.value
+    })
     return
   }
   if (e.altKey && !ctrl && key === 'ArrowLeft') {
@@ -114,6 +141,12 @@ function onKeyDown(e) {
     ensureFullWindow().then(() => {
       ui.shortcutsOpen.value = true
     })
+  } else if (ctrl && !e.shiftKey && !e.altKey && key === 'd') {
+    // Save the song that is playing.
+    e.preventDefault()
+    saveCurrent()
+  } else if (!typing && !ctrl && !e.altKey && onSongKey(e, key)) {
+    e.preventDefault()
   } else if (key === 'Escape' && !typing) {
     if (desktop.state.fullscreen) {
       e.preventDefault()

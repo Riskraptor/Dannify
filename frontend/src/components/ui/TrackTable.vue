@@ -52,7 +52,7 @@
         :disabled="!sortable"
         @click="emit('sort', 'added')"
       >
-        {{ t('table.dateAdded') }}<SortArrow v-if="sortKey === 'added'" :dir="sortDir" />
+        {{ addedLabel || t('table.dateAdded') }}<SortArrow v-if="sortKey === 'added'" :dir="sortDir" />
       </button>
       <button
         class="tt-cell tt-sort tt-c-duration"
@@ -179,7 +179,7 @@
               @dblclick.stop
             >{{ row.album }}</a>
           </div>
-          <div v-if="cols.added" class="tt-cell tt-c-added">{{ formatAdded(row.added) }}</div>
+          <div v-if="cols.added" class="tt-cell tt-c-added">{{ (addedFormat || formatAdded)(row.added) }}</div>
           <div class="tt-cell tt-c-duration">
             <button
               v-if="videoIdOf(row)"
@@ -362,6 +362,10 @@ const props = defineProps({
   showCover: { type: Boolean, default: true },
   showAlbum: { type: Boolean, default: true },
   showAdded: { type: Boolean, default: false },
+  // The date column, when it is not the day a song was saved: its heading,
+  // and how its time is written (History shows when each song was played).
+  addedLabel: { type: String, default: '' },
+  addedFormat: { type: Function, default: null },
   useTrackNumbers: { type: Boolean, default: false },
   header: { type: Boolean, default: true },
   sortable: { type: Boolean, default: false },

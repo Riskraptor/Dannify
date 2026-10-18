@@ -12,6 +12,7 @@ import { installShortcuts } from './desktop/shortcuts'
 import { installDesktopIntegration } from './desktop/integration'
 import { startArtAccent } from './model/artAccent'
 import { installErrorReporting } from './model/problems'
+import { startListening } from './model/listens'
 import { vOverlayScroll } from './model/overlayScroll'
 
 import './index.css'
@@ -27,3 +28,4 @@ installShortcuts()
 installDesktopIntegration()
 app.mount('#app')
 startArtAccent()
+startListening()

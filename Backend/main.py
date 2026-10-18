@@ -249,6 +249,10 @@ def build_app() -> FastAPI:
     from dannify import playlists as _playlists
 
     _playlists.init(DATABASE_DIR)
+    # What has been listened to, for History and Stats (see listens.py).
+    from dannify import listens as _listens
+
+    _listens.init(DATABASE_DIR)
     from dannify import bench as _bench
 
     # Songs are put together in here before they are sealed (see bench.py).
@@ -270,6 +274,11 @@ def build_app() -> FastAPI:
     except Exception:
         logger.opt(exception=True).warning('could not join the music folder')
     _updates.init(DATABASE_DIR)
+    # ListenBrainz, for whoever connected it (see scrobble.py): listens that
+    # were still waiting to go are sent from here.
+    from dannify import scrobble as _scrobble
+
+    _scrobble.init(DATABASE_DIR)
     # This version is running, so whatever was downloaded to get here, or to
     # get to an older one, has done its job. A newer one still waiting stays.
     try:
@@ -358,6 +367,14 @@ def build_app() -> FastAPI:
                     logger.info('Removed {} unfinished download(s) left by an earlier run', gone)
             except Exception:
                 logger.opt(exception=True).debug('could not tidy unfinished downloads')
+            # And after repairs: a half-placed copy, and originals kept longer
+            # than they are kept for (see repair.prune).
+            try:
+                from dannify import repair as _repair
+
+                await asyncio.to_thread(_repair.jobs.tidy)
+            except Exception:
+                logger.opt(exception=True).debug('could not tidy after repairs')
 
         asyncio.create_task(_tidy_benches())
 

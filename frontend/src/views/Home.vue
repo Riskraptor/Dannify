@@ -36,6 +36,10 @@
     <section v-if="quick.length" class="shelf-block view-pad">
       <header class="shelf-head is-flush">
         <h2 class="shelf-title">{{ t('home.jumpBackIn') }}</h2>
+        <!-- These are the last few; History has all of them. -->
+        <button class="shelf-more" @click="router.push({ name: 'History' })">
+          {{ t('history.title') }}
+        </button>
       </header>
       <div ref="quickGrid" class="tile-grid" :class="{ 'is-few': quick.length < 3 }">
         <SongTile
@@ -50,6 +54,27 @@
     </section>
 
     <div class="shelves">
+      <!-- What has been played most this month, from the app's own history
+           (model/listens.js): there signed out and offline, unlike the feed. -->
+      <Shelf
+        v-if="onRepeat.length"
+        :title="t('stats.onRepeat')"
+        :more-label="t('stats.nav')"
+        @more="router.push({ name: 'Stats' })"
+      >
+        <MediaCard
+          v-for="(row, i) in onRepeat"
+          :key="row.key"
+          :item="{ name: row.title, cover: row.cover }"
+          kind="track"
+          :subtitle-text="row.artistText"
+          playable
+          :menu="() => trackMenu([row], { source: onRepeat })"
+          @open="playRows(onRepeat, i)"
+          @play="playRows(onRepeat, i)"
+        />
+      </Shelf>
+
       <!-- Your YouTube Music picks (personalized once signed in) -->
       <template v-for="(section, si) in feedSections" :key="section.title + si">
         <section v-if="section.songs" class="shelf-block">
@@ -104,6 +129,21 @@
           </div>
         </div>
       </div>
+
+      <!-- Played a good deal once, and not for a month. -->
+      <Shelf v-if="rediscover.length" :title="t('stats.rediscover')">
+        <MediaCard
+          v-for="(row, i) in rediscover"
+          :key="row.key"
+          :item="{ name: row.title, cover: row.cover }"
+          kind="track"
+          :subtitle-text="row.artistText"
+          playable
+          :menu="() => trackMenu([row], { source: rediscover })"
+          @open="playRows(rediscover, i)"
+          @play="playRows(rediscover, i)"
+        />
+      </Shelf>
 
       <Shelf
         v-if="account.signedIn.value && likedRows.length"
@@ -214,7 +254,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onActivated, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, computed, watch, onActivated, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
@@ -231,6 +271,8 @@ import { warmAll } from '/src/model/prefetch'
 import { onRefresh } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
 import { useSupport } from '/src/model/support'
+import { useListens } from '/src/model/listens'
+import { entryRow } from '/src/model/playlists'
 import Shelf from '/src/components/ui/Shelf.vue'
 import SongTile from '/src/components/ui/SongTile.vue'
 import MediaCard from '/src/components/MediaCard.vue'
@@ -259,7 +301,31 @@ feed.load().then(warmFirstShelf)
 onActivated(() => {
   lib.ensureLoaded()
   feed.load()
+  loadListening()
 })
+
+// The month's listening, for "On repeat" and "Rediscover". A shelf of one or
+// two songs reads as something missing, so each waits until it has a few.
+const listens = useListens()
+const month = shallowRef(null)
+async function loadListening() {
+  try {
+    month.value = await listens.fetchStats(30, 12)
+  } catch {
+    // The two shelves just are not there.
+  }
+}
+loadListening()
+watch(listens.listensEpoch, loadListening)
+function listenRows(songs) {
+  // Made again when the library is read: a song saved since plays from disk.
+  void lib.tracks.value
+  return songs.length >= 3 ? songs.map(entryRow) : []
+}
+const onRepeat = computed(() =>
+  listenRows(((month.value && month.value.top_songs) || []).filter((s) => s.plays >= 2))
+)
+const rediscover = computed(() => listenRows((month.value && month.value.rediscover) || []))
 
 // Home is where most sessions start, so the songs at the top of it get
 // resolved before anyone reaches for the mouse.

@@ -87,10 +87,15 @@ def identify(base: Path, path: Path, head: Optional[dict[str, Any]]) -> dict[str
     song: dict[str, Any] = {
         'name': title,
         'artists': artists,
-        'album_name': str(head.get('album') or ''),
+        # The index keeps the album as well (from 4.9), so a locked track
+        # comes back on its album instead of loose among the singles.
+        'album_name': str(head.get('album') or notes.get('album') or ''),
         'duration': _int(head.get('duration')),
         'song_id': video_id or f'repair:{path.name}',
     }
+    album_id = str(head.get('album_id') or notes.get('album_id') or '').strip()
+    if album_id:
+        song['album_id'] = album_id
     if _int(head.get('track_number')):
         song['track_number'] = _int(head.get('track_number'))
     if head.get('genre'):
@@ -304,6 +309,10 @@ def _keep(path: Path, base: Path, data_dir: Optional[Path]) -> Optional[Path]:
     if not data_dir:
         return None
     shelf = Path(data_dir) / KEPT / path.relative_to(base)
+    if shelf.exists():
+        # A copy kept by an earlier repair of this track is the original, and
+        # what replaced it is no use if the old key turns up: both are kept.
+        shelf = shelf.with_name(f'{shelf.stem} ({int(time.time())}){shelf.suffix}')
     try:
         shelf.parent.mkdir(parents=True, exist_ok=True)
         # copyfile, not copy2: the copy's date is when it was kept, which is
@@ -363,11 +372,7 @@ def _unlink(path: Path) -> None:
 def _renote(base: Path, path: Path, head: dict[str, Any]) -> None:
     """Point the library's index at what is in the file now."""
 
-    vault.note_track(base, path.relative_to(base).as_posix(), {
-        'title': str(head.get('title') or ''),
-        'artist': str(head.get('artist') or ''),
-        'video_id': str(head.get('video_id') or ''),
-    })
+    vault.note_track(base, path.relative_to(base).as_posix(), vault.index_entry(head))
 
 
 def _online() -> bool:
@@ -506,6 +511,21 @@ class _Jobs:
         for _ in range(spawn):
             threading.Thread(target=self._work, name='repair', daemon=True).start()
         return self._send(forced=True)
+
+    def tidy(self) -> None:
+        """Clear up after repairs a crash or a power cut stopped halfway.
+
+        Run once at startup. A fresh round tidies up as well, but somebody who
+        never repairs again would otherwise keep a stray half-placed copy in
+        the music folder, and every kept original, for good.
+        """
+
+        with self._lock:
+            if self._queue or self._threads:
+                return
+        ctx = self._context() if self._context else None
+        if ctx:
+            prune(ctx[2], ctx[0])
 
     def forget(self, file: str) -> None:
         """A track was deleted: do not repair it, and do not put it back.

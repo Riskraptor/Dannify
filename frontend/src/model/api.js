@@ -4,17 +4,23 @@ import { ref } from 'vue'
 import config from '/src/config.js'
 import { pageIsStale } from '/src/model/staleness'
 
-import { v4 as uuidv4 } from 'uuid'
-
-console.log('using env:', process.env)
-console.log('using config: ', config)
-
 const API = axios.create({
   baseURL: `${config.PROTOCOL}//${config.BACKEND}:${config.PORT}${config.BASEURL}`,
 })
 
-const sessionID = uuidv4()
-console.log('session ID: ', sessionID)
+// Names this window to the live channel. randomUUID is only there on a
+// secure page, and a phone on the LAN opens the app over plain http, so the
+// same thing is made by hand from random bytes when it is missing.
+function makeSessionId() {
+  const c = globalThis.crypto
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID()
+  const b = c.getRandomValues(new Uint8Array(16))
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
+const sessionID = makeSessionId()
 
 getVersion()
 
@@ -218,6 +224,14 @@ function getArtist(name) {
   return API.get(`/api/artists/${encodeURIComponent(name)}`)
 }
 
+// The albums there are saved songs from, and one of them with its songs.
+function getAlbums() {
+  return API.get('/api/albums')
+}
+function getAlbum(artist, name) {
+  return API.get('/api/albums/detail', { params: { artist, name } })
+}
+
 // Something went wrong in the window: into the app's log (see problems.js).
 function reportClientError(payload) {
   return API.post('/api/client-error', payload)
@@ -248,6 +262,23 @@ function addToPlaylist(id, tracks, position = null) {
 }
 function deletePlaylist(id) {
   return API.delete(`/api/playlists/${encodeURIComponent(id)}`)
+}
+
+// What has been listened to: History and Stats (see listens.py).
+function recordListen(payload) {
+  return API.post('/api/listens', payload)
+}
+function getListenStats(days = 0, top = 50) {
+  return API.get('/api/listens/stats', { params: { days, top } })
+}
+function getListenHistory(limit = 100, before = 0) {
+  return API.get('/api/listens/history', { params: { limit, before } })
+}
+function forgetListen(at, key) {
+  return API.delete('/api/listens/item', { params: { at, key } })
+}
+function clearListens() {
+  return API.delete('/api/listens')
 }
 
 // Who the saved artists are online (page id and picture), and one artist's
@@ -343,6 +374,11 @@ function discardUpdate() {
 function exploreSearch(q, limit = 20) {
   return API.get('/api/explore/search', { params: { q, limit } })
 }
+// Ways to finish what is being typed in the search box. Quick to give up:
+// a suggestion that arrives after the search itself is no use to anyone.
+function searchSuggest(q, signal) {
+  return API.get('/api/explore/suggest', { params: { q }, timeout: 4000, signal })
+}
 // Moods and genres (Search before anything is typed).
 function getMoods() {
   return API.get('/api/explore/moods')
@@ -387,6 +423,21 @@ function health() {
 }
 
 // Saved tracks that will not play, downloaded again in place.
+// ListenBrainz, for whoever connects it (Backend/dannify/scrobble.py).
+function listenBrainzStatus() {
+  return API.get('/api/listenbrainz')
+}
+function connectListenBrainz(token) {
+  return API.post('/api/listenbrainz/connect', { token })
+}
+function disconnectListenBrainz() {
+  return API.post('/api/listenbrainz/disconnect')
+}
+// Saved music that will not open at all: look again ('retry'), or let new
+// songs be saved beside the ones that will not ('fresh').
+function recoverStorage(action) {
+  return API.post('/api/storage/recover', { action })
+}
 function repairStatus() {
   return API.get('/api/library/repair')
 }
@@ -440,6 +491,10 @@ export default {
   download,
   downloadBatch,
   health,
+  recoverStorage,
+  listenBrainzStatus,
+  connectListenBrainz,
+  disconnectListenBrainz,
   repairStatus,
   repairTracks,
   repairStop,
@@ -473,6 +528,8 @@ export default {
   searchLibrary,
   getArtists,
   getArtist,
+  getAlbums,
+  getAlbum,
   reportClientError,
   getReportStatus,
   sendReport,
@@ -482,6 +539,11 @@ export default {
   updatePlaylist,
   addToPlaylist,
   deletePlaylist,
+  recordListen,
+  getListenStats,
+  getListenHistory,
+  forgetListen,
+  clearListens,
   getArtistLinks,
   getArtistOnline,
   getStorage,
@@ -489,6 +551,7 @@ export default {
   refreshDetails,
   refreshArtists,
   exploreSearch,
+  searchSuggest,
   exploreArtist,
   getMoods,
   getMoodPlaylists,

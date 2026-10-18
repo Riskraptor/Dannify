@@ -1,7 +1,6 @@
 import API from '/src/model/api'
 import { useUi } from '/src/model/ui'
 import { rememberPlayed } from '/src/model/recent'
-import { notePlayed } from '/src/model/support'
 import {
   GAPLESS_OVERLAP,
   MANUAL_FADE,
@@ -195,7 +194,6 @@ export function playAt(index, { autoplay = true, fade = null, again = false } = 
   if (needsDetails(track)) fillMissingDetails(track)
   if (!again) {
     rememberPlayed(track)
-    notePlayed()
     // For whoever keeps a history of listens (the YouTube Music account).
     if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new CustomEvent('dannify:played', { detail: track }))

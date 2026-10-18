@@ -1,8 +1,13 @@
 # Dannify
 
+[![Latest release](https://img.shields.io/github/v/release/DANIELMWENDWA9451/Dannify?label=release)](https://github.com/DANIELMWENDWA9451/Dannify/releases/latest)
+[![CI](https://github.com/DANIELMWENDWA9451/Dannify/actions/workflows/ci.yml/badge.svg)](https://github.com/DANIELMWENDWA9451/Dannify/actions/workflows/ci.yml)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-informational)](#install)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
+
 A music player for Windows, Linux and macOS. Search for anything, play it
-straight away, and keep the tracks you want as real files with artwork, tags
-and synced lyrics.
+straight away, and save the songs you want to keep in your library, with
+artwork, tags and synced lyrics, to play offline.
 
 I built it because every other option was either a browser tab pretending to
 be an app, or a downloader with no player attached. This is one program: a
@@ -13,21 +18,38 @@ outside the app can reach.
 
 | | |
 | --- | --- |
-| ![Now Playing, with synced lyrics](docs/screenshots/now-playing.png) | ![The Sound panel on the play bar: equalizer over the live spectrum](docs/screenshots/sound.png) |
+| ![Now Playing, with synced lyrics](docs/screenshots/now-playing.png) | ![Your stats: time listened, streaks and a chart of every day](docs/screenshots/stats.png) |
+| ![Albums in your library](docs/screenshots/albums.png) | ![An album, its songs in album order](docs/screenshots/album.png) |
 | ![An artist page](docs/screenshots/artist.png) | ![Search](docs/screenshots/search.png) |
+| ![The command palette](docs/screenshots/palette.png) | ![The Sound panel on the play bar](docs/screenshots/sound.png) |
 | ![Your songs](docs/screenshots/library.png) | ![Home in the light theme](docs/screenshots/home-light.png) |
 
 ## What it does
 
 Search the YouTube Music catalogue and play anything in about a third of a
-second. Results come in as you type.
+second. Suggestions and results come in as you type.
 
-Download whatever you want to keep. MP3, FLAC, OGG, Opus or M4A, tagged
-properly, with cover art embedded and an `.lrc` beside it.
+Save whatever you want to keep. Saved songs live in your library, tagged
+properly, with their artwork and lyrics, and play without a connection. They
+are kept in Dannify's own sealed format, so they play in Dannify and not
+elsewhere.
+
+Your library is organised by song, artist, album and playlist. Each album
+lists its songs in album order with their real track numbers, and one click
+opens the whole album to save the rest of it.
+
+It keeps a listening history, if you want it to. History shows what you
+played day by day, and Your stats shows time listened, streaks, the hours you
+listen at and your top songs, artists and albums. It stays on your computer;
+connect ListenBrainz in Settings and your listens go to your profile there
+too.
 
 Lyrics scroll in a side panel and follow the song. If a track has none, there
 is an editor for writing them and tapping the timing in, and what you write
 goes out to everyone else playing that song.
+
+Ctrl+Shift+P opens a command palette: any page, playback control, setting,
+playlist, artist or album, by typing a few letters.
 
 Sign in with Google and you get your own home feed, liked songs and playlists.
 
@@ -36,6 +58,13 @@ on come back next launch, paused at the second you stopped.
 
 Closing the window keeps the music going. It drops to the tray instead of
 quitting.
+
+When something goes wrong it says so, with the fix beside it: a song that
+will not play can be repaired (downloaded again in the same place), a music
+folder that has gone can be chosen again, and saved songs from another PC or
+account can be started afresh without deleting anything.
+
+What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
@@ -147,7 +176,8 @@ new version, and `migrate` does it from a 3.x folder.
 The version lives in `Backend/dannify/__init__.py`; the build stamps it
 everywhere else. A release is cut from any machine with PowerShell, the
 project's Python environment (`Backend/venv`) and the release key; today that
-is a Linux one. Bump the version, merge, then tag and publish:
+is a Linux one. Bump the version, add its entry to [CHANGELOG.md](CHANGELOG.md),
+merge, then tag and publish:
 
 ```bash
 git tag v<version> && git push origin v<version>

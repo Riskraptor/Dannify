@@ -419,6 +419,13 @@ class Downloader:
             )
 
         song = enrich_from_match(song, match)
+        if not song.get('album_name'):
+            # The search often has nothing to say about the album, and a song
+            # saved without one sits loose in the library for good: a repair
+            # brought every song back that way. Its recording usually knows.
+            from .details import _with_album  # noqa: PLC0415
+
+            song = _with_album(song, video_id)
         stage(2.0, 'Preparing')
 
         basename = self._format_basename(song)
@@ -605,6 +612,7 @@ class Downloader:
         except Exception:
             logger.opt(exception=True).debug('fast download resolve failed')
             resolved = None
+        clients = ydl_opts.get('extractor_args')
         if resolved:
             url = resolved
             ydl_opts['http_chunk_size'] = 1024 * 1024
@@ -612,9 +620,29 @@ class Downloader:
             # client list and its JS solving are dead weight.
             ydl_opts.pop('extractor_args', None)
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            stage(3.0, 'Connecting')
-            ydl.download([url])
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                stage(3.0, 'Connecting')
+                ydl.download([url])
+        except yt_dlp.utils.DownloadError as exc:
+            # The address the fast resolver handed over can be refused when
+            # the bytes are asked for (403: YouTube wants a different client
+            # for this one, or the address was resolved for the player and
+            # has gone stale). Playback already falls back to a full
+            # extraction then (streaming.stream_direct); downloads just
+            # failed, and the song had to be saved again by hand.
+            if not resolved or not _refused(exc) or (cancel is not None and cancel.is_set()):
+                raise
+            logger.info('Stream address refused for {}; downloading the slow way', video_id)
+            from . import streaming as _streaming  # noqa: PLC0415
+
+            _streaming.forget_direct(video_id)
+            url = f'https://music.youtube.com/watch?v={video_id}'
+            if clients is not None:
+                ydl_opts['extractor_args'] = clients
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                stage(3.0, 'Connecting')
+                ydl.download([url])
         if cancel is not None and cancel.is_set():
             raise DownloadStopped()
 
@@ -751,6 +779,10 @@ class Downloader:
             ]
             if ids:
                 meta['artist_ids'] = ids
+            # Which album this is on YouTube Music: what lets the album's page
+            # in the library open the whole of it online.
+            if song.get('album_id'):
+                meta['album_id'] = str(song['album_id'])
             header_details(final_path, song, meta)
             target = target_dir / f'{basename}{vault.SUFFIX}'
             sealed = vault.seal(final_path, target, meta)
@@ -801,11 +833,13 @@ def _remember(root: Path, sealed: Path, song: dict, video_id: str) -> None:
     except ValueError:
         return
     artists = song.get('artists') or []
-    vault.note_track(root, rel, {
+    vault.note_track(root, rel, vault.index_entry({
         'title': song.get('name', '') or '',
         'artist': artists[0] if artists else '',
+        'album': song.get('album_name') or '',
+        'album_id': song.get('album_id') or '',
         'video_id': video_id,
-    })
+    }))
 
 
 def _is_image(data: bytes) -> bool:
@@ -939,6 +973,13 @@ def embed_metadata(path: Path, song: dict[str, Any]) -> None:
         genre=genre or None,
         **extra,
     )
+
+
+def _refused(exc: BaseException) -> bool:
+    """Whether a failed download was the server saying no to the address."""
+
+    text = str(exc)
+    return any(code in text for code in ('HTTP Error 403', 'HTTP Error 410'))
 
 
 def header_details(path: Path, song: dict[str, Any], meta: dict[str, Any]) -> None:
