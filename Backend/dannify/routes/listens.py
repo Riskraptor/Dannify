@@ -1,0 +1,97 @@
+"""What has been listened to: History and Stats (see listens.py)."""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+
+from fastapi import APIRouter, Body, HTTPException, Query
+
+from .. import listens as listens_mod
+from .. import scrobble
+
+router = APIRouter()
+
+
+def _take(payload: dict[str, Any]) -> bool:
+    found = listens_mod.checked(payload.get('track'), payload.get('seconds'), payload.get('started'))
+    if found is None:
+        return False
+    song, at, seconds = found
+    # ``keep: false`` is a listen for ListenBrainz only: the history is
+    # paused, and what is paused is the history, not the account.
+    if payload.get('keep', True) is False:
+        scrobble.submit(song, at, seconds)
+        return False
+    recorded = listens_mod.keep(found)
+    # Only a listen kept now: one already kept was sent when it was.
+    if recorded:
+        scrobble.submit(song, at, seconds)
+    return recorded
+
+
+@router.post('/api/listens')
+async def listen_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """One listen, from the window: ``{track, seconds, started, keep}``.
+
+    ``recorded`` is false for a skip and for one already kept; either way
+    the window has nothing left to hand over.
+    """
+
+    body = payload if isinstance(payload, dict) else {}
+    return {'recorded': await asyncio.to_thread(_take, body)}
+
+
+@router.get('/api/listenbrainz')
+def listenbrainz_status_endpoint() -> dict[str, Any]:
+    return scrobble.status()
+
+
+@router.post('/api/listenbrainz/connect')
+async def listenbrainz_connect_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """Connect with the person's ListenBrainz user token.
+
+    400 when ListenBrainz does not accept it, 503 when it cannot be asked.
+    """
+
+    token = (payload or {}).get('token') if isinstance(payload, dict) else None
+    try:
+        return await asyncio.to_thread(scrobble.connect, str(token or ''))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='invalid') from exc
+    except ConnectionError as exc:
+        raise HTTPException(status_code=503, detail='unreachable') from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail='not kept') from exc
+
+
+@router.post('/api/listenbrainz/disconnect')
+async def listenbrainz_disconnect_endpoint() -> dict[str, Any]:
+    return await asyncio.to_thread(scrobble.disconnect)
+
+
+@router.get('/api/listens/stats')
+async def listens_stats_endpoint(
+    days: int = Query(0, ge=0, le=3660), top: int = Query(50, ge=1, le=200)
+) -> dict[str, Any]:
+    return await asyncio.to_thread(listens_mod.stats, days, top)
+
+
+@router.get('/api/listens/history')
+async def listens_history_endpoint(
+    limit: int = Query(100, ge=1, le=500), before: int = Query(0, ge=0)
+) -> dict[str, Any]:
+    return await asyncio.to_thread(listens_mod.history, limit, before)
+
+
+@router.delete('/api/listens/item')
+async def listen_forget_endpoint(
+    at: int = Query(..., ge=0), key: str = Query(..., min_length=1, max_length=2100)
+) -> dict[str, Any]:
+    return {'removed': await asyncio.to_thread(listens_mod.forget, at, key)}
+
+
+@router.delete('/api/listens')
+async def listens_clear_endpoint() -> dict[str, Any]:
+    await asyncio.to_thread(listens_mod.clear)
+    return {'cleared': True}

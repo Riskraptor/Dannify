@@ -27,9 +27,20 @@ $frontend = Join-Path $root 'frontend'
 $backend = Join-Path $root 'Backend'
 $installer = Join-Path $root 'installer'
 $out = Join-Path $PSScriptRoot 'out'
-$python = Join-Path $backend 'venv\Scripts\python.exe'
+# The Python the build runs on: the one named in DANNIFY_PYTHON, as for
+# publish.ps1, or this checkout's own environment. A checkout that has moved
+# between Linux and Windows can hold a venv\Scripts that points at a Linux
+# Python and cannot start here, so the environment is tried before it is used.
+$python = $env:DANNIFY_PYTHON
+if (-not $python) {
+    $own = Join-Path $backend 'venv\Scripts\python.exe'
+    if (Test-Path $own) {
+        & $own -c 'pass' 2>$null
+        if ($LASTEXITCODE -eq 0) { $python = $own }
+    }
+}
 # No environment of its own on a build machine: the Python that was set up.
-if (-not (Test-Path $python)) { $python = (Get-Command python).Source }
+if (-not $python) { $python = (Get-Command python).Source }
 
 # One source of truth for the version: the package itself.
 $version = (Select-String -Path (Join-Path $backend 'dannify\__init__.py') `

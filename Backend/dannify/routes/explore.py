@@ -102,6 +102,25 @@ async def explore_search_endpoint(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@router.get('/api/explore/suggest')
+async def explore_suggest_endpoint(
+    q: str = Query('', max_length=200), limit: int = Query(8, ge=1, le=20)
+) -> dict[str, Any]:
+    """Ways to finish what is being typed in the search box.
+
+    Never an error: with no connection, or YouTube saying no, the box simply
+    offers nothing, and the search itself is what says why.
+    """
+
+    if not q.strip():
+        return {'suggestions': []}
+    try:
+        return {'suggestions': await asyncio.to_thread(explorer.suggest, q, limit)}
+    except Exception:
+        logger.opt(exception=True).debug('search suggestions failed for {}', q)
+        return {'suggestions': []}
+
+
 @router.get('/api/explore/artist')
 async def explore_artist_endpoint(id: str = Query(...)) -> dict[str, Any]:
     try:

@@ -164,7 +164,10 @@ export async function repairFiles(files, { force = false } = {}) {
   }
 }
 
-/** Repair every saved song the library finds a problem with. */
+/**
+ * Repair every saved song the library finds a problem with. Resolves to how
+ * many it started on, or -1 when it could not start.
+ */
 export async function repairAll() {
   try {
     const snapshot = (await API.repairTracks({ all: true })).data
@@ -175,11 +178,18 @@ export async function repairAll() {
     if (files.length === 1) {
       watching.add(files[0])
       announce(status.value)
+    } else if (!files.length) {
+      // The note that offered this counted songs a moment ago, and they
+      // have come good since (a drive that came back, a key found again).
+      // Saying nothing would leave the button looking broken.
+      toast(t('repair.nothingToDo'), { icon: 'ph:check-circle', tone: 'success' })
     } else {
       started(snapshot)
     }
+    return files.length
   } catch (err) {
     failedToStart(err)
+    return -1
   }
 }
 

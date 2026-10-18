@@ -23,7 +23,9 @@ import time  # noqa: F401  (tests set api.time.monotonic)
 
 from fastapi import APIRouter
 
-from .routes import system, downloads, settings, explore, stream, lyrics, library, playlists, account, updates
+from .routes import (
+    system, downloads, settings, explore, stream, lyrics, library, playlists, account, updates, listens,
+)
 from .routes.common import (  # noqa: F401  (used through api.<name>)
     ConnectionManager,
     DEFAULT_SETTINGS,
@@ -63,5 +65,7 @@ from .routes.updates import (  # noqa: F401  (used through api.<name>)
 # One router for the whole API, in the order the parts were written: a
 # request matches the first route that fits.
 router = APIRouter()
-for _part in (system, downloads, settings, explore, stream, lyrics, library, playlists, account, updates):
+for _part in (
+    system, downloads, settings, explore, stream, lyrics, library, playlists, account, updates, listens,
+):
     router.include_router(_part.router)

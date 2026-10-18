@@ -21,6 +21,9 @@ import API from '/src/model/api'
 import { t } from '/src/i18n'
 import { tp } from '/src/i18n/platform'
 import { useRepair } from '/src/model/repair'
+import { useSettingsManager } from '/src/model/settings'
+import { confirmDialog } from '/src/model/dialog'
+import { toast } from '/src/model/toast'
 
 const props = defineProps({
   // True on screens it must stay off (Now Playing). A prop rather than
@@ -33,7 +36,10 @@ const props = defineProps({
 const problems = ref([])
 const dismissed = ref(false)
 const repair = useRepair()
+const settings = useSettingsManager()
 const running = computed(() => !!repair.status.value.running)
+// One fix at a time, and the buttons say so while it runs.
+const busy = ref(false)
 
 async function check() {
   try {
@@ -59,7 +65,11 @@ function checkSoon() {
 
 function messageFor(p) {
   if (p.code === 'songs_unplayable') return t('health.songsUnplayable', { count: p.tracks })
-  if (p.code === 'storage_unavailable') return t('health.storageUnavailable')
+  if (p.code === 'storage_unavailable') {
+    if (p.state === 'unreadable') return t('health.storageUnreadable')
+    if (p.state === 'unwritable') return t('health.storageUnwritable')
+    return t('health.storageUnavailable')
+  }
   if (p.code === 'folder_missing') return t('health.folderMissing', { path: p.path })
   if (p.code === 'folder_read_only') return t('health.folderReadOnly', { path: p.path })
   if (p.code === 'check_failed') return tp('health.checkFailed')
@@ -73,6 +83,80 @@ const shown = computed(() => problems.value.filter((p) => messageFor(p)))
 const repairable = computed(() =>
   shown.value.find((p) => p.code === 'songs_unplayable' && p.repairable)
 )
+// Saved music that will not open. Looking again is always worth a try (a
+// keyring locked at login opens later); starting fresh only when there are
+// keys here that will never open on this account.
+const storage = computed(() => shown.value.find((p) => p.code === 'storage_unavailable'))
+const folder = computed(() =>
+  shown.value.find((p) => p.code === 'folder_missing' || p.code === 'folder_read_only')
+)
+const checkable = computed(() => !storage.value && shown.value.some((p) => p.code === 'check_failed'))
+
+async function guarded(work) {
+  if (busy.value) return
+  busy.value = true
+  try {
+    await work()
+  } finally {
+    busy.value = false
+  }
+}
+
+function recover(action) {
+  return guarded(async () => {
+    let result = null
+    try {
+      result = (await API.recoverStorage(action)).data
+    } catch {
+      // Said below, the same as a recovery that ran and did not work.
+    }
+    await check()
+    if (result && result.ok) {
+      toast(t(action === 'fresh' ? 'health.freshDone' : 'health.recovered'), {
+        icon: 'ph:check-circle',
+        tone: 'success',
+        timeout: 7000,
+      })
+      return
+    }
+    const now = (result && result.state) || (storage.value && storage.value.state)
+    let text = t('health.freshFailed')
+    if (action === 'retry') {
+      text = now === 'unwritable' ? t('health.stillUnwritable') : t('health.stillUnreadable')
+    }
+    toast(text, { tone: 'error', timeout: 9000 })
+  })
+}
+
+async function startFresh() {
+  const yes = await confirmDialog({
+    title: t('health.freshTitle'),
+    message: t('health.freshMessage'),
+    detail: t('health.freshDetail'),
+    confirmText: t('health.startFresh'),
+    icon: 'ph:arrow-counter-clockwise',
+  })
+  if (yes) await recover('fresh')
+}
+
+function chooseFolder() {
+  return guarded(async () => {
+    const path = await settings.pickDownloadFolder()
+    if (path) await check()
+  })
+}
+
+function checkAgain() {
+  return guarded(check)
+}
+
+function repairEverything() {
+  return guarded(async () => {
+    // Nothing started means nothing was left to do: look again, so the
+    // note goes rather than offering the same button for ever.
+    if ((await repair.repairAll()) === 0) await check()
+  })
+}
 const visible = computed(
   () => !props.away && !dismissed.value && !running.value && shown.value.length > 0
 )
@@ -102,14 +186,49 @@ onUnmounted(() => {
       <div class="note-text">
         <p v-for="p in shown" :key="p.code">{{ messageFor(p) }}</p>
       </div>
-      <button
-        v-if="repairable"
-        class="btn-accent btn-pill press note-btn"
-        @click="repair.repairAll()"
-      >
-        <Icon icon="ph:wrench" class="h-4 w-4" />
-        {{ repairable.tracks > 1 ? t('repair.all') : t('repair.action') }}
-      </button>
+      <div class="note-actions">
+        <template v-if="storage">
+          <button class="btn btn-pill press note-btn" :disabled="busy" @click="recover('retry')">
+            <Icon icon="ph:arrow-clockwise" class="h-4 w-4" :class="{ 'animate-spin': busy }" />
+            {{ t('common.retry') }}
+          </button>
+          <button
+            v-if="storage.state === 'unreadable'"
+            class="btn-accent btn-pill press note-btn"
+            :disabled="busy"
+            @click="startFresh"
+          >
+            <Icon icon="ph:arrow-counter-clockwise" class="h-4 w-4" />
+            {{ t('health.startFresh') }}
+          </button>
+        </template>
+        <button
+          v-else-if="repairable"
+          class="btn-accent btn-pill press note-btn"
+          :disabled="busy"
+          @click="repairEverything"
+        >
+          <Icon icon="ph:wrench" class="h-4 w-4" />
+          {{ repairable.tracks > 1 ? t('repair.all') : t('repair.action') }}
+        </button>
+        <template v-if="folder">
+          <button class="btn btn-pill press note-btn" :disabled="busy" @click="checkAgain">
+            {{ t('health.checkAgain') }}
+          </button>
+          <button class="btn-accent btn-pill press note-btn" :disabled="busy" @click="chooseFolder">
+            <Icon icon="ph:folder-open" class="h-4 w-4" />
+            {{ t('health.chooseFolder') }}
+          </button>
+        </template>
+        <button
+          v-else-if="checkable"
+          class="btn btn-pill press note-btn"
+          :disabled="busy"
+          @click="checkAgain"
+        >
+          {{ t('health.checkAgain') }}
+        </button>
+      </div>
       <button class="note-close" :title="t('common.dismiss')" :aria-label="t('common.dismiss')" @click="dismissed = true">
         <Icon icon="ph:x" class="h-4 w-4" />
       </button>
@@ -152,6 +271,18 @@ onUnmounted(() => {
 
 .note-text p + p {
   margin-top: 4px;
+}
+
+.note-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.note-actions:empty {
+  display: none;
 }
 
 .note-btn {

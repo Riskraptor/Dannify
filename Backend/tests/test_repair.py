@@ -749,3 +749,82 @@ def test_a_download_that_cannot_be_saved_says_so(downloads):
     wrapped = RuntimeError('This song downloaded but could not be saved')
     wrapped.__cause__ = vault.StorageUnavailable('x')
     assert repair._reason(wrapped) == repair.UNAVAILABLE
+
+
+# ---------------------------------------------------------------------------
+# What a repair keeps: the album, the originals, a tidy folder
+# ---------------------------------------------------------------------------
+def test_identify_reads_the_album_from_the_index_for_a_locked_track(tmp_path):
+    path = locked(tmp_path / 'X', 'X - Tune.dnf')
+    vault.note_track(tmp_path, 'X/X - Tune.dnf', vault.index_entry({
+        'title': 'Tune', 'artist': 'X', 'album': 'Night Drive',
+        'album_id': 'MPREb_album', 'video_id': 'TUNETUNETUN',
+    }))
+    song = repair.identify(tmp_path, path, None)
+    assert song['album_name'] == 'Night Drive'
+    assert song['album_id'] == 'MPREb_album'
+    assert song['youtube_id'] == 'TUNETUNETUN'
+
+
+def test_identify_carries_the_album_id_from_the_header(tmp_path):
+    path = sealed(tmp_path, 'A - Song.dnf', album='LP', album_id='MPREb_head')
+    head, _ = vault.inspect(path)
+    assert repair.identify(tmp_path, path, head)['album_id'] == 'MPREb_head'
+
+
+def test_the_index_entry_of_a_saved_song_names_its_album():
+    entry = vault.index_entry({
+        'title': 'T', 'artist': 'A', 'album': 'LP', 'album_id': 'MPREb_x',
+        'video_id': 'VIDVIDVIDVI', 'cover': 'not for the index',
+    })
+    assert entry == {
+        'title': 'T', 'artist': 'A', 'album': 'LP', 'album_id': 'MPREb_x',
+        'video_id': 'VIDVIDVIDVI',
+    }
+
+
+def test_a_second_repair_keeps_the_first_original_too(tmp_path, downloads):
+    music, data = tmp_path / 'music', tmp_path / 'data'
+    path = locked(music, 'A - Twice.dnf', video_id='TWICETWICET')
+    vault.note_track(music, 'A - Twice.dnf', {'title': 'Twice', 'artist': 'A', 'video_id': 'TWICETWICET'})
+    original = path.read_bytes()
+
+    assert repair.fix(music, 'A - Twice.dnf', FakeDownloader(), data) == ('fixed', '')
+    repaired = path.read_bytes()
+    assert repair.fix(music, 'A - Twice.dnf', FakeDownloader(), data, force=True) == ('fixed', '')
+
+    kept = sorted((data / repair.KEPT).iterdir())
+    assert len(kept) == 2
+    assert {p.read_bytes() for p in kept} == {original, repaired}
+
+
+def test_startup_tidies_up_after_a_repair_that_was_cut_off(tmp_path):
+    data, music = tmp_path / 'data', tmp_path / 'music'
+    music.mkdir()
+    stray = music / 'A - B.dnf.incoming'
+    stray.write_bytes(b'half')
+    old = data / repair.KEPT / 'old.dnf'
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b'x')
+    past = time.time() - (repair.KEEP_DAYS + 1) * 86400
+    os.utime(old, (past, past))
+
+    jobs = repair._Jobs()
+    jobs.configure(lambda: (music, None, data), lambda message: None, lambda: None)
+    jobs.tidy()
+
+    assert not stray.exists() and not old.exists()
+
+
+def test_startup_tidying_leaves_a_running_round_alone(tmp_path):
+    music = tmp_path / 'music'
+    music.mkdir()
+    stray = music / 'A - B.dnf.incoming'
+    stray.write_bytes(b'being placed right now')
+
+    jobs = repair._Jobs()
+    jobs.configure(lambda: (music, None, tmp_path / 'data'), lambda message: None, lambda: None)
+    jobs._threads = 1  # a repair is under way
+    jobs.tidy()
+
+    assert stray.exists()

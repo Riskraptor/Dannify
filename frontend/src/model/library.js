@@ -11,6 +11,9 @@ import API from '/src/model/api'
 // a hundred thousand took.
 const tracks = shallowRef([])
 const artists = shallowRef([])
+// The albums there are songs from (see library._album_list), without their
+// songs: those are in `tracks`, and an album's page asks for its own.
+const albums = shallowRef([])
 const loaded = ref(false)
 const loading = ref(false)
 const error = ref(false)
@@ -37,10 +40,17 @@ function refresh() {
     return again
   }
   loading.value = true
-  inflight = Promise.all([API.getLibrary(), API.getArtists()])
-    .then(([lib, art]) => {
+  inflight = Promise.all([
+    API.getLibrary(),
+    API.getArtists(),
+    // Not worth failing the whole library over: without them there is no
+    // Albums page, and every song still plays.
+    API.getAlbums().catch(() => null),
+  ])
+    .then(([lib, art, alb]) => {
       tracks.value = (lib.data && lib.data.tracks) || []
       artists.value = Array.isArray(art.data) ? art.data : []
+      if (alb) albums.value = Array.isArray(alb.data) ? alb.data : []
       loaded.value = true
       error.value = false
       libraryEpoch.value++
@@ -95,6 +105,47 @@ if (typeof window !== 'undefined') {
   })
 }
 
+/**
+ * The library's album a song is on, or null: by the song's album and the
+ * artist page it is on, the way the albums were made.
+ */
+export function albumOf(tr) {
+  if (!tr || !tr.album) return null
+  const name = foldName(tr.album)
+  const who = foldName(tr.group || tr.artist)
+  return albums.value.find((a) => foldName(a.name) === name && foldName(a.artist) === who) || null
+}
+
+// The way the server compares names (library.fold): case, accents and
+// punctuation do not make two albums.
+function foldName(text) {
+  return String(text || '')
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+}
+
+/** An album's saved songs, in album order. */
+export function albumTracks(album) {
+  if (!album) return []
+  const name = foldName(album.name)
+  const who = foldName(album.artist)
+  return tracks.value
+    .filter((tr) => foldName(tr.album) === name && foldName(tr.group || tr.artist) === who)
+    .sort(
+      (a, b) =>
+        (a.track_number || 999) - (b.track_number || 999) ||
+        String(a.title || '').localeCompare(String(b.title || ''))
+    )
+}
+
+/** Where an album's page is: by its artist and its name. */
+export function albumRoute(album) {
+  return { name: 'Album', params: { artist: album.artist, name: album.name } }
+}
+
 export function useLibrary() {
-  return { tracks, artists, loaded, loading, error, refresh, ensureLoaded }
+  return { tracks, artists, albums, loaded, loading, error, refresh, ensureLoaded }
 }

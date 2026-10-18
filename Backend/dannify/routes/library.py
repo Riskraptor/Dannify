@@ -104,6 +104,23 @@ async def artists_endpoint() -> list[dict[str, Any]]:
     return await asyncio.to_thread(library_mod.artists, base)
 
 
+@router.get('/api/albums')
+async def albums_endpoint() -> list[dict[str, Any]]:
+    base = _require_download_dir()
+    return await asyncio.to_thread(library_mod.albums, base)
+
+
+@router.get('/api/albums/detail')
+async def album_detail_endpoint(
+    artist: str = Query(..., max_length=500), name: str = Query(..., max_length=500)
+) -> dict[str, Any]:
+    base = _require_download_dir()
+    detail = await asyncio.to_thread(library_mod.album_detail, base, artist, name)
+    if detail is None:
+        raise HTTPException(status_code=404, detail='Album not found')
+    return detail
+
+
 # ---------------------------------------------------------------------------
 # Refreshing saved songs' details, and artists'
 # ---------------------------------------------------------------------------
