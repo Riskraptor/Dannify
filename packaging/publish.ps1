@@ -25,7 +25,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$Notes,
     # The tag is pushed with the merge, before this runs.
-    [string]$Repo = 'DANIELMWENDWA9451/Dannify',
+    [string]$Repo = 'Riskraptor/Dannify',
     # The platforms this release must carry. Leaving one out is a decision,
     # never something that happens because its build failed.
     [ValidateSet('windows', 'linux', 'macos')][string[]]$Platforms = @('windows', 'linux', 'macos'),

@@ -6,7 +6,7 @@ distributions built on them (Linux Mint, Pop!_OS, elementary, Zorin).
 ## Install
 
 Download `linux-dannify_<version>_amd64.deb` from the
-[releases page](https://github.com/DANIELMWENDWA9451/Dannify/releases) and:
+[releases page](https://github.com/Riskraptor/Dannify/releases) and:
 
 ```bash
 sudo apt install ./linux-dannify_<version>_amd64.deb
