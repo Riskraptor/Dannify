@@ -243,12 +243,12 @@ function onFocusOut(e) {
   transform: scale(1.01);
   text-shadow: 0 0 30px rgb(var(--c-accent) / 0.22);
 }
-/* A soft pool of light behind the line playing: barely there, but it is
-   what makes it findable at a glance in a wall of text. */
 /* Word by word, the glow follows the words already sung instead. */
 .lyrics-lines .lyric-line.active.has-words {
   text-shadow: none;
 }
+/* A soft pool of light behind the line playing: barely there, but it is
+   what makes it findable at a glance in a wall of text. */
 .lyric-line.active::before {
   content: '';
   position: absolute;
