@@ -43,9 +43,13 @@ from . import layout, osenv, release_assets, signing
 # Releases live on Dannify's own repository, which is public. Up to 4.6.1
 # they came from a separate one, dannify-releases, while the source was
 # private; 4.6.2 was published on both so every copy could find its way here.
-DEFAULT_REPO = 'DANIELMWENDWA9451/Dannify'
+# The repository moved from DANIELMWENDWA9451 to Riskraptor in October 2026.
+# GitHub sends requests for the old name on to the new one, which is how
+# 4.9.0 and older find their updates; this version asks the new name
+# directly, so nothing depends on that forwarding lasting.
+DEFAULT_REPO = 'Riskraptor/Dannify'
 # Where About sends people: the page the builds are on.
-SITE_URL = 'https://github.com/DANIELMWENDWA9451/Dannify/releases'
+SITE_URL = 'https://github.com/Riskraptor/Dannify/releases'
 CHECK_TTL = 60 * 60 * 6  # re-check at most every 6 hours
 # A refused check (GitHub's limit is 60 an hour per address, shared by
 # everyone behind the same router) is not retried for this long.
