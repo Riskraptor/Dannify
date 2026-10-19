@@ -110,24 +110,9 @@
   background: rgb(var(--c-accent));
   transition: width 0.4s var(--ease-out);
 }
+/* What's new in the version on offer: the box is WhatsNew.vue's own. */
 .settings .up-notes {
   margin-top: 8px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  border: 1px solid rgb(var(--c-tint) / 0.1);
-  background: rgb(var(--c-tint) / 0.04);
-  display: grid;
-  gap: 8px;
-  font-size: 14px;
-  line-height: 1.55;
-  color: rgb(var(--c-fg) / 0.72);
-}
-.settings .up-notes-head {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .settings .up-flow {
   margin-top: 8px;

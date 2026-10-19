@@ -184,6 +184,16 @@ git tag v<version> && git push origin v<version>
 pwsh packaging/publish.ps1 -Notes "what changed"
 ```
 
+The notes are what the app shows as "What's new", so they are written for
+the people using it: one line that says what the release is, then a
+`## What's new` list and a `## Fixed` list, each item a short title, a colon
+and one sentence ("Albums: every album you have saved songs from…"). Nothing
+about files, commands, repositories or how the release was made: the release
+page lists its files, and installing is described above. Copies before 4.9.2
+show the first twelve lines of the notes as they are, so those must read well
+on their own (see `frontend/src/model/releaseNotes.js`, which also leaves out
+any `## Downloads` section).
+
 Pushing the tag starts the release workflow, which builds every platform on
 GitHub's machines: the Windows setup and update package, the Linux `.deb` and
 the macOS apps. `publish.ps1` waits for it, downloads those builds, signs

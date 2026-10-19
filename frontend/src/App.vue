@@ -59,6 +59,7 @@
   <ToastHost />
   <ShortcutsDialog />
   <CommandPalette />
+  <WhatsNewDialog />
   <ReportDialog />
   <LyricsEditor :open="submitOpen" @close="submitOpen = false" />
   <Onboarding />
@@ -81,6 +82,7 @@ import ToastHost from './components/ui/ToastHost.vue'
 import ReportDialog from '/src/components/ui/ReportDialog.vue'
 import ShortcutsDialog from './components/ui/ShortcutsDialog.vue'
 import CommandPalette from './components/ui/CommandPalette.vue'
+import WhatsNewDialog from './components/ui/WhatsNewDialog.vue'
 import LyricsEditor from './components/lyrics/LyricsEditor.vue'
 import Onboarding from './components/Onboarding.vue'
 import { startOnboarding } from './model/onboarding'
