@@ -284,6 +284,11 @@ def build_app() -> FastAPI:
     from dannify import scrobble as _scrobble
 
     _scrobble.init(DATABASE_DIR)
+    # Discord, for whoever turned it on (see presence.py): nothing at all
+    # happens otherwise.
+    from dannify import presence as _presence
+
+    _presence.init(DATABASE_DIR)
     # This version is running, so whatever was downloaded to get here, or to
     # get to an older one, has done its job. A newer one still waiting stays.
     try:

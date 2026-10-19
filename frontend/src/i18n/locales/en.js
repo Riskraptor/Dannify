@@ -402,6 +402,11 @@ export default {
     lbTokenStopped:
       'ListenBrainz no longer accepts your token, so nothing is being sent. Disconnect, then connect again with your current token.',
     lbConnect: 'Connect',
+    discord: 'Show on Discord',
+    discordHint: 'Your Discord profile shows the song you are playing, with its artwork, and friends can play it too.',
+    discordConnected: 'On: your Discord profile shows what you are playing.',
+    discordWaiting: 'On. Discord is not open on this computer; it shows as soon as Discord is.',
+    discordFailed: 'Could not change that just now. Try again.',
     lbDisconnect: 'Disconnect',
     lbConnectTitle: 'Connect ListenBrainz',
     lbConnectText: 'Paste your user token. You will find it on listenbrainz.org, in your profile settings.',
@@ -1141,6 +1146,9 @@ export default {
     openPlaylist: 'Playlist: {name}',
     openArtist: 'Artist: {name}',
     openAlbum: 'Album: {name}',
+  },
+  discord: {
+    button: 'Play on YouTube Music',
   },
   mixes: {
     shelf: 'Made for you',
