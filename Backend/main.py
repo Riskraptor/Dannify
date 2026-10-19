@@ -269,6 +269,11 @@ def build_app() -> FastAPI:
     # never again drift apart and leave the songs unopenable (see vault.attach).
     from dannify import vault as _vault
     _vault.init(DATABASE_DIR)
+    # What every saved song is, kept between runs so the library opens at
+    # once however big it is (see library.init).
+    from dannify import library as _library_index
+
+    _library_index.init(DATABASE_DIR)
     try:
         _vault.attach(download_dir)
     except Exception:

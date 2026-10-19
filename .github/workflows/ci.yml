@@ -103,6 +103,10 @@ jobs:
         run: npx vitest run
       - name: Build
         run: npx vite build
+      # What every start reads before anything is drawn: it may only grow on
+      # purpose (see the script for the limits).
+      - name: Size budget
+        run: node scripts/size-budget.mjs
 
   installer:
     runs-on: windows-latest

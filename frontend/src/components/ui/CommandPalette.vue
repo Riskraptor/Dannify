@@ -195,7 +195,9 @@ watch(
     active.value = 0
     await nextTick()
     field.value && field.value.focus()
-  }
+  },
+  // Loaded the first time it is opened (App.vue), so already open then.
+  { immediate: true }
 )
 </script>
 
