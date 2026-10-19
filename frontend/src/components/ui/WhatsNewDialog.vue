@@ -56,17 +56,22 @@ function onKey(e) {
   trapTab(e, box.value)
 }
 
-watch(shown, async (now) => {
-  if (!now) {
-    const back = giveBack
-    giveBack = null
-    back?.()
-    return
-  }
-  giveBack = rememberFocus()
-  await nextTick()
-  ;(okBtn.value || box.value)?.focus()
-})
+watch(
+  shown,
+  async (now) => {
+    if (!now) {
+      const back = giveBack
+      giveBack = null
+      back?.()
+      return
+    }
+    giveBack = rememberFocus()
+    await nextTick()
+    ;(okBtn.value || box.value)?.focus()
+  },
+  // Loaded the first time it is shown (App.vue), so already showing then.
+  { immediate: true }
+)
 </script>
 
 <style scoped>

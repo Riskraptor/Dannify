@@ -13,6 +13,7 @@ import { installDesktopIntegration } from './desktop/integration'
 import { startArtAccent } from './model/artAccent'
 import { installErrorReporting } from './model/problems'
 import { startListening } from './model/listens'
+import { localeReady } from './i18n'
 import { vOverlayScroll } from './model/overlayScroll'
 
 import './index.css'
@@ -26,6 +27,8 @@ app.directive('overlay-scroll', vOverlayScroll)
 app.use(router)
 installShortcuts()
 installDesktopIntegration()
-app.mount('#app')
+// Drawn once the language it starts in has arrived: a moment for anything
+// but English, and no flash of English before it.
+localeReady.finally(() => app.mount('#app'))
 startArtAccent()
 startListening()

@@ -30,8 +30,12 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
-import yt_dlp
 from loguru import logger
+
+from .lazy import LazyModule
+
+# Imported when a song first needs it (see lazy.py).
+yt_dlp = LazyModule('yt_dlp')
 
 from . import providers, spotify
 

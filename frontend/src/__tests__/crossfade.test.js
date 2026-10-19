@@ -225,10 +225,35 @@ describe('crossfade', () => {
     expect(second.paused).toBe(false)
     // Both are heard while one fades into the other...
     expect(playing()).toHaveLength(2)
-    // ...and then the first one stops.
+    // ...and then the first one stops. Its deck does not sit idle: the song
+    // after is loaded on it, ready for Next (see prepareNext).
     await vi.advanceTimersByTimeAsync(6100)
     expect(playing()).toEqual([second])
-    expect(first.src).toBe('')
+    expect(first.paused).toBe(true)
+    expect(first.src).not.toBe(track(0).url)
+  })
+
+  it('has the next song ready a few seconds in, so Next starts it at once', async () => {
+    await startQueue()
+    at(3)
+    await vi.advanceTimersByTimeAsync(6100)
+    const ready = FakeAudio.all.find((a) => a.src === track(1).url)
+    expect(ready).toBeTruthy()
+    expect(ready.paused).toBe(true)
+    const elements = FakeAudio.all.length
+    P.next()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(title()).toBe('Song 1')
+    expect(ready.paused).toBe(false)
+    expect(FakeAudio.all.length).toBe(elements) // nothing loaded from scratch
+  })
+
+  it('does not get a song ready while the same one repeats', async () => {
+    P.setRepeat ? P.setRepeat('one') : (P.repeatMode.value = 'one')
+    await startQueue()
+    at(3)
+    await vi.advanceTimersByTimeAsync(6100)
+    expect(FakeAudio.all.find((a) => a.src === track(1).url)).toBeFalsy()
   })
 
   it('does not move on twice when the faded song reaches its end', async () => {
