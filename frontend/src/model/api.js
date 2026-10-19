@@ -271,6 +271,13 @@ function recordListen(payload) {
 function getListenStats(days = 0, top = 50) {
   return API.get('/api/listens/stats', { params: { days, top } })
 }
+// Mixes made from the listening, and a year of it (Backend listens.py).
+function getMixes() {
+  return API.get('/api/listens/mixes')
+}
+function getRecap(year = 0) {
+  return API.get('/api/listens/recap', { params: { year } })
+}
 function getListenHistory(limit = 100, before = 0) {
   return API.get('/api/listens/history', { params: { limit, before } })
 }
@@ -542,6 +549,8 @@ export default {
   recordListen,
   getListenStats,
   getListenHistory,
+  getMixes,
+  getRecap,
   forgetListen,
   clearListens,
   getArtistLinks,

@@ -13,7 +13,9 @@ import {
   resetLyricsOffset,
   saveLyricsOffset,
   seekToLyric,
+  setWordByWord,
   switchLyricVersion,
+  wordByWord,
 } from '/src/model/player/lyrics'
 import { trackFromFile, trackFromSong } from '/src/model/player/makeTrack'
 import { mediaCommand } from '/src/model/player/mediaSession'
@@ -83,6 +85,7 @@ import {
   currentTime,
   currentTrack,
   duration,
+  frameTime,
   isBuffering,
   isMuted,
   isPlaying,
@@ -176,6 +179,9 @@ export function usePlayer() {
     resetLyricsOffset,
     saveLyricsOffset,
     switchLyricVersion,
+    wordByWord,
+    setWordByWord,
+    frameTime,
     // playback
     setPlaylist,
     restoreSession,

@@ -54,24 +54,34 @@
     </section>
 
     <div class="shelves">
-      <!-- What has been played most this month, from the app's own history
-           (model/listens.js): there signed out and offline, unlike the feed. -->
+      <!-- Mixes made from the listening and the library (model/mixes.js),
+           and the year so far: there signed out and offline, unlike the feed. -->
       <Shelf
-        v-if="onRepeat.length"
-        :title="t('stats.onRepeat')"
+        v-if="mixes.length || hasYear"
+        :title="t('mixes.shelf')"
         :more-label="t('stats.nav')"
         @more="router.push({ name: 'Stats' })"
       >
-        <MediaCard
-          v-for="(row, i) in onRepeat"
-          :key="row.key"
-          :item="{ name: row.title, cover: row.cover }"
-          kind="track"
-          :subtitle-text="row.artistText"
-          playable
-          :menu="() => trackMenu([row], { source: onRepeat })"
-          @open="playRows(onRepeat, i)"
-          @play="playRows(onRepeat, i)"
+        <MixCard
+          v-for="mix in mixes"
+          :key="mix.id"
+          :title="t(MIXES[mix.id].title)"
+          :subtitle="t(MIXES[mix.id].text)"
+          :covers="mixCovers(mix.rows)"
+          :icon="MIXES[mix.id].icon"
+          :tone="MIXES[mix.id].tone"
+          @open="router.push({ name: 'Mix', params: { id: mix.id } })"
+          @play="playRows(mix.rows, 0)"
+        />
+        <MixCard
+          v-if="hasYear"
+          :title="t('recap.card', { year: thisYear })"
+          :subtitle="t('recap.cardText')"
+          :covers="yearCovers"
+          icon="ph:confetti"
+          tone="mix-year"
+          :playable="false"
+          @open="router.push({ name: 'Recap' })"
         />
       </Shelf>
 
@@ -129,21 +139,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Played a good deal once, and not for a month. -->
-      <Shelf v-if="rediscover.length" :title="t('stats.rediscover')">
-        <MediaCard
-          v-for="(row, i) in rediscover"
-          :key="row.key"
-          :item="{ name: row.title, cover: row.cover }"
-          kind="track"
-          :subtitle-text="row.artistText"
-          playable
-          :menu="() => trackMenu([row], { source: rediscover })"
-          @open="playRows(rediscover, i)"
-          @play="playRows(rediscover, i)"
-        />
-      </Shelf>
 
       <Shelf
         v-if="account.signedIn.value && likedRows.length"
@@ -273,9 +268,11 @@ import { useI18n } from '/src/i18n'
 import { useSupport } from '/src/model/support'
 import { useListens } from '/src/model/listens'
 import { entryRow } from '/src/model/playlists'
+import { mixCovers, MIXES, useMixes } from '/src/model/mixes'
 import Shelf from '/src/components/ui/Shelf.vue'
 import SongTile from '/src/components/ui/SongTile.vue'
 import MediaCard from '/src/components/MediaCard.vue'
+import MixCard from '/src/components/MixCard.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -304,28 +301,26 @@ onActivated(() => {
   loadListening()
 })
 
-// The month's listening, for "On repeat" and "Rediscover". A shelf of one or
-// two songs reads as something missing, so each waits until it has a few.
+// Made for you: the mixes (model/mixes.js), and the year so far once there
+// is a year to look back on.
+const { mixes, refresh: refreshMixes } = useMixes()
 const listens = useListens()
-const month = shallowRef(null)
+const thisYear = new Date().getFullYear()
+const year = shallowRef(null)
 async function loadListening() {
+  refreshMixes()
   try {
-    month.value = await listens.fetchStats(30, 12)
+    // This year so far: from the first of January to today.
+    const days = Math.floor((Date.now() - new Date(thisYear, 0, 1)) / 86400000) + 1
+    year.value = await listens.fetchStats(days, 4)
   } catch {
-    // The two shelves just are not there.
+    // The year card just is not there.
   }
 }
 loadListening()
 watch(listens.listensEpoch, loadListening)
-function listenRows(songs) {
-  // Made again when the library is read: a song saved since plays from disk.
-  void lib.tracks.value
-  return songs.length >= 3 ? songs.map(entryRow) : []
-}
-const onRepeat = computed(() =>
-  listenRows(((month.value && month.value.top_songs) || []).filter((s) => s.plays >= 2))
-)
-const rediscover = computed(() => listenRows((month.value && month.value.rediscover) || []))
+const hasYear = computed(() => !!(year.value && year.value.plays >= 10))
+const yearCovers = computed(() => mixCovers(((year.value && year.value.top_songs) || []).map(entryRow)))
 
 // Home is where most sessions start, so the songs at the top of it get
 // resolved before anyone reaches for the mouse.
