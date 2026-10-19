@@ -2,7 +2,8 @@ import { ref, computed, watch } from 'vue'
 import API from '/src/model/api'
 import { desktop } from '/src/desktop/bridge'
 import { toast } from '/src/model/toast'
-import { alertDialog, confirmDialog } from '/src/model/dialog'
+import { confirmDialog } from '/src/model/dialog'
+import { hasNotes, readNotes } from '/src/model/releaseNotes'
 import { t, currentLocale } from '/src/i18n'
 
 // In-app updates.
@@ -253,22 +254,11 @@ function skipVersion() {
 // still waiting (the app was restarted before it could be swapped in), and
 // the note that one just was, which is shown once.
 
-function noteLines(notes) {
-  return String(notes || '')
-    .split(/\r?\n+/)
-    .map((l) => l.replace(/^[#*\-\s]+/, '').trim())
-    .filter(Boolean)
-    .slice(0, 10)
-}
+/** The version Dannify just updated to, while its "What's new" is open. */
+export const whatsNew = ref(null)
 
-async function showWhatsNew(version, notes) {
-  const lines = noteLines(notes)
-  await alertDialog({
-    title: t('update.whatsNewTitle', { version }),
-    message: lines.join('\n') || t('update.whatsNewEmpty'),
-    confirmText: t('update.gotIt'),
-    icon: 'ph:sparkle-fill',
-  })
+function showWhatsNew(version, notes) {
+  whatsNew.value = { version, notes: String(notes || '') }
 }
 
 let rollbackShown = false
@@ -294,7 +284,6 @@ async function loadStatus() {
           icon: 'ph:arrow-counter-clockwise',
           tone: 'error',
           timeout: 15000,
-          action: { label: t('update.releaseNotes'), run: () => desktop.openExternal(siteUrl.value) },
         }
       )
     }
@@ -305,7 +294,7 @@ async function loadStatus() {
         icon: 'ph:sparkle-fill',
         tone: 'success',
         timeout: 10000,
-        action: noteLines(notes).length
+        action: hasNotes(readNotes(notes))
           ? { label: t('update.whatsNew'), run: () => showWhatsNew(version, notes) }
           : undefined,
       })

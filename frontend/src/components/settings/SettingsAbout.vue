@@ -7,10 +7,6 @@
         <p class="row-label">Dannify</p>
         <p class="row-hint">{{ t('settings.version', { version }) }}</p>
       </div>
-      <button class="btn" @click="desktop.openExternal(updates.siteUrl.value)">
-        <Icon icon="ph:download-simple" class="h-4 w-4" />
-        {{ t('settings.builds') }}
-      </button>
     </div>
     <label class="row">
       <Icon icon="ph:arrows-clockwise" class="row-icon" />
@@ -56,13 +52,13 @@
     </div>
 
     <!-- What is in the new version, here, rather than behind a link to
-         a page on the internet. -->
-    <div v-if="updates.available.value && noteLines.length" class="up-notes">
-      <p class="up-notes-head">
-        {{ t('update.releaseNotes') }} &middot; {{ updates.info.value.version }}
-      </p>
-      <p v-for="(line, i) in noteLines" :key="i">{{ line }}</p>
-    </div>
+         a page on the internet: what is new, not how it is packaged. -->
+    <WhatsNew
+      v-if="updates.available.value"
+      class="up-notes"
+      :version="updates.info.value.version"
+      :notes="updates.info.value.notes"
+    />
 
     <!-- What the update is actually doing. Most of the wait is spent
          working out which files changed, and a bar on its own at 0%
@@ -119,8 +115,8 @@ import { useUi } from '/src/model/ui'
 import { useUpdates } from '/src/model/updates'
 import { useConnectivity } from '/src/model/connectivity'
 import { useReporting } from '/src/model/problems'
-import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
+import WhatsNew from '/src/components/ui/WhatsNew.vue'
 
 const { t } = useI18n()
 const ui = useUi()
@@ -131,16 +127,6 @@ const version = appVersion
 
 // "Report a problem": written and sent in the app (model/problems.js).
 const reporting = useReporting()
-
-// The notes come back as one block of text. Split it for reading, and never
-// render it as markup: it arrives over the network.
-const noteLines = computed(() =>
-  String(updates.info.value.notes || '')
-    .split(/\r?\n+/)
-    .map((l) => l.replace(/^[#*\-\s]+/, '').trim())
-    .filter(Boolean)
-    .slice(0, 12)
-)
 
 const updateHint = computed(() => {
   if (updates.downloading.value) {
