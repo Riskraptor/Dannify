@@ -385,7 +385,6 @@ export default {
     languageHint: 'Choose the interface language.',
     about: 'About',
     version: 'Version {version}',
-    builds: 'All versions',
     shortcutsHint: 'Every keyboard shortcut in one place (Ctrl+/).',
     showShortcuts: 'View shortcuts',
     historyGroup: 'Listening history',
@@ -478,7 +477,7 @@ export default {
     checkFailedLinux:
       'Dannify could not check itself just now. If anything looks wrong, quit it from the system tray and open it again.',
     updateFailed:
-      'Version {wanted} was downloaded but did not install: this is still {running}. Try the update again, and if it keeps happening, install {wanted} over the top from the releases page.',
+      'Version {wanted} did not install, so this is still {running}. Dannify will try again with the next update.',
   },
   repair: {
     action: 'Repair',
@@ -859,9 +858,8 @@ export default {
     installMessageMac: 'Dannify will restart as the new version.',
     installMessageLinux: 'Dannify will ask for your password to install the update, then restart.',
     downloadManual: 'Download',
-    manualHint: 'Version {version} is out. This copy cannot update itself: download it from the website and install it over this one.',
+    manualHint: 'Dannify {version} is ready. Download it and install it over this one.',
     installFailed: 'Could not start the update.',
-    releaseNotes: 'Release notes',
     skip: 'Skip this version',
     mb: 'MB',
     stage: {
@@ -877,6 +875,7 @@ export default {
     whatsNew: "What's new",
     whatsNewTitle: "What's new in {version}",
     whatsNewEmpty: 'Fixes and improvements.',
+    fixedHeading: 'Fixed',
     gotIt: 'Got it',
     rolledBack:
       'Dannify {version} would not start on this computer, so you are back on {running}. It will not be offered again; the next version will be.',
