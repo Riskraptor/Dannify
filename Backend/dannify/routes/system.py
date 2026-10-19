@@ -181,7 +181,7 @@ async def recover_storage_endpoint(payload: Optional[dict[str, Any]] = Body(None
 # Storage: what the library takes up, and the caches that can go
 # ---------------------------------------------------------------------------
 
-_CACHE_FILES = ('lyrics_cache.json', 'direct_cache.json', 'artist_links.json')
+_CACHE_FILES = ('lyrics_cache.json', 'direct_cache.json', 'artist_links.json', library_mod.INDEX_FILE)
 
 
 _CACHE_DIRS = ('ytdlp-cache',)
@@ -232,6 +232,8 @@ async def clear_caches_endpoint() -> dict[str, Any]:
         lyrics_mod.clear_cache()
         streaming.clear_direct_cache()
         artist_links.clear()
+        # Read again from the songs themselves at the next look.
+        library_mod.forget_index()
         if state.data_dir:
             for name in _CACHE_DIRS:
                 folder = Path(state.data_dir) / name

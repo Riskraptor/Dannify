@@ -140,7 +140,9 @@ watch(
     player.noAutoAdvance.value = true
     bindKeys(true)
     s.open()
-  }
+  },
+  // Loaded the first time it is opened (App.vue), so already open then.
+  { immediate: true }
 )
 
 onBeforeUnmount(leave)
