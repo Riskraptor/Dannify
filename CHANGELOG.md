@@ -27,6 +27,12 @@ Music made for you.
 - **The music keeps going offline.** When the queue runs out and YouTube
   Music's mix cannot be had, Dannify carries on from your library: more by
   the same artist first, then the same album, then the rest.
+- **Show on Discord.** Your Discord profile can show the song you are
+  playing, "Listening to Dannify", with its artwork, a progress bar that
+  follows pauses and skips, and a button for friends to play it on YouTube
+  Music. It talks to the Discord app on your computer directly, connects by
+  itself whenever Discord is open, and is off until you turn it on in
+  Settings, Playback.
 
 Fixed:
 
