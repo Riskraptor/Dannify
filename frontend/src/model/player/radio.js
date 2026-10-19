@@ -13,6 +13,8 @@ import {
   videoIdOf,
 } from '/src/model/player/state'
 import { playAt } from '/src/model/player/transport'
+import { useLibrary } from '/src/model/library'
+import { chooseFromLibrary } from '/src/model/player/libraryRadio'
 
 // Autoplay: when the queue runs dry, keep going with YouTube Music's endless
 // mix for the last track: the behaviour every streaming app has.
@@ -37,21 +39,54 @@ export function setAutoplayRadio(on) {
 export async function extendWithRadio() {
   if (!autoplayRadio.value) return false
   const id = videoIdOf(currentTrack.value)
-  if (!id || radioSeed === id) return false
-  radioSeed = id
   const gen = playGen
-  try {
-    const res = await API.getRadio(id)
-    const songs = (res.data && res.data.songs) || []
-    if (!songs.length || gen !== playGen) return gen !== playGen
-    const at = playlist.value.length
-    const added = shuffle.value ? addToShuffleOrder(at, songs.length, { mix: true }) : null
-    playlist.value = [...playlist.value, ...songs.map(trackFromSong)]
-    playAt(added ? added[0] : at)
-    return true
-  } catch {
-    return false
+  if (id && radioSeed !== id) {
+    radioSeed = id
+    try {
+      const res = await API.getRadio(id)
+      const songs = (res.data && res.data.songs) || []
+      if (gen !== playGen) return true
+      if (songs.length) {
+        append(songs.map(trackFromSong))
+        return true
+      }
+    } catch {
+      // Offline, most likely: the library carries on instead.
+    }
+    if (gen !== playGen) return true
   }
+  return continueFromLibrary()
+}
+
+function append(tracks) {
+  const at = playlist.value.length
+  const added = shuffle.value ? addToShuffleOrder(at, tracks.length, { mix: true }) : null
+  playlist.value = [...playlist.value, ...tracks]
+  playAt(added ? added[0] : at)
+}
+
+// No mix to be had (offline, or a song YouTube knows nothing of): more from
+// the library, by the same artist first (libraryRadio.js).
+function continueFromLibrary() {
+  const current = currentTrack.value || {}
+  const known = useLibrary().tracks.value
+  const mine = known.find((tr) => tr.file && tr.file === current.file) || current
+  const chosen = chooseFromLibrary(mine, known, playlist.value)
+  if (!chosen.length) return false
+  append(
+    chosen.map((tr) => ({
+      type: 'local',
+      file: tr.file,
+      url: API.downloadFileURL(tr.file),
+      cover: API.coverFileURL(tr.file, Math.floor(tr.added || 0)),
+      title: tr.title,
+      artist: tr.artist_display || tr.artist,
+      album: tr.album,
+      duration: tr.duration,
+      video_id: tr.video_id || '',
+    }))
+  )
+  return true
 }
 
 /** Replace the queue with a station built around one song. */

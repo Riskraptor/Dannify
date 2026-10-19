@@ -18,6 +18,7 @@ outside the app can reach.
 
 | | |
 | --- | --- |
+| ![Made for you: mixes on Home that keep up with your listening](docs/screenshots/made-for-you.png) | ![Your year in music, told as a story](docs/screenshots/year-in-music.png) |
 | ![Now Playing, with synced lyrics](docs/screenshots/now-playing.png) | ![Your stats: time listened, streaks and a chart of every day](docs/screenshots/stats.png) |
 | ![Albums in your library](docs/screenshots/albums.png) | ![An album, its songs in album order](docs/screenshots/album.png) |
 | ![An artist page](docs/screenshots/artist.png) | ![Search](docs/screenshots/search.png) |
@@ -42,11 +43,21 @@ It keeps a listening history, if you want it to. History shows what you
 played day by day, and Your stats shows time listened, streaks, the hours you
 listen at and your top songs, artists and albums. It stays on your computer;
 connect ListenBrainz in Settings and your listens go to your profile there
-too.
+too. Turn on Show on Discord and your Discord profile shows what you are
+playing, with its artwork and a progress bar.
 
-Lyrics scroll in a side panel and follow the song. If a track has none, there
-is an editor for writing them and tapping the timing in, and what you write
-goes out to everyone else playing that song.
+From that history Home makes you mixes that keep themselves up to date: On
+Repeat, Top This Month, Forgotten Favourites and Recently Added. Your year in
+music tells the story of the year: minutes, top artist, top songs, the time
+of day you listen most and the artists you discovered.
+
+Lyrics scroll in a side panel and follow the song, lighting up word by word
+as each line is sung. If a track has none, there is an editor for writing
+them and tapping the timing in, and what you write goes out to everyone else
+playing that song.
+
+When the queue runs out, the music keeps going with songs like the last one,
+and from your own library when there is no connection.
 
 Ctrl+Shift+P opens a command palette: any page, playback control, setting,
 playlist, artist or album, by typing a few letters.

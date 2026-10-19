@@ -1,6 +1,21 @@
 <template>
   <div class="np">
-    <div v-if="cur && cur.cover" class="np-bg" :style="{ backgroundImage: `url('${cur.cover}')` }" aria-hidden="true" />
+    <!-- The artwork, blurred into light that drifts while the music plays and
+         rests when it stops; one song's light fades into the next. The blur
+         is drawn once per layer and only the layer moves, so this costs the
+         graphics card a slide, not a blur sixty times a second. -->
+    <transition name="np-bg-fade">
+      <div
+        v-if="cur && cur.cover"
+        :key="cur.cover"
+        class="np-bg"
+        :class="{ 'is-playing': player.isPlaying.value }"
+        aria-hidden="true"
+      >
+        <span class="np-bg-layer np-bg-a"><i :style="{ backgroundImage: `url('${cur.cover}')` }" /></span>
+        <span class="np-bg-layer np-bg-b"><i :style="{ backgroundImage: `url('${cur.cover}')` }" /></span>
+      </div>
+    </transition>
     <div class="np-shade" aria-hidden="true" />
 
     <header class="np-top">
@@ -41,7 +56,7 @@
 
     <div v-else class="np-body">
       <section class="np-left">
-        <div class="np-cover-wrap" @contextmenu="onMenu">
+        <div class="np-cover-wrap" :class="{ 'is-resting': !player.isPlaying.value }" @contextmenu="onMenu">
           <CoverImage :src="cur.cover" radius="lg" class="np-cover" eager />
           <span v-if="player.isBuffering.value" class="np-buffer">
             <span class="spinner h-8 w-8 text-white" />
@@ -142,15 +157,65 @@ function onMore(e) {
 }
 .np-bg {
   position: absolute;
-  inset: -120px;
+  inset: -160px;
+  opacity: 0.62;
+}
+.np-bg-layer {
+  position: absolute;
+  inset: 0;
+  /* A layer of its own: its blurred picture is drawn once and then moved. */
+  will-change: transform;
+  animation: np-drift-a 46s ease-in-out infinite alternate;
+  animation-play-state: paused;
+}
+.np-bg-layer i {
+  position: absolute;
+  inset: 0;
   background-size: cover;
   background-position: center;
-  filter: blur(90px) saturate(1.5);
+  filter: blur(90px) saturate(1.6);
+}
+.np-bg-b {
   opacity: 0.55;
-  transform: scale(1.1);
-  /* A layer of its own: blurred once and then moved, instead of blurred
-     again on every repaint while the page scrolls. */
-  will-change: transform;
+  mix-blend-mode: screen;
+  animation-name: np-drift-b;
+  animation-duration: 63s;
+}
+.np-bg.is-playing .np-bg-layer {
+  animation-play-state: running;
+}
+@keyframes np-drift-a {
+  from {
+    transform: scale(1.12) rotate(0deg) translate(0, 0);
+  }
+  to {
+    transform: scale(1.32) rotate(24deg) translate(4%, -3%);
+  }
+}
+@keyframes np-drift-b {
+  from {
+    transform: scale(1.3) rotate(180deg) translate(0, 0);
+  }
+  to {
+    transform: scale(1.1) rotate(150deg) translate(-5%, 4%);
+  }
+}
+.np-bg-fade-enter-active,
+.np-bg-fade-leave-active {
+  transition: opacity 1.1s ease;
+}
+.np-bg-fade-enter-from,
+.np-bg-fade-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .np-bg-layer {
+    animation: none;
+  }
+  .np-bg-fade-enter-active,
+  .np-bg-fade-leave-active {
+    transition: none;
+  }
 }
 .np-shade {
   position: absolute;
@@ -221,11 +286,29 @@ function onMore(e) {
   /* Without this the column stretches it to full width and the square
      becomes a letterbox. */
   align-self: flex-start;
+  /* Full size while the music plays, settled back a little when it stops. */
+  transform-origin: center;
+  transition:
+    transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 0.55s ease;
+}
+.np-cover-wrap.is-resting {
+  transform: scale(0.94);
+  filter: saturate(0.85);
 }
 .np-cover {
   width: 100%;
   height: 100%;
   box-shadow: 0 24px 70px rgb(0 0 0 / 0.55);
+  transition: box-shadow 0.55s ease;
+}
+.is-resting .np-cover {
+  box-shadow: 0 14px 40px rgb(0 0 0 / 0.45);
+}
+@media (prefers-reduced-motion: reduce) {
+  .np-cover-wrap {
+    transition: none;
+  }
 }
 .np-buffer {
   position: absolute;

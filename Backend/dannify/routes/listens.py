@@ -77,6 +77,22 @@ async def listens_stats_endpoint(
     return await asyncio.to_thread(listens_mod.stats, days, top)
 
 
+@router.get('/api/listens/mixes')
+async def listens_mixes_endpoint() -> dict[str, Any]:
+    """On repeat, Forgotten favourites and Top this month (see listens.mixes)."""
+
+    return await asyncio.to_thread(listens_mod.mixes)
+
+
+@router.get('/api/listens/recap')
+async def listens_recap_endpoint(year: int = Query(0, ge=0, le=9999)) -> dict[str, Any]:
+    """A year of listening; this year when none is named."""
+
+    import datetime  # noqa: PLC0415
+
+    return await asyncio.to_thread(listens_mod.recap, year or datetime.date.today().year)
+
+
 @router.get('/api/listens/history')
 async def listens_history_endpoint(
     limit: int = Query(100, ge=1, le=500), before: int = Query(0, ge=0)

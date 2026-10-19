@@ -21,7 +21,7 @@
           :key="idx"
           :ref="(el) => follow.setLineEl(el, idx)"
           class="lyric-line"
-          :class="{ active: idx === active, past: idx < active }"
+          :class="{ active: idx === active, past: idx < active, 'has-words': idx === active && byWord }"
           :style="{ '--d': Math.min(4, Math.abs(idx - active)) }"
           :tabindex="idx === tabStop ? 0 : -1"
           :aria-current="idx === active ? 'true' : undefined"
@@ -30,7 +30,10 @@
           @focus="focused = idx"
         >
           <span class="lyric-stamp" aria-hidden="true">{{ formatShort(line.time) }}</span>
-          <span class="lyric-text">{{ line.text || '♪' }}</span>
+          <span v-if="idx === active && byWord" class="lyric-text">
+            <LyricWords :line="line" :next="nextTime" />
+          </span>
+          <span v-else class="lyric-text">{{ line.text || '♪' }}</span>
         </li>
       </ol>
       <div class="spacer-bottom" aria-hidden="true" />
@@ -55,6 +58,7 @@ import { usePlayer } from '/src/model/player'
 import { useI18n } from '/src/i18n'
 import { formatShort } from '/src/model/lyrics/lrc'
 import { useLyricsFollow } from '/src/model/lyrics/useLyricsFollow'
+import LyricWords from '/src/components/lyrics/LyricWords.vue'
 
 defineProps({ large: { type: Boolean, default: false } })
 
@@ -69,6 +73,17 @@ const focused = ref(-1)
 const tabStop = computed(() => (focused.value >= 0 ? focused.value : Math.max(0, active.value)))
 
 const follow = useLyricsFollow({ container: scroll, active, lines })
+
+// Word by word on the line playing, when it has words to sing (a '♪' line
+// has none) and the setting is on.
+const byWord = computed(() => {
+  const line = lines.value[active.value]
+  return player.wordByWord.value && !!(line && line.text)
+})
+const nextTime = computed(() => {
+  const line = lines.value[active.value + 1]
+  return line ? line.time : null
+})
 
 function focusLine(idx) {
   const to = Math.max(0, Math.min(lines.value.length - 1, idx))
@@ -218,9 +233,8 @@ function onFocusOut(e) {
   opacity: 1;
 }
 
-/* The whole line lights up when it starts, rather than colouring in word by
-   word: word timings are often a little off, and a sweep that runs ahead of
-   the voice is worse than none. */
+/* The line playing. Word by word (LyricWords.vue) it fills in as it is
+   sung; with that turned off the whole line lights up as it starts. */
 .lyric-line.active {
   color: rgb(var(--c-fg));
   font-size: 1.62rem;
@@ -228,6 +242,10 @@ function onFocusOut(e) {
   filter: none;
   transform: scale(1.01);
   text-shadow: 0 0 30px rgb(var(--c-accent) / 0.22);
+}
+/* Word by word, the glow follows the words already sung instead. */
+.lyrics-lines .lyric-line.active.has-words {
+  text-shadow: none;
 }
 /* A soft pool of light behind the line playing: barely there, but it is
    what makes it findable at a glance in a wall of text. */

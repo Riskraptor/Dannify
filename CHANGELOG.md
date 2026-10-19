@@ -4,6 +4,43 @@ What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
 page](https://github.com/Riskraptor/Dannify/releases).
 
+## 4.11.0
+
+Music made for you.
+
+- **Made for you.** Home has mixes that make themselves and keep up with
+  your listening: On Repeat (what you keep coming back to), Top This Month,
+  Forgotten Favourites (songs you loved and have not played in a while) and
+  Recently Added. Each one plays, shuffles and saves as a playlist, and its
+  picture is made from the covers of what is in it.
+- **Your year in music.** Your minutes, top artist, top songs and albums,
+  favourite time to listen, longest run of days and the artists you
+  discovered, told as a story you step through. It opens from Home and from
+  Stats, and earlier years are a click away.
+- **Word-by-word lyrics.** The line being sung fills in word by word. Lyrics
+  that come with the time of every word are followed exactly; the rest are
+  paced by syllable, a little behind the voice rather than ahead of it. It
+  can be turned off in Settings, Lyrics.
+- **A living Now Playing.** The background drifts slowly in the colours of
+  the artwork while the music plays, and settles when it stops. It stays
+  still when the system asks for reduced motion.
+- **The music keeps going offline.** When the queue runs out and YouTube
+  Music's mix cannot be had, Dannify carries on from your library: more by
+  the same artist first, then the same album, then the rest.
+- **Show on Discord.** Your Discord profile can show the song you are
+  playing, "Listening to Dannify", with its artwork, a progress bar that
+  follows pauses and skips, and a button for friends to play it on YouTube
+  Music. It talks to the Discord app on your computer directly, connects by
+  itself whenever Discord is open, and is off until you turn it on in
+  Settings, Playback.
+
+Fixed:
+
+- Lyrics with word timings no longer show the timing marks (`<00:12.34>`)
+  among the words.
+- Arrow keys in Your year in music step through it instead of seeking the
+  song.
+
 ## 4.10.0
 
 The speed release.
