@@ -1,7 +1,7 @@
 # Dannify
 
-[![Latest release](https://img.shields.io/github/v/release/DANIELMWENDWA9451/Dannify?label=release)](https://github.com/DANIELMWENDWA9451/Dannify/releases/latest)
-[![CI](https://github.com/DANIELMWENDWA9451/Dannify/actions/workflows/ci.yml/badge.svg)](https://github.com/DANIELMWENDWA9451/Dannify/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Riskraptor/Dannify?label=release)](https://github.com/Riskraptor/Dannify/releases/latest)
+[![CI](https://github.com/Riskraptor/Dannify/actions/workflows/ci.yml/badge.svg)](https://github.com/Riskraptor/Dannify/actions/workflows/ci.yml)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-informational)](#install)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
@@ -69,7 +69,7 @@ What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 ## Install
 
 Everything is on the [downloads
-page](https://github.com/DANIELMWENDWA9451/Dannify/releases):
+page](https://github.com/Riskraptor/Dannify/releases):
 
 - **Windows 10 and 11:** `Dannify-Setup-<version>.exe`.
 - **Ubuntu, Debian, Mint and the like:** `linux-dannify_<version>_amd64.deb`,

@@ -12,7 +12,7 @@
     listening history and stats, and listens can go on to ListenBrainz.</p>
   </description>
   <launchable type="desktop-id">dannify.desktop</launchable>
-  <url type="homepage">https://github.com/DANIELMWENDWA9451/Dannify</url>
+  <url type="homepage">https://github.com/Riskraptor/Dannify</url>
   <developer id="io.github.danielmwendwa9451"><name>Daniel Mwendwa</name></developer>
   <content_rating type="oars-1.1"/>
 </component>
