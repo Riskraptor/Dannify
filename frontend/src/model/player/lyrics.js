@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import API from '/src/model/api'
-import { currentTime, currentTrack, duration, isPlaying } from '/src/model/player/state'
+import { currentTime, currentTrack, duration, isPlaying, readStored, storeSetting } from '/src/model/player/state'
 import { play, seek } from '/src/model/player/transport'
 
 // The synced lyrics of the track in the player: fetched as it starts, the
@@ -18,6 +18,16 @@ const lyricVersions = ref([]) // all synced versions [{synced, plain}]
 export const lyricVersionIndex = ref(0) // which version is showing
 export const lyricVersionCount = ref(0) // how many versions exist
 let lyricsToken = 0
+
+// Word by word: the line playing lights up as each word is sung
+// (LyricWords.vue). On unless turned off in Settings.
+const WORDS_KEY = 'dannify-lyrics-words'
+export const wordByWord = ref(readStored(WORDS_KEY) !== '0')
+
+export function setWordByWord(on) {
+  wordByWord.value = !!on
+  storeSetting(WORDS_KEY, on ? '1' : '0')
+}
 
 // --- Synced lyrics ---
 function _lyricsParams(track) {

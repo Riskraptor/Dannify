@@ -215,6 +215,50 @@ describe('shuffle respects repeat (item 2)', () => {
   })
 })
 
+describe('autoplay without a connection (4.11)', () => {
+  async function libraryOf(rows) {
+    const { useLibrary } = await import('/src/model/library')
+    useLibrary().tracks.value = rows
+  }
+
+  it('carries on from the library, same artist first, when the mix cannot be had', async () => {
+    await libraryOf([
+      { file: 'other.mp3', title: 'Other', artist: 'Someone', album: 'Y', added: 2 },
+      { file: 'same.mp3', title: 'Same Artist', artist: 'Artist', album: 'X', added: 1 },
+    ])
+    start(2, { at: 1 })
+    api.getRadio = vi.fn(() => Promise.reject(new Error('offline')))
+    P.next()
+    await flush()
+    await flush()
+    expect(currentTitle()).toBe('Same Artist')
+    expect(P.currentTrack.value.type).toBe('local')
+    expect(P.currentTrack.value.url).toBe('/downloads/same.mp3')
+    expect(P.playlist.value.map((t) => t.title)).toEqual(['Song 0', 'Song 1', 'Same Artist', 'Other'])
+  })
+
+  it('still stops at the end when there is nothing new in the library either', async () => {
+    await libraryOf([])
+    start(2, { at: 1 })
+    api.getRadio = vi.fn(() => Promise.reject(new Error('offline')))
+    P.next()
+    await flush()
+    await flush()
+    expect(currentTitle()).toBe('Song 1')
+    expect(P.playlist.value).toHaveLength(2)
+  })
+
+  it('stays put when autoplay is off', async () => {
+    await libraryOf([{ file: 'same.mp3', title: 'Same Artist', artist: 'Artist', added: 1 }])
+    P.setAutoplayRadio(false)
+    start(2, { at: 1 })
+    P.next()
+    await flush()
+    expect(api.getRadio).not.toHaveBeenCalled()
+    expect(P.playlist.value).toHaveLength(2)
+  })
+})
+
 describe('Up next and Clear follow the play order (item 3)', () => {
   it('Up next lists exactly what next() goes on to play under shuffle', () => {
     start(8, { shuffle: true, at: 3 })

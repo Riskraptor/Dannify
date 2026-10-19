@@ -25,6 +25,7 @@ from fastapi import APIRouter
 
 from .routes import (
     system, downloads, settings, explore, stream, lyrics, library, playlists, account, updates, listens,
+    presence,
 )
 from .routes.common import (  # noqa: F401  (used through api.<name>)
     ConnectionManager,
@@ -67,5 +68,6 @@ from .routes.updates import (  # noqa: F401  (used through api.<name>)
 router = APIRouter()
 for _part in (
     system, downloads, settings, explore, stream, lyrics, library, playlists, account, updates, listens,
+    presence,
 ):
     router.include_router(_part.router)

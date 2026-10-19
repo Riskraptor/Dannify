@@ -271,6 +271,13 @@ function recordListen(payload) {
 function getListenStats(days = 0, top = 50) {
   return API.get('/api/listens/stats', { params: { days, top } })
 }
+// Mixes made from the listening, and a year of it (Backend listens.py).
+function getMixes() {
+  return API.get('/api/listens/mixes')
+}
+function getRecap(year = 0) {
+  return API.get('/api/listens/recap', { params: { year } })
+}
 function getListenHistory(limit = 100, before = 0) {
   return API.get('/api/listens/history', { params: { limit, before } })
 }
@@ -433,6 +440,17 @@ function connectListenBrainz(token) {
 function disconnectListenBrainz() {
   return API.post('/api/listenbrainz/disconnect')
 }
+
+// Discord, for whoever turns it on (Backend/dannify/presence.py).
+function discordStatus() {
+  return API.get('/api/discord')
+}
+function setDiscord(enabled) {
+  return API.post('/api/discord', { enabled })
+}
+function discordNowPlaying(song) {
+  return API.post('/api/discord/now-playing', song)
+}
 // Saved music that will not open at all: look again ('retry'), or let new
 // songs be saved beside the ones that will not ('fresh').
 function recoverStorage(action) {
@@ -495,6 +513,9 @@ export default {
   listenBrainzStatus,
   connectListenBrainz,
   disconnectListenBrainz,
+  discordStatus,
+  setDiscord,
+  discordNowPlaying,
   repairStatus,
   repairTracks,
   repairStop,
@@ -542,6 +563,8 @@ export default {
   recordListen,
   getListenStats,
   getListenHistory,
+  getMixes,
+  getRecap,
   forgetListen,
   clearListens,
   getArtistLinks,
