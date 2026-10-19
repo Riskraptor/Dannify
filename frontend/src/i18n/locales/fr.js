@@ -388,7 +388,6 @@ export default {
     languageHint: "Choisissez la langue de l'interface.",
     about: 'À propos',
     version: 'Version {version}',
-    builds: 'Toutes les versions',
     shortcutsHint: 'Tous les raccourcis clavier au même endroit (Ctrl+/).',
     showShortcuts: 'Voir les raccourcis',
     historyGroup: 'Historique d’écoute',
@@ -483,7 +482,7 @@ export default {
     checkFailedLinux:
       "Dannify n'a pas pu se vérifier pour le moment. Si quelque chose ne va pas, quittez-le depuis la zone de notification et rouvrez-le.",
     updateFailed:
-      "La version {wanted} a été téléchargée mais ne s'est pas installée : ceci est toujours {running}. Réessayez la mise à jour, et si cela se reproduit, installez {wanted} par-dessus depuis la page des versions.",
+      "La version {wanted} ne s'est pas installée, donc ceci est toujours {running}. Dannify réessaiera avec la prochaine mise à jour.",
   },
   repair: {
     action: 'Réparer',
@@ -864,9 +863,8 @@ export default {
     installMessageMac: 'Dannify va redémarrer dans sa nouvelle version.',
     installMessageLinux: 'Dannify va vous demander votre mot de passe pour installer la mise à jour, puis redémarrer.',
     downloadManual: 'Télécharger',
-    manualHint: 'La version {version} est sortie. Cette copie ne peut pas se mettre à jour elle-même : téléchargez-la depuis le site et installez-la par-dessus.',
+    manualHint: 'Dannify {version} est prêt. Téléchargez-le et installez-le par-dessus celui-ci.',
     installFailed: 'Impossible de lancer la mise à jour.',
-    releaseNotes: 'Notes de version',
     skip: 'Ignorer cette version',
     mb: 'Mo',
     stage: {
@@ -882,6 +880,7 @@ export default {
     whatsNew: 'Nouveautés',
     whatsNewTitle: 'Nouveautés de la version {version}',
     whatsNewEmpty: 'Corrections et améliorations.',
+    fixedHeading: 'Corrigé',
     rolledBack:
       "Dannify {version} n'a pas pu démarrer sur cet ordinateur : vous êtes revenu à la version {running}. Elle ne sera plus proposée ; la suivante le sera.",
     gotIt: 'Compris',
