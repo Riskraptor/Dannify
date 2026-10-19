@@ -4,6 +4,16 @@ What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
 page](https://github.com/Riskraptor/Dannify/releases).
 
+## 4.9.2
+
+- **What's new, redesigned.** A new version's highlights appear as cards,
+  each with its own icon, and the fixes as a short checklist, both in
+  Settings when an update is on offer and in the window that opens after
+  Dannify has updated.
+- The app no longer shows release notes as raw text, with formatting marks,
+  file names, install commands and signature details: it shows what is new,
+  and leaves the rest to the releases page.
+
 ## 4.9.1
 
 - **Linux and macOS get 4.9.0's features.** 4.9.0 was released for Windows
