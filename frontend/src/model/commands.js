@@ -80,6 +80,11 @@ export function buildCommands() {
     },
     { id: 'go.stats', group: goTo, title: t('stats.nav'), icon: 'ph:chart-bar', keywords: t('stats.title'), run: go({ name: 'Stats' }) },
     { id: 'go.history', group: goTo, title: t('history.title'), icon: 'ph:clock-counter-clockwise', run: go({ name: 'History' }) },
+    { id: 'go.recap', group: goTo, title: t('recap.nav'), icon: 'ph:confetti', run: go({ name: 'Recap' }) },
+    { id: 'go.mix.on_repeat', group: goTo, title: t('mixes.onRepeat'), keywords: t('mixes.label'), icon: 'ph:repeat', run: go({ name: 'Mix', params: { id: 'on_repeat' } }) },
+    { id: 'go.mix.top_month', group: goTo, title: t('mixes.topMonth'), keywords: t('mixes.label'), icon: 'ph:crown-simple', run: go({ name: 'Mix', params: { id: 'top_month' } }) },
+    { id: 'go.mix.recent', group: goTo, title: t('mixes.recent'), keywords: t('mixes.label'), icon: 'ph:sparkle', run: go({ name: 'Mix', params: { id: 'recent' } }) },
+    { id: 'go.mix.forgotten', group: goTo, title: t('mixes.forgotten'), keywords: t('mixes.label'), icon: 'ph:heart', run: go({ name: 'Mix', params: { id: 'forgotten' } }) },
     { id: 'go.downloads', group: goTo, title: t('nav.downloads'), icon: 'ph:download-simple', run: go({ name: 'Downloads' }) },
     row && {
       id: 'go.nowPlaying',

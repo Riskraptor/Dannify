@@ -14,6 +14,10 @@
           <Icon icon="ph:clock-counter-clockwise" class="h-4 w-4" />
           {{ t('history.title') }}
         </router-link>
+        <router-link :to="{ name: 'Recap' }" class="btn btn-pill">
+          <Icon icon="ph:confetti" class="h-4 w-4" />
+          {{ t('recap.nav') }}
+        </router-link>
       </template>
     </ViewHeader>
 
