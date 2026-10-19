@@ -4,6 +4,26 @@ What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
 page](https://github.com/Riskraptor/Dannify/releases).
 
+## 4.10.0
+
+The speed release.
+
+- **Your library opens at once, however big it is.** What each saved song is
+  gets remembered between runs, so only songs that changed are read again: a
+  library of 5,000 songs is ready in about half a second instead of about
+  nine. Questions asked together (songs, artists, albums) look at the folder
+  once.
+- **Smoother, lighter lists.** A saved song's artwork is drawn from a small
+  copy, made once and kept, instead of the full picture every time: long
+  lists scroll smoothly, use far less memory, and after the first time ask
+  the app for no artwork at all.
+- **Next is instant.** A few seconds into a song, the next one is already
+  loaded, artwork included, so it starts the moment Next is pressed.
+- **A lighter start.** The mini player, the dialogs, the lyrics editor and
+  other languages load when they are first needed, and the download engine
+  when the first download needs it. The interface's main script is 17%
+  smaller, with a size budget in CI so it stays that way.
+
 ## 4.9.2
 
 - **What's new, redesigned.** A new version's highlights appear as cards,

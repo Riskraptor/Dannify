@@ -74,7 +74,9 @@ watch(
     giveBack = rememberFocus()
     await nextTick()
     box.value && box.value.focus()
-  }
+  },
+  // Loaded the first time it is opened (App.vue), so already open then.
+  { immediate: true }
 )
 
 const groups = computed(() => [
