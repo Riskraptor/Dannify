@@ -8,6 +8,8 @@ mtime), so newly downloaded tracks show up without a restart.
 
 from __future__ import annotations
 
+import json
+import os
 import stat as _stat
 import threading
 from pathlib import Path
@@ -28,6 +30,101 @@ _lock = threading.Lock()
 _build_lock = threading.Lock()
 _cache: dict[str, Any] = {}
 _cache_signature: Optional[tuple] = None
+
+# ---------------------------------------------------------------------------
+# What each song is, kept between runs
+# ---------------------------------------------------------------------------
+# Reading a saved song's details means opening it and decrypting its header:
+# under two milliseconds, but for every song, every time the app started, so
+# a library of five thousand waited nine seconds to appear. What was read is
+# kept in the data folder now, against each file's size and modification
+# time, and only a song that changed is read again. A change of keys (one
+# found, one started afresh) can change what a song says or whether it opens
+# at all, so the index is only trusted with the keys it was made with.
+INDEX_FILE = 'library-index.json'
+_INDEX_VERSION = 1
+# Entries for folders the library is no longer in are kept, for going back
+# to one, but not without limit.
+_INDEX_MOST = 60000
+_index_path: Optional[Path] = None
+_index: dict[str, Any] = {'ring': None, 'entries': {}, 'square': {}}
+_index_loaded = False
+_index_dirty = False
+
+
+def init(data_dir: Path) -> None:
+    """Keep the index in *data_dir*. Without this, nothing is kept."""
+
+    global _index_path, _index_loaded, _index_dirty
+    _index_path = Path(data_dir) / INDEX_FILE
+    _index_loaded = False
+    _index_dirty = False
+    _index.update({'ring': None, 'entries': {}, 'square': {}})
+
+
+def forget_index() -> None:
+    """Throw the kept details away (Settings, clear caches)."""
+
+    global _index_loaded, _index_dirty
+    with _build_lock:
+        _index.update({'ring': None, 'entries': {}, 'square': {}})
+        _index_loaded = True
+        _index_dirty = False
+        if _index_path is not None:
+            try:
+                _index_path.unlink(missing_ok=True)
+            except OSError:
+                logger.opt(exception=True).debug('could not remove the library index')
+    invalidate_cache()
+
+
+def _load_index() -> None:
+    global _index_loaded
+    if _index_loaded or _index_path is None:
+        return
+    _index_loaded = True
+    try:
+        data = json.loads(_index_path.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return
+    except (OSError, ValueError):
+        logger.opt(exception=True).warning('library index unreadable; reading every song again')
+        return
+    if not isinstance(data, dict) or data.get('v') != _INDEX_VERSION:
+        return
+    entries, square = data.get('entries'), data.get('square')
+    _index['ring'] = data.get('ring')
+    _index['entries'] = entries if isinstance(entries, dict) else {}
+    _index['square'] = square if isinstance(square, dict) else {}
+
+
+def _save_index() -> None:
+    global _index_dirty
+    if not _index_dirty or _index_path is None:
+        return
+    entries = _index['entries']
+    if len(entries) > _INDEX_MOST:
+        for key in list(entries)[: len(entries) - _INDEX_MOST]:
+            entries.pop(key, None)
+    body = {'v': _INDEX_VERSION, 'ring': _index['ring'], 'entries': entries, 'square': _index['square']}
+    tmp = _index_path.with_name(_index_path.name + '.part')
+    try:
+        _index_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(body, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+        os.replace(tmp, _index_path)
+        _index_dirty = False
+    except OSError:
+        logger.opt(exception=True).debug('could not keep the library index')
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _keys_ring() -> str:
+    from . import vault  # noqa: PLC0415  (circular at import)
+
+    return vault.ring_id()
 
 
 def _signature(base: Path) -> tuple[int, float, int]:
@@ -476,8 +573,18 @@ def _square_art(base: Path, tr: dict[str, Any]) -> bool:
     somebody's face with half a title across it.
     """
 
-    stamp = (tr['file'], float(tr.get('added') or 0))
-    if stamp in _square:
+    global _index_dirty
+    added = float(tr.get('added') or 0)
+    stamp = (tr['file'], added)
+    # Kept with the index when there is one: looking at a cover means
+    # decrypting it, and doing that for every album at every start was a
+    # second, slower scan behind the first.
+    kept_key = str(base / tr['file'])
+    if _index_path is not None:
+        hit = _index['square'].get(kept_key)
+        if isinstance(hit, list) and len(hit) == 2 and hit[0] == added:
+            return bool(hit[1])
+    elif stamp in _square:
         return _square[stamp]
     from . import vault  # noqa: PLC0415  (circular at import)
 
@@ -488,6 +595,10 @@ def _square_art(base: Path, tr: dict[str, Any]) -> bool:
     except Exception:
         size = None
     square = bool(size) and size[1] > 0 and abs(size[0] - size[1]) <= 0.06 * max(size)
+    if _index_path is not None:
+        _index['square'][kept_key] = [added, square]
+        _index_dirty = True
+        return square
     if len(_square) > 20000:
         _square.clear()
     _square[stamp] = square
@@ -555,20 +666,59 @@ def _album_list(tracks: list[dict[str, Any]], base: Optional[Path] = None) -> li
     return albums
 
 
+def _read_cached(path: Path, st: os.stat_result, seen: set[str]) -> dict[str, Any]:
+    """A song's details, from the index when the file has not changed."""
+
+    global _index_dirty
+    key = str(path)
+    stamp = [st.st_size, st.st_mtime_ns]
+    seen.add(key)
+    hit = _index['entries'].get(key)
+    if isinstance(hit, dict) and hit.get('s') == stamp and isinstance(hit.get('m'), dict):
+        meta = dict(hit['m'])
+        for field in ('artists', 'artist_ids'):
+            if isinstance(meta.get(field), list):
+                meta[field] = list(meta[field])
+        return meta
+    meta = _read_tags(path)
+    _index['entries'][key] = {'s': stamp, 'm': dict(meta)}
+    _index_dirty = True
+    return meta
+
+
 def _build(base: Path) -> dict[str, Any]:
+    global _index_dirty
     tracks: list[dict[str, Any]] = []
+    keep = _index_path is not None
+    seen: set[str] = set()
+    if keep:
+        _load_index()
+        ring = _keys_ring()
+        if _index['ring'] != ring:
+            _index.update({'ring': ring, 'entries': {}, 'square': {}})
+            _index_dirty = True
     if base.exists():
         for path in sorted(base.rglob('*')):
-            if not path.is_file() or path.suffix.lower() not in _AUDIO_EXTS:
+            if path.suffix.lower() not in _AUDIO_EXTS:
+                continue
+            try:
+                st = path.stat()
+            except OSError:
+                continue
+            if not _stat.S_ISREG(st.st_mode):
                 continue
             rel = path.relative_to(base).as_posix()
-            meta = _read_tags(path)
+            meta = _read_cached(path, st, seen) if keep else _read_tags(path)
             meta['file'] = rel
-            try:
-                meta['added'] = path.stat().st_mtime
-            except OSError:
-                meta['added'] = 0
+            meta['added'] = st.st_mtime
             tracks.append(meta)
+    if keep:
+        # Songs gone from this folder go from the index too.
+        inside = str(base) + os.sep
+        for key in [k for k in _index['entries'] if k.startswith(inside) and k not in seen]:
+            _index['entries'].pop(key, None)
+            _index['square'].pop(key, None)
+            _index_dirty = True
 
     # Collapse near-identical artist spellings to one canonical name.
     canon = _canonicalize_artists(
@@ -596,10 +746,14 @@ def _build(base: Path) -> dict[str, Any]:
     # broken file instead of streaming it, and failed.
     playable = [tr for tr in tracks if not tr.get('problem')]
 
+    albums = _album_list(tracks, base)
+    if keep:
+        _save_index()
+
     return {
         'tracks': tracks,
         'artists': artist_list,
-        'albums': _album_list(tracks, base),
+        'albums': albums,
         'total': len(tracks),
         # O(1) lookup tables for the "is this song already downloaded?" check.
         'by_video_id': {
@@ -690,10 +844,33 @@ def _track_for_file(
     return {'file': file}
 
 
+# How long a look at the folder stands for it while the app runs. Opening a
+# page asks for the songs, the artists and the albums together, and each
+# used to walk every file in the folder to see whether it had changed: a
+# hundred and fifty milliseconds apiece for five thousand songs. The app says
+# itself when it changes the folder (invalidate_cache), and the disk watcher
+# when anything else does, so one look serves a burst of questions.
+_SIGNATURE_FOR = 2.0
+_recent_signature: Optional[tuple] = None  # (folder, signature, when)
+
+
+def _folder_signature(base: Path) -> tuple:
+    global _recent_signature
+    import time  # noqa: PLC0415
+
+    now = time.monotonic()
+    recent = _recent_signature
+    if _index_path is not None and recent and recent[0] == str(base) and now - recent[2] < _SIGNATURE_FOR:
+        return recent[1]
+    sig = _signature(base)
+    _recent_signature = (str(base), sig, now)
+    return sig
+
+
 def _get(base: Path) -> dict[str, Any]:
     global _cache, _cache_signature
     # The folder is part of the key: two empty folders look identical.
-    sig = (str(base), _signature(base))
+    sig = (str(base), _folder_signature(base))
     with _lock:
         if _cache_signature == sig and _cache:
             return _cache
@@ -733,10 +910,11 @@ def invalidate_cache() -> None:
     Called when the user changes the download folder so the new
     location's tracks show up immediately.
     """
-    global _cache, _cache_signature
+    global _cache, _cache_signature, _recent_signature
     with _lock:
         _cache = {}
         _cache_signature = None
+        _recent_signature = None
 
 
 def library(base: Path) -> dict[str, Any]:

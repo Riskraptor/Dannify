@@ -1,10 +1,10 @@
 <template>
-  <span class="cover" :class="[round ? 'rounded-full' : radiusClass]">
+  <span ref="root" class="cover" :class="[round ? 'rounded-full' : radiusClass]">
     <img
-      v-if="shown && !failed"
-      :key="shown"
-      :src="src1x"
-      :srcset="srcset"
+      v-if="shown && !failed && !awaitingSmall"
+      :key="small || shown"
+      :src="small || src1x"
+      :srcset="small ? undefined : srcset"
       alt=""
       :loading="eager ? 'eager' : 'lazy'"
       decoding="async"
@@ -20,9 +20,10 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
 import { libraryEpoch } from '/src/model/library'
+import { canThumb, thumbNow, thumbnail, whenVisible } from '/src/model/thumbs'
 
 const props = defineProps({
   src: { type: String, default: '' },
@@ -75,6 +76,12 @@ watch(shown, () => {
 })
 
 function onError() {
+  // The small copy would not draw: the picture itself, as it always was.
+  if (small.value) {
+    small.value = ''
+    skipSmall.value = true
+    return
+  }
   if (!usingFallback.value && props.fallback && props.src && props.fallback !== props.src) {
     usingFallback.value = true
     loaded.value = false
@@ -95,6 +102,49 @@ watch(libraryEpoch, () => {
     retry.value++
   }
 })
+
+// A saved song's cover drawn small is drawn from a small copy of it, made the
+// first time it comes into view and kept (model/thumbs.js). Until the copy is
+// ready nothing is drawn but the placeholder: drawing the full picture first
+// would be the very work this saves.
+const root = ref(null)
+const small = ref('')
+const awaitingSmall = ref(false)
+const skipSmall = ref(false)
+const wantsSmall = computed(() => !skipSmall.value && !retry.value && canThumb(shown.value, props.size))
+let stopWatching = null
+watch(
+  [shown, () => props.size, root, wantsSmall],
+  () => {
+    stopWatching?.()
+    stopWatching = null
+    small.value = ''
+    if (!wantsSmall.value) {
+      awaitingSmall.value = false
+      return
+    }
+    const now = thumbNow(shown.value, props.size)
+    if (now) {
+      small.value = now
+      awaitingSmall.value = false
+      return
+    }
+    awaitingSmall.value = true
+    if (!root.value) return // mounted in a moment, and looked at then
+    const src = shown.value
+    stopWatching = whenVisible(root.value, async () => {
+      const url = await thumbnail(src, props.size)
+      if (shown.value !== src) return
+      small.value = url
+      awaitingSmall.value = false
+    })
+  },
+  { immediate: true }
+)
+watch(shown, () => {
+  skipSmall.value = false
+})
+onBeforeUnmount(() => stopWatching?.())
 
 const src1x = computed(() => {
   const url = atSize(shown.value, props.size)

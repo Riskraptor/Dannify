@@ -57,35 +57,43 @@
   <ContextMenuHost />
   <DialogHost />
   <ToastHost />
-  <ShortcutsDialog />
-  <CommandPalette />
-  <WhatsNewDialog />
-  <ReportDialog />
-  <LyricsEditor :open="submitOpen" @close="submitOpen = false" />
-  <Onboarding />
+  <!-- Each of these is a file of its own, fetched the first time it is
+       wanted and kept from then on (see `wanted` below). -->
+  <ShortcutsDialog v-if="wanted.shortcuts" />
+  <CommandPalette v-if="wanted.palette" />
+  <WhatsNewDialog v-if="wanted.whatsNew" />
+  <ReportDialog v-if="wanted.report" />
+  <LyricsEditor v-if="wanted.editor" :open="submitOpen" @close="submitOpen = false" />
+  <Onboarding v-if="wanted.onboarding" />
 </template>
 
 <script setup>
 import { ensureFullWindow } from '/src/desktop/fullWindow'
-import { ref, computed, provide, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, provide, nextTick, onMounted, onUnmounted, watchEffect, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TitleBar from './components/shell/TitleBar.vue'
 import HealthBanner from '/src/components/shell/HealthBanner.vue'
 import Sidebar from './components/shell/Sidebar.vue'
 import PlayerBar from './components/shell/PlayerBar.vue'
 import SidePanel from './components/shell/SidePanel.vue'
-import MiniMode from './components/shell/MiniMode.vue'
 import ResizeHandles from './components/shell/ResizeHandles.vue'
 import ContextMenuHost from './components/ui/ContextMenuHost.vue'
 import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
-import ReportDialog from '/src/components/ui/ReportDialog.vue'
-import ShortcutsDialog from './components/ui/ShortcutsDialog.vue'
-import CommandPalette from './components/ui/CommandPalette.vue'
-import WhatsNewDialog from './components/ui/WhatsNewDialog.vue'
-import LyricsEditor from './components/lyrics/LyricsEditor.vue'
-import Onboarding from './components/Onboarding.vue'
-import { startOnboarding } from './model/onboarding'
+import { startOnboarding, useOnboarding } from './model/onboarding'
+import { useReporting } from './model/problems'
+import { whatsNew } from './model/updates'
+
+// What most sessions never open stays out of the first download: the mini
+// player, the dialogs, the lyrics editor and the first-run welcome are each
+// fetched the moment they are first wanted.
+const MiniMode = defineAsyncComponent(() => import('./components/shell/MiniMode.vue'))
+const ShortcutsDialog = defineAsyncComponent(() => import('./components/ui/ShortcutsDialog.vue'))
+const CommandPalette = defineAsyncComponent(() => import('./components/ui/CommandPalette.vue'))
+const WhatsNewDialog = defineAsyncComponent(() => import('./components/ui/WhatsNewDialog.vue'))
+const ReportDialog = defineAsyncComponent(() => import('/src/components/ui/ReportDialog.vue'))
+const LyricsEditor = defineAsyncComponent(() => import('./components/lyrics/LyricsEditor.vue'))
+const Onboarding = defineAsyncComponent(() => import('./components/Onboarding.vue'))
 import { useUi } from './model/ui'
 import { usePlayer } from './model/player'
 import { desktop } from './desktop/bridge'
@@ -179,6 +187,26 @@ const removeAfter = router.afterEach((to, from) => {
 
 // --- Lyrics contribution modal (opened from several places) ---------------
 const submitOpen = ref(false)
+
+// Once wanted, kept: each dialog's closing animation needs it still there.
+const reporting = useReporting()
+const onboarding = useOnboarding()
+const wanted = reactive({
+  shortcuts: false,
+  palette: false,
+  whatsNew: false,
+  report: false,
+  editor: false,
+  onboarding: false,
+})
+watchEffect(() => {
+  if (ui.shortcutsOpen.value) wanted.shortcuts = true
+  if (ui.paletteOpen.value) wanted.palette = true
+  if (whatsNew.value) wanted.whatsNew = true
+  if (reporting.dialogOpen.value) wanted.report = true
+  if (submitOpen.value) wanted.editor = true
+  if (onboarding.show.value) wanted.onboarding = true
+})
 async function openSubmit() {
   // Never inside the mini player: the editor needs the room.
   await ensureFullWindow()

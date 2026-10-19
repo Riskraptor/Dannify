@@ -596,6 +596,18 @@ def key_path() -> Optional[Path]:
     return _key_path
 
 
+def ring_id() -> str:
+    """A name for the keys saved songs are opened with, that says nothing
+    about them. It changes when one is added or lost, which is when what a
+    song's header says (or whether it opens at all) can change too."""
+
+    keys = _candidates()
+    if not keys:
+        return ''
+    names = sorted(_fp(k) for k in keys)
+    return hashlib.blake2b('|'.join(names).encode('ascii'), digest_size=8).hexdigest()
+
+
 def reopen(data_dir: Path, root: Optional[Path] = None) -> str:
     """Look for the keys again, exactly as at startup. Returns state().
 

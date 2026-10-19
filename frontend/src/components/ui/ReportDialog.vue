@@ -155,14 +155,20 @@ const contactOk = computed(
 )
 const canSend = computed(() => longEnough.value && contactOk.value && !sending.value)
 
-watch(open, async (on) => {
-  if (!on) return
-  giveBack = rememberFocus()
-  result.value = null
-  error.value = ''
-  await nextTick()
-  what.value && what.value.focus()
-})
+// Immediate as well: the dialog is loaded the first time it is opened, by
+// which time it is already open (App.vue).
+watch(
+  open,
+  async (on) => {
+    if (!on) return
+    giveBack = rememberFocus()
+    result.value = null
+    error.value = ''
+    await nextTick()
+    what.value && what.value.focus()
+  },
+  { immediate: true }
+)
 
 function close() {
   if (sending.value) return

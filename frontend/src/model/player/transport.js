@@ -11,10 +11,12 @@ import {
   engine,
   ensureAudio,
   otherDeck,
+  prepareNext,
   retire,
   silenceRetiring,
   takeDeck,
 } from '/src/model/player/decks'
+import { thumbnail } from '/src/model/thumbs'
 import {
   activeLyricIndex,
   loadLyricsForCurrent,
@@ -74,8 +76,27 @@ let _lyricsAutoOpened = false
 // Warm the next stream's cache file (and lyrics) so advancing the queue is
 // instant and lyrics are ready before the next track even starts.
 let prefetchTimer = null
+let prepareTimer = null
+
+// Its picture, before it is needed: the play bar draws it small (a kept
+// copy, model/thumbs.js) and Now Playing draws it whole.
+function warmArtwork(track) {
+  const cover = track && track.cover
+  if (!cover) return
+  thumbnail(cover, 56).catch(() => {})
+  if (typeof Image === 'function') {
+    const img = new Image()
+    img.decoding = 'async'
+    img.src = cover
+  }
+}
+
 function prefetchNext() {
   clearTimeout(prefetchTimer)
+  clearTimeout(prepareTimer)
+  // A few seconds in, when it is clear this one is being listened to: the
+  // next song goes onto the waiting deck, so Next starts it at once.
+  prepareTimer = setTimeout(prepareNext, 6000)
   prefetchTimer = setTimeout(() => {
     // The track that plays next, which under shuffle is not the next row.
     const nxt = playlist.value[nextIndex()]
@@ -96,6 +117,7 @@ function prefetchNext() {
       ensureLocalGain(nxt)
     }
     prefetchLyrics(nxt)
+    warmArtwork(nxt)
   }, 500)
 }
 

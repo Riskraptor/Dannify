@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import API from '/src/model/api'
+import { clearThumbs } from '/src/model/thumbs'
 import { toast } from '/src/model/toast'
 import { t } from '/src/i18n'
 
@@ -39,6 +40,8 @@ export function createStorageInfo() {
     clearing.value = true
     try {
       await API.clearCaches()
+      // The window's own copies of covers, too (model/thumbs.js).
+      await clearThumbs()
       // The size beside the button drops to nothing: that is the answer.
       load()
     } catch {
