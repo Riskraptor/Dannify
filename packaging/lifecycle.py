@@ -51,7 +51,20 @@ VERSION = re.search(r"__version__\s*=\s*'([^']+)'",
 SETUP = REPO / 'packaging' / 'out' / f'Dannify-Setup-{VERSION}.exe'
 DIST = REPO / 'Backend' / 'dist' / 'Dannify'
 _VENV = REPO / 'Backend' / 'venv' / 'Scripts' / 'python.exe'
-PYTHON = str(_VENV if _VENV.exists() else sys.executable)
+
+
+def _runs(python):
+    # A checkout shared with Linux can hold a venv\Scripts that points at a
+    # Linux Python: there, but unable to start.
+    try:
+        return subprocess.run([str(python), '-c', 'pass'], capture_output=True, timeout=60).returncode == 0
+    except OSError:
+        return False
+
+
+PYTHON = os.environ.get('DANNIFY_PYTHON') or str(
+    _VENV if _VENV.exists() and _runs(_VENV) else sys.executable
+)
 
 SCR = Path(os.path.realpath(os.environ['TEMP'])) / 'dannify-life'
 NAME = os.environ.get('LIFE_NAME', 'life')
