@@ -86,7 +86,7 @@ install -m 644 "$ROOT/packaging/linux/README-UBUNTU.md" "$STAGE/usr/share/doc/da
 {
   echo "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
   echo "Upstream-Name: Dannify"
-  echo "Source: https://github.com/DANIELMWENDWA9451/Dannify"
+  echo "Source: https://github.com/Riskraptor/Dannify"
   echo
   echo "Files: *"
   echo "Copyright: Daniel Mwendwa"
@@ -113,7 +113,7 @@ Priority: optional
 Architecture: $ARCH
 Installed-Size: $SIZE
 Maintainer: Daniel Mwendwa <eb13.61159.22@student.chuka.ac.ke>
-Homepage: https://github.com/DANIELMWENDWA9451/Dannify
+Homepage: https://github.com/Riskraptor/Dannify
 Depends: python3 (>= 3.10), python3-venv, python3-gi, gir1.2-gtk-3.0,
  gir1.2-webkit2-4.1 | gir1.2-webkit2-4.0, ffmpeg, gstreamer1.0-plugins-good,
  gstreamer1.0-libav, libsecret-tools, pkexec | policykit-1, xdg-utils

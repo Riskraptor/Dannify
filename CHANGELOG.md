@@ -2,7 +2,16 @@
 
 What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
-page](https://github.com/DANIELMWENDWA9451/Dannify/releases).
+page](https://github.com/Riskraptor/Dannify/releases).
+
+## 4.9.1
+
+- **Linux and macOS get 4.9.0's features.** 4.9.0 was released for Windows
+  only; this release carries everything in it to every platform.
+- **Dannify has moved to [github.com/Riskraptor/Dannify](https://github.com/Riskraptor/Dannify).**
+  Updates, the download page and every link in the app point there now.
+  Copies on 4.9.0 and older reach it through GitHub's forwarding from the old
+  address; from this version on, nothing depends on that forwarding.
 
 ## 4.9.0
 
@@ -172,4 +181,4 @@ on. After this one, updates install themselves again.
 - A first-run welcome.
 
 Earlier versions are in the [commit
-history](https://github.com/DANIELMWENDWA9451/Dannify/commits/main).
+history](https://github.com/Riskraptor/Dannify/commits/main).
