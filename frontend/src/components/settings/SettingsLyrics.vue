@@ -2,6 +2,19 @@
   <section>
     <h2 class="group-title">{{ t('settings.lyricsGroup') }}</h2>
     <label class="row">
+      <Icon icon="ph:microphone-stage" class="row-icon" />
+      <div class="row-text">
+        <p class="row-label">{{ t('settings.wordByWord') }}</p>
+        <p class="row-hint">{{ t('settings.wordByWordHint') }}</p>
+      </div>
+      <input
+        type="checkbox"
+        class="switch"
+        :checked="player.wordByWord.value"
+        @change="player.setWordByWord($event.target.checked)"
+      />
+    </label>
+    <label class="row">
       <Icon icon="ph:text-align-left" class="row-icon" />
       <div class="row-text">
         <p class="row-label">{{ t('settings.downloadLyrics') }}</p>
@@ -46,9 +59,11 @@
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useSettingsManager } from '/src/model/settings'
+import { usePlayer } from '/src/model/player'
 import { useI18n } from '/src/i18n'
 
 const { t } = useI18n()
 const sm = useSettingsManager()
+const player = usePlayer()
 const s = computed(() => sm.settings.value)
 </script>

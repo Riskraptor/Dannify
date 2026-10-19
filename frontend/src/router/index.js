@@ -23,6 +23,8 @@ const Stats = () => import('/src/views/Stats.vue')
 const History = () => import('/src/views/History.vue')
 const Albums = () => import('/src/views/Albums.vue')
 const Album = () => import('/src/views/Album.vue')
+const Mix = () => import('/src/views/Mix.vue')
+const Recap = () => import('/src/views/Recap.vue')
 
 const routes = [
   { path: '/', name: 'Home', component: Home },
@@ -32,6 +34,8 @@ const routes = [
   { path: '/artists/:name', name: 'Artist', component: Artist },
   { path: '/albums', name: 'Albums', component: Albums },
   { path: '/albums/:artist/:name', name: 'Album', component: Album },
+  { path: '/mix/:id', name: 'Mix', component: Mix },
+  { path: '/recap/:year?', name: 'Recap', component: Recap },
   { path: '/liked', name: 'Liked', component: Liked },
   { path: '/stats', name: 'Stats', component: Stats },
   { path: '/history', name: 'History', component: History },

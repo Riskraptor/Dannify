@@ -541,6 +541,52 @@ def fetch_all_versions(song: dict[str, Any]) -> list[Lyrics]:
 # ---------------------------------------------------------------------------
 
 _LRC_LINE = _re.compile(r'\[(\d+):(\d+(?:\.\d+)?)\]')
+# Word times from "enhanced" LRC (<00:12.34>), the time each word is sung.
+_LRC_WORD = _re.compile(r'<(\d+):(\d+(?:\.\d+)?)>')
+
+
+def _seconds(m) -> float:
+    return int(m.group(1)) * 60 + float(m.group(2))
+
+
+def _words(body: str, start: float) -> tuple[str, list[dict[str, Any]], Optional[float]]:
+    """The words of an enhanced line, each with when it is sung.
+
+    Returns the plain text, the words (``[{'time', 'text'}]``, the text keeping
+    its spaces so they join back into the line) and when the last one ends,
+    or ``None`` when the file does not say. A line without word times gives
+    no words.
+    """
+
+    stamps = list(_LRC_WORD.finditer(body))
+    text = ' '.join(_LRC_WORD.sub('', body).split())
+    if not stamps:
+        return text, [], None
+    words: list[dict[str, Any]] = []
+    lead = body[: stamps[0].start()]
+    if lead.strip():
+        words.append({'time': start, 'text': lead})
+    end: Optional[float] = None
+    for i, m in enumerate(stamps):
+        stop = stamps[i + 1].start() if i + 1 < len(stamps) else len(body)
+        piece = body[m.end():stop]
+        if piece.strip():
+            words.append({'time': _seconds(m), 'text': piece})
+        elif i + 1 == len(stamps):
+            # A closing stamp with nothing after it: when the line ends.
+            end = _seconds(m)
+        elif words:
+            words[-1]['text'] += piece
+    # Spaces as the line shows them: one between words, none at either end.
+    for w in words:
+        w['text'] = _re.sub(r'\s+', ' ', w['text'])
+    if words:
+        words[0]['text'] = words[0]['text'].lstrip()
+        words[-1]['text'] = words[-1]['text'].rstrip()
+    times = [w['time'] for w in words]
+    if any(b < a for a, b in zip(times, times[1:])):
+        return text, [], None  # out of order: the file is not to be trusted
+    return text, words, end
 
 
 def parse_lrc(synced: Optional[str]) -> list[dict[str, Any]]:
@@ -548,6 +594,9 @@ def parse_lrc(synced: Optional[str]) -> list[dict[str, Any]]:
 
     Multiple timestamps on a single line are expanded. Metadata-only lines
     (``[ar:...]`` etc.) are skipped. Output is sorted by time.
+
+    A line with word times (enhanced LRC) also carries ``words``, each with
+    the time it is sung, and ``end`` when the file says when the line ends.
     """
 
     if not synced:
@@ -557,11 +606,22 @@ def parse_lrc(synced: Optional[str]) -> list[dict[str, Any]]:
         stamps = list(_LRC_LINE.finditer(raw_line))
         if not stamps:
             continue
-        text = _LRC_LINE.sub('', raw_line).strip()
+        body = _LRC_LINE.sub('', raw_line).strip()
+        first = _seconds(stamps[0])
+        text, words, end = _words(body, first)
         for m in stamps:
-            minutes = int(m.group(1))
-            seconds = float(m.group(2))
-            out.append({'time': minutes * 60 + seconds, 'text': text})
+            time = _seconds(m)
+            row: dict[str, Any] = {'time': time, 'text': text}
+            if words:
+                # Word times are written for the first time the line is
+                # sung; a chorus stamped again is sung the same way later.
+                shift = time - first
+                row['words'] = [
+                    {'time': round(w['time'] + shift, 3), 'text': w['text']} for w in words
+                ]
+                if end is not None:
+                    row['end'] = round(end + shift, 3)
+            out.append(row)
     out.sort(key=lambda r: r['time'])
     return out
 
