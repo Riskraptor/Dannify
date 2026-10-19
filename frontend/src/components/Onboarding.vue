@@ -244,7 +244,9 @@ watch(
     step.value = 0
     await nextTick()
     primary.value?.focus()
-  }
+  },
+  // Loaded when it is first shown (App.vue), so already showing.
+  { immediate: true }
 )
 watch(step, async () => {
   await nextTick()

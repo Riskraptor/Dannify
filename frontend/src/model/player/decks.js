@@ -168,6 +168,18 @@ function preloadNext(i) {
   }
 }
 
+/**
+ * The next song, on the waiting deck early in this one, so Next starts it
+ * at once whenever it is pressed. It used to be loaded only in the last
+ * seconds, for a crossfade, and a skip before then started from nothing.
+ */
+export function prepareNext() {
+  if (!engine || !audio || audio.paused) return
+  if (repeatMode.value === 'one' || noAutoAdvance.value || clipLoopStart.value != null) return
+  const i = nextIndex()
+  if (i >= 0) preloadNext(i)
+}
+
 // --- Crossfade and gapless: the change to the next song, near the end ---
 let transitionTimer = 0
 let transitionFor = -1
