@@ -405,6 +405,11 @@ export default {
     lbTokenStopped:
       'ListenBrainz n’accepte plus votre jeton, donc rien n’est envoyé. Déconnectez, puis reconnectez avec votre jeton actuel.',
     lbConnect: 'Connecter',
+    discord: 'Afficher sur Discord',
+    discordHint: 'Votre profil Discord montre le titre en cours, avec sa pochette, et vos amis peuvent l’écouter aussi.',
+    discordConnected: 'Activé : votre profil Discord montre ce que vous écoutez.',
+    discordWaiting: 'Activé. Discord n’est pas ouvert sur cet ordinateur ; il s’affichera dès qu’il le sera.',
+    discordFailed: 'Impossible de changer cela pour le moment. Réessayez.',
     lbDisconnect: 'Déconnecter',
     lbConnectTitle: 'Connecter ListenBrainz',
     lbConnectText: 'Collez votre jeton utilisateur. Il se trouve sur listenbrainz.org, dans les réglages de votre profil.',
@@ -1146,6 +1151,9 @@ export default {
     openPlaylist: 'Playlist : {name}',
     openArtist: 'Artiste : {name}',
     openAlbum: 'Album : {name}',
+  },
+  discord: {
+    button: 'Écouter sur YouTube Music',
   },
   mixes: {
     shelf: 'Pour vous',

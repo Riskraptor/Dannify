@@ -61,6 +61,7 @@ const read = computed(() => readNotes(props.notes))
 // A picture for each card, from what it is about. Written out in full:
 // the icons are found in the source by name (vite.config.js).
 const ICONS = [
+  [/discord/i, 'ph:discord-logo'],
   [/made for you|\bmix(es)?\b/i, 'ph:music-notes-plus'],
   [/year in music|recap/i, 'ph:confetti'],
   [/now playing/i, 'ph:play-circle'],
