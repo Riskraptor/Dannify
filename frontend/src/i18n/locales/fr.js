@@ -166,6 +166,7 @@ export default {
     tipLyrics: 'Paroles synchronisées',
   },
   panel: {
+    tabs: 'Panneau latéral',
     aboutButton: 'En cours de lecture',
     about: 'Infos',
     aboutIdle: 'Lancez un titre pour en savoir plus ici.',
