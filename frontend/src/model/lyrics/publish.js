@@ -1,8 +1,10 @@
 // Sending finished lyrics to the shared catalogue, through the backend.
 //
-// The backend answers 200 either way, with `{published, error}`; the
+// The backend answers 200 either way, with `{published, reason}`; the
 // connection failing is a different thing again. Both come back here as one
-// shape, so the editor has a single place to decide what to say.
+// shape, so the editor has a single place to decide what to say. The
+// catalogue's own words never reach the screen: only the kind of failure,
+// said in the person's language.
 
 import API from '/src/model/api'
 import { failedForNetwork } from '/src/model/connectivity'
@@ -10,8 +12,7 @@ import { failedForNetwork } from '/src/model/connectivity'
 /**
  * @param {{track: string, artist: string, album: string, duration: number,
  *          plain: string, synced: string}} payload
- * @returns {Promise<{ok: true} | {ok: false, reason: 'rejected'|'offline'|'timeout'|'failed', error?: string}>}
- *   `error` is the catalogue's own explanation, when it gave one.
+ * @returns {Promise<{ok: true} | {ok: false, reason: 'busy'|'refused'|'slow'|'invalid'|'offline'|'timeout'|'failed'}>}
  */
 export async function sendLyrics(payload) {
   let res
@@ -24,9 +25,10 @@ export async function sendLyrics(payload) {
   }
   const data = (res && res.data) || {}
   if (data.published) return { ok: true }
-  const error = typeof data.error === 'string' ? data.error.trim() : ''
-  return error ? { ok: false, reason: 'rejected', error } : { ok: false, reason: 'failed' }
+  return { ok: false, reason: REASONS.has(data.reason) ? data.reason : 'failed' }
 }
+
+const REASONS = new Set(['busy', 'refused', 'slow', 'invalid', 'offline'])
 
 /** Tell the rest of the app, so the player pulls the new words in. */
 export function announcePublished(track, artist) {

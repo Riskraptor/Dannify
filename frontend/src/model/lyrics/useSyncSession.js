@@ -5,7 +5,7 @@
 // all of it (see keymap.js).
 
 import { ref, computed, watch } from 'vue'
-import { loopWindow, predictLine, NUDGE_STEP } from './timing'
+import { loopWindow, predictLine, sungLine, NUDGE_STEP } from './timing'
 import { syncCommand } from './keymap'
 
 // After the user does something themselves, the cursor stays where they
@@ -27,6 +27,10 @@ export function useSyncSession({ player, editor, enabled, release = () => {} }) 
   const loopId = ref(null)
   const loopIndex = computed(() =>
     loopId.value == null ? -1 : editor.lines.value.findIndex((l) => l._id === loopId.value)
+  )
+  // The line the song is on, as opposed to the cursor, the line to tap next.
+  const sung = computed(() =>
+    enabled.value ? sungLine(editor.lines.value, player.currentTime.value || 0) : -1
   )
   // Bumped whenever the cursor should be brought into view.
   const reveal = ref(0)
@@ -112,8 +116,25 @@ export function useSyncSession({ player, editor, enabled, release = () => {} }) 
     if (!player.isPlaying.value) player.play()
   }
 
+  /**
+   * Go to a moment of the song. Paused, the line to tap goes along: the
+   * cursor otherwise follows only while the song plays, and moving through a
+   * paused song left the card offering line 1 while line 5 was being sung.
+   */
+  function seekTo(seconds) {
+    const to = Math.max(0, seconds || 0)
+    player.seek(to)
+    if (player.isPlaying.value || !enabled.value) return
+    stopLoop()
+    const target = predictLine(editor.lines.value, to)
+    if (target >= 0 && target !== editor.active.value) {
+      editor.active.value = target
+      show()
+    }
+  }
+
   function seekBy(delta) {
-    player.seek(Math.max(0, (player.currentTime.value || 0) + delta))
+    seekTo((player.currentTime.value || 0) + delta)
   }
 
   function setRate(rate) {
@@ -201,6 +222,7 @@ export function useSyncSession({ player, editor, enabled, release = () => {} }) 
 
   return {
     loopIndex,
+    sung,
     reveal,
     stamp,
     select,
@@ -211,6 +233,7 @@ export function useSyncSession({ player, editor, enabled, release = () => {} }) 
     stopLoop,
     playFrom,
     playFromStart,
+    seekTo,
     seekBy,
     setRate,
     stepRate,

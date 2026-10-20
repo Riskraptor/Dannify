@@ -45,6 +45,9 @@ _TIMEOUT = (4.0, 8.0)
 class Lyrics:
     plain: Optional[str] = None
     synced: Optional[str] = None
+    # What a version is, for the picker: its length, whether it is timed word
+    # by word, how many lines. Only versions carry it; it is not persisted.
+    about: Optional[dict] = None
 
     def has_any(self) -> bool:
         return bool(self.plain) or bool(self.synced)
@@ -126,10 +129,27 @@ def _persist_cache() -> None:
     _threading.Thread(target=_run, daemon=True).start()
 
 
-def _cache_key(song: dict[str, Any]) -> str:
+def _base_key(song: dict[str, Any]) -> str:
     artists = song.get('artists') or []
     a = (artists[0] if artists else '').strip().lower()
     return f"{a}|{(song.get('name') or '').strip().lower()}"
+
+
+def _cache_key(song: dict[str, Any]) -> str:
+    """Artist, title and, when known, length: two cuts of a song with one
+    name (a radio edit, the album take) were kept as one, so the lyrics and
+    versions found for the first were shown, and ranked, for the second."""
+
+    base = _base_key(song)
+    try:
+        seconds = int(float(song.get('duration') or 0))
+    except (TypeError, ValueError):
+        seconds = 0
+    return f'{base}|{seconds}' if seconds > 0 else base
+
+
+def _same_song(key: str, base: str) -> bool:
+    return key == base or key.startswith(base + '|')
 
 
 def clear_cache(song: Optional[dict[str, Any]] = None) -> None:
@@ -141,8 +161,11 @@ def clear_cache(song: Optional[dict[str, Any]] = None) -> None:
 
     with _lyrics_cache_lock:
         if song is not None:
-            _lyrics_cache.pop(_cache_key(song), None)
-            _versions_cache.pop(_cache_key(song), None)
+            # Every length of it: a song published is asked for by name.
+            base = _base_key(song)
+            for cache in (_lyrics_cache, _versions_cache):
+                for key in [k for k in cache if _same_song(k, base)]:
+                    cache.pop(key, None)
         else:
             _lyrics_cache.clear()
             _versions_cache.clear()
@@ -158,11 +181,15 @@ def fetch(song: dict[str, Any], providers: list[str]) -> Optional[Lyrics]:
     """
 
     key = _cache_key(song)
-    if key.strip('|'):
+    base = _base_key(song)
+    if base.strip('|'):
         with _lyrics_cache_lock:
-            if key in _lyrics_cache:
-                _lyrics_cache.move_to_end(key)
-                return _lyrics_cache[key]
+            # What was kept before lengths were part of the key still counts,
+            # so nothing found earlier is looked up again, or lost offline.
+            for k in (key, base):
+                if k in _lyrics_cache:
+                    _lyrics_cache.move_to_end(k)
+                    return _lyrics_cache[k]
 
     import time as _time
 
@@ -175,7 +202,7 @@ def fetch(song: dict[str, Any], providers: list[str]) -> Optional[Lyrics]:
     if result is None and _last_trouble >= started:
         return None
 
-    if key.strip('|'):
+    if base.strip('|'):
         with _lyrics_cache_lock:
             _lyrics_cache[key] = result
             _lyrics_cache.move_to_end(key)
@@ -263,7 +290,7 @@ def _fetch_lrclib(song: dict[str, Any]) -> Optional[Lyrics]:
     # Fire /get and the multi-query /search concurrently.
     with _cf.ThreadPoolExecutor(max_workers=2) as ex:
         f_get = ex.submit(_get_json, f'{LRCLIB_BASE}/get', get_params)
-        f_search = ex.submit(_fetch_lrclib_search, title, artist, duration)
+        f_search = ex.submit(_fetch_lrclib_search, title, artist, duration, album)
         data = f_get.result()
         scored = f_search.result()
 
@@ -342,6 +369,69 @@ def _alt_title(title: str) -> str:
     return ' '.join(out)
 
 
+# What a title says about *which* recording it is. A remix, a live take or a
+# sped-up upload has the same words at other times, so one is only a good
+# match for the same kind of recording.
+_VERSION_TAGS = {
+    'remix': ('remix', 'rmx', 'mix'),
+    'live': ('live', 'concert', 'session', 'sessions'),
+    'acoustic': ('acoustic', 'unplugged', 'stripped'),
+    'instrumental': ('instrumental', 'karaoke', 'backing track'),
+    'fast': ('sped up', 'speed up', 'nightcore', 'fast'),
+    'slow': ('slowed', 'reverb', 'chopped'),
+    'extended': ('extended', 'long version'),
+    'cover': ('cover', 'tribute'),
+    'demo': ('demo',),
+}
+# Asides that name nobody new and change nothing about the words.
+_ASIDE = _re.compile(
+    r'\s*[\(\[](?:feat\.?|ft\.?|featuring|with|prod\.?|from|official|audio|lyrics?|lyric video|'
+    r'video|visuali[sz]er|remaster(?:ed)?(?: \d{4})?|\d{4} remaster(?:ed)?|explicit|clean|'
+    r'radio edit|single version|album version|original mix|mono|stereo)[^\)\]]*[\)\]]',
+    _re.I,
+)
+_TRAILING_FEAT = _re.compile(r'\s+(?:feat\.?|ft\.?|featuring)\s+.*$', _re.I)
+_DASH_ASIDE = _re.compile(
+    r'\s+-\s+(?:remaster(?:ed)?(?: \d{4})?|\d{4} remaster(?:ed)?|radio edit|single version|'
+    r'album version|original mix|mono|stereo|explicit|clean)\s*$',
+    _re.I,
+)
+
+
+def _base_title(text: str) -> str:
+    """The title without who it features or how it was mastered."""
+
+    t = str(text or '')
+    for _ in range(3):
+        t2 = _DASH_ASIDE.sub('', _ASIDE.sub('', _TRAILING_FEAT.sub('', t)))
+        if t2 == t:
+            break
+        t = t2
+    return t.strip() or str(text or '').strip()
+
+
+def _tags(text: str) -> set[str]:
+    folded = ' ' + _norm(text) + ' '
+    found = set()
+    for tag, words in _VERSION_TAGS.items():
+        if any(f' {w} ' in folded for w in words):
+            found.add(tag)
+    return found
+
+
+_STAMP = _re.compile(r'\[(\d+):(\d+(?:\.\d+)?)\]')
+
+
+def _synced_shape(synced: str) -> tuple[int, float, bool, int]:
+    """(lines, last time, timed word by word, times that go backwards)."""
+
+    times = [int(m.group(1)) * 60 + float(m.group(2)) for m in _STAMP.finditer(synced or '')]
+    back = sum(1 for a, b in zip(times, times[1:]) if b + 0.05 < a)
+    return len(times), (max(times) if times else 0.0), '<' in (synced or '') and bool(
+        _re.search(r'<\d+:\d+(?:\.\d+)?>', synced or '')
+    ), back
+
+
 def _artist_matches(query_artist: str, row_artist: str) -> bool:
     """True if the queried artist appears in the row's artist field.
 
@@ -370,18 +460,29 @@ def _score_row(
     want_title: str,
     want_artist: str,
     want_duration: int,
+    want_album: str = '',
 ) -> float:
-    """Lower is better. ``inf`` means reject (wrong artist or title)."""
+    """Lower is better. ``inf`` means reject (wrong artist or title).
 
-    rt = _norm(row.get('trackName'))
+    What counts, most first: lyrics timed at all; the same kind of recording
+    (a remix or a live take has the words at other times); the same length;
+    timing that fits inside the song; the same title once who it features
+    is set aside; word-by-word timing; the same album.
+    """
+
+    row_title = row.get('trackName') or ''
+    rt = _norm(row_title)
     ra = row.get('artistName') or ''
     if not rt:
         return float('inf')
     wt = _norm(want_title)
     # Title match: exact, containment, OR fuzzy (handles "to"/"too" typos,
-    # "&"/"and", punctuation). Accept when token-overlap is strong.
-    sim = _title_similarity(want_title, row.get('trackName') or '')
-    title_ok = rt == wt or wt in rt or rt in wt or sim >= 0.7
+    # "&"/"and", punctuation). Accept when token-overlap is strong. Compared
+    # without "(feat. ...)" too: "Girl Next Door (feat. Tiwa Savage)" is
+    # "Girl Next Door".
+    wb, rb = _norm(_base_title(want_title)), _norm(_base_title(row_title))
+    sim = max(_title_similarity(want_title, row_title), _title_similarity(wb, rb))
+    title_ok = rt == wt or wb == rb or wt in rt or rt in wt or sim >= 0.7
     if not title_ok:
         return float('inf')
     # Artist must match: this is what stops "different song, same title".
@@ -389,15 +490,33 @@ def _score_row(
         return float('inf')
 
     score = 0.0
-    if rt != wt:
+    if rt != wt and wb != rb:
         score += 5 * (1.0 - sim)  # smaller penalty the closer the titles are
-    # Duration proximity (the strongest version discriminator).
+    # A different kind of recording: a remix found for the original is
+    # worse than one for which the song is the remix.
+    want_tags, row_tags = _tags(want_title), _tags(row_title)
+    score += 30 * len(row_tags - want_tags) + 15 * len(want_tags - row_tags)
+    # Duration proximity (the strongest version discriminator), and more so
+    # past ten seconds, where it is another cut of the song.
     rd = row.get('duration') or 0
     if want_duration and rd:
-        score += abs(float(rd) - float(want_duration))
-    # Strongly prefer rows that actually have synced lyrics.
-    if not (row.get('syncedLyrics') or '').strip():
+        diff = abs(float(rd) - float(want_duration))
+        score += diff + (20 if diff > 10 else 0)
+    synced = (row.get('syncedLyrics') or '').strip()
+    if not synced:
+        # Strongly prefer rows that actually have synced lyrics.
         score += 1000
+    else:
+        lines, last, words, back = _synced_shape(synced)
+        if want_duration and last > float(want_duration) + 8:
+            score += 60  # its words go on after the song has ended
+        if lines < 3:
+            score += 15
+        score += 2 * back
+        if words:
+            score -= 2
+    if want_album and _norm(row.get('albumName')) == _norm(want_album):
+        score -= 1.5
     return score
 
 
@@ -450,7 +569,7 @@ def _gather_candidates(title: str, artist: str) -> list[dict[str, Any]]:
 
 
 def _fetch_lrclib_search(
-    title: str, artist: str, duration: int = 0
+    title: str, artist: str, duration: int = 0, album: str = ''
 ) -> Optional[Lyrics]:
     candidates = _gather_candidates(title, artist)
     if not candidates:
@@ -458,7 +577,7 @@ def _fetch_lrclib_search(
 
     scored = []
     for row in candidates:
-        s = _score_row(row, title, artist, duration)
+        s = _score_row(row, title, artist, duration, album)
         if s != float('inf'):
             scored.append((s, row))
     if not scored:
@@ -503,13 +622,14 @@ def fetch_all_versions(song: dict[str, Any]) -> list[Lyrics]:
         return []
     artist = artists[0]
     duration = int(song.get('duration') or 0)
+    album = (song.get('album_name') or '').strip()
 
     candidates = _gather_candidates(title, artist)
     scored: list[tuple[float, dict[str, Any]]] = []
     for row in candidates:
         if not (row.get('syncedLyrics') or '').strip():
             continue
-        s = _score_row(row, title, artist, duration)
+        s = _score_row(row, title, artist, duration, album)
         if s != float('inf'):
             scored.append((s, row))
     scored.sort(key=lambda x: x[0])
@@ -525,10 +645,18 @@ def fetch_all_versions(song: dict[str, Any]) -> list[Lyrics]:
         if sig in seen_text:
             continue
         seen_text.add(sig)
+        lines, _last, words, _back = _synced_shape(synced)
+        length = row.get('duration') or 0
         versions.append(
             Lyrics(
                 plain=(row.get('plainLyrics') or '').strip() or None,
                 synced=synced,
+                about={
+                    'words': words,
+                    'lines': lines,
+                    'length': round(float(length)) if length else None,
+                    'diff': round(float(length) - duration) if length and duration else None,
+                },
             )
         )
         if len(versions) >= 6:  # cap. Nobody needs more than a handful
@@ -661,11 +789,12 @@ def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
     """
 
     key = _cache_key(song)
+    named = bool(_base_key(song).strip('|'))
     with _lyrics_cache_lock:
-        cached = _versions_cache.get(key) if key.strip('|') else None
+        cached = _versions_cache.get(key) if named else None
     if cached is None:
         cached = fetch_all_versions(song)
-        if key.strip('|'):
+        if named:
             with _lyrics_cache_lock:
                 _versions_cache[key] = cached
                 _versions_cache.move_to_end(key)
@@ -680,5 +809,5 @@ def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
         plain = ver.plain or (
             '\n'.join(l['text'] for l in lines if l['text']) or None
         )
-        out.append({'synced': lines, 'plain': plain, 'has': True})
+        out.append({'synced': lines, 'plain': plain, 'has': True, 'about': ver.about or {}})
     return out

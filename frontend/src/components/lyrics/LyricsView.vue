@@ -6,6 +6,7 @@
     <LyricsEmpty v-else :compact="compact" />
 
     <LyricsOffsetBar v-if="tools.hasLines.value" />
+    <LyricsVersions v-if="tools.hasLines.value" />
   </div>
 </template>
 
@@ -16,6 +17,7 @@ import LyricsLines from './LyricsLines.vue'
 import LyricsPlain from './LyricsPlain.vue'
 import LyricsEmpty from './LyricsEmpty.vue'
 import LyricsOffsetBar from './LyricsOffsetBar.vue'
+import LyricsVersions from './LyricsVersions.vue'
 
 // The lyrics of the song playing, in whichever state they are: on their way,
 // in time, words only, missing, or out of reach while offline.

@@ -2,66 +2,68 @@
   <transition name="bar">
     <div
       v-if="ui.lyricsSyncOpen.value"
-      class="offset-bar"
+      class="offset-card"
       role="group"
       :aria-label="t('lyrics.sync')"
       @keydown.esc.stop.prevent="ui.lyricsSyncOpen.value = false"
     >
-      <span class="ob-label">{{ t('lyrics.sync') }}</span>
-      <button
-        class="icon-btn is-round press h-7 w-7"
-        :title="t('lyrics.syncEarlier')"
-        :aria-label="t('lyrics.syncEarlier')"
-        @click="player.adjustLyricsOffset(-0.2)"
-      >
-        <Icon icon="ph:minus-bold" class="h-3.5 w-3.5" />
-      </button>
-      <span class="ob-val" :class="{ zero: tools.offset.value === 0 }" aria-live="polite">
-        {{ tools.offset.value > 0 ? '+' : '' }}{{ tools.offset.value.toFixed(1) }}s
-      </span>
-      <button
-        class="icon-btn is-round press h-7 w-7"
-        :title="t('lyrics.syncLater')"
-        :aria-label="t('lyrics.syncLater')"
-        @click="player.adjustLyricsOffset(0.2)"
-      >
-        <Icon icon="ph:plus-bold" class="h-3.5 w-3.5" />
-      </button>
-      <button
-        class="icon-btn is-round press h-7 w-7"
-        :title="t('lyrics.syncReset')"
-        :aria-label="t('lyrics.syncReset')"
-        :disabled="tools.offset.value === 0"
-        @click="player.resetLyricsOffset()"
-      >
-        <Icon icon="ph:arrow-counter-clockwise" class="h-3.5 w-3.5" />
-      </button>
-      <button class="btn-accent btn-pill press ob-save" :disabled="tools.saving.value" @click="tools.saveOffset">
-        <Icon :icon="tools.saved.value ? 'ph:check-bold' : 'ph:floppy-disk'" class="h-3.5 w-3.5" />
-        {{ tools.saved.value ? t('lyrics.syncSaved') : t('lyrics.syncSave') }}
-      </button>
-      <button
-        class="icon-btn is-round press h-7 w-7"
-        :title="t('common.close')"
-        :aria-label="t('common.close')"
-        @click="ui.lyricsSyncOpen.value = false"
-      >
-        <Icon icon="ph:x-bold" class="h-3.5 w-3.5" />
-      </button>
+      <!-- The quick way first: the line being heard, clicked, and the words
+           line up to it. Working out "early or late, and by how much" by ear
+           is the hard way, kept below for the last tenth of a second. -->
+      <div class="oc-head">
+        <span class="oc-icon"><Icon icon="ph:hand-pointing-bold" class="h-4 w-4" /></span>
+        <div class="min-w-0 flex-1">
+          <p class="oc-title">{{ t('lyrics.syncTap') }}</p>
+          <p class="oc-sub">{{ t('lyrics.syncTapSub') }}</p>
+        </div>
+        <button
+          class="icon-btn is-round press h-7 w-7 shrink-0"
+          :title="t('common.close')"
+          :aria-label="t('common.close')"
+          @click="ui.lyricsSyncOpen.value = false"
+        >
+          <Icon icon="ph:x-bold" class="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div class="oc-row">
+        <button class="oc-step press" :title="t('lyrics.syncEarlier')" :aria-label="t('lyrics.syncEarlier')" @click="tools.nudge(-0.1)">
+          <Icon icon="ph:caret-left-bold" class="h-3.5 w-3.5" />
+          {{ t('lyrics.syncEarlierShort') }}
+        </button>
+        <span class="oc-val" :class="{ zero: tools.offset.value === 0 }" aria-live="polite">
+          {{ tools.offset.value > 0 ? '+' : '' }}{{ tools.offset.value.toFixed(1) }}s
+        </span>
+        <button class="oc-step press" :title="t('lyrics.syncLater')" :aria-label="t('lyrics.syncLater')" @click="tools.nudge(0.1)">
+          {{ t('lyrics.syncLaterShort') }}
+          <Icon icon="ph:caret-right-bold" class="h-3.5 w-3.5" />
+        </button>
+        <button
+          class="icon-btn is-round press h-7 w-7"
+          :title="t('lyrics.syncReset')"
+          :aria-label="t('lyrics.syncReset')"
+          :disabled="tools.offset.value === 0"
+          @click="tools.resetOffset()"
+        >
+          <Icon icon="ph:arrow-counter-clockwise" class="h-3.5 w-3.5" />
+        </button>
+        <span class="oc-kept" :class="{ on: tools.saved.value }" aria-live="polite">
+          <Icon icon="ph:check-bold" class="h-3 w-3" />
+          {{ t('lyrics.syncKept') }}
+        </span>
+      </div>
     </div>
   </transition>
 </template>
 
 <script setup>
 import { Icon } from '@iconify/vue'
-import { usePlayer } from '/src/model/player'
 import { useUi } from '/src/model/ui'
 import { useI18n } from '/src/i18n'
 import { useLyricsTools } from '/src/model/lyrics/useLyricsTools'
 
-// Moving this song's words earlier or later as it plays, then keeping it.
+// Lining this song's words up with it as it plays, kept by itself.
 const { t } = useI18n()
-const player = usePlayer()
 const ui = useUi()
 const tools = useLyricsTools()
 </script>
@@ -70,57 +72,100 @@ const tools = useLyricsTools()
 /* A dark floating surface in every theme, like the toasts: it sits over
    the lyrics, and over the cover art in Now Playing, where the theme's own
    surfaces lose their contrast. */
-.offset-bar {
+.offset-card {
   --c-fg: 255 255 255;
   --c-tint: 255 255 255;
-  color: rgb(var(--c-fg));
-  background: rgb(36 37 42 / 0.94);
-  border: 1px solid rgb(255 255 255 / 0.1);
-  box-shadow: var(--shadow-pop);
-  backdrop-filter: blur(12px);
   position: absolute;
   bottom: 0.75rem;
   left: 50%;
+  z-index: 7;
+  display: flex;
+  width: min(380px, calc(100% - 1rem));
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 10px 14px;
+  border-radius: 16px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(36 37 42 / 0.95);
+  box-shadow: var(--shadow-pop);
+  backdrop-filter: blur(12px);
+  color: rgb(var(--c-fg));
   transform: translateX(-50%);
+}
+.oc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.oc-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border-radius: 9px;
+  background: rgb(var(--c-accent) / 0.18);
+  color: rgb(var(--c-accent));
+}
+.oc-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.oc-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgb(var(--c-fg) / 0.6);
+}
+.oc-row {
   display: flex;
   align-items: center;
-  gap: 0.2rem;
-  max-width: calc(100% - 1rem);
-  padding: 0.3rem 0.35rem 0.3rem 0.8rem;
-  border-radius: 9999px;
-  z-index: 7;
-  white-space: nowrap;
+  gap: 4px;
 }
-.ob-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 11px;
+.oc-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.08);
+  font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgb(var(--c-fg) / 0.5);
-  padding-right: 0.2rem;
+  transition: background-color 0.12s ease;
 }
-.ob-val {
-  min-width: 2.8rem;
+.oc-step:hover {
+  background: rgb(255 255 255 / 0.14);
+}
+.oc-val {
+  min-width: 3.2rem;
   text-align: center;
   font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: rgb(var(--c-accent));
 }
-.ob-val.zero {
+.oc-val.zero {
   color: rgb(var(--c-fg) / 0.55);
 }
-.ob-save {
-  height: 1.75rem;
-  margin-left: 0.15rem;
-  padding: 0 0.75rem;
-  font-size: 12px;
+.oc-kept {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 11.5px;
+  color: rgb(var(--c-accent));
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
-/* Narrow panes keep the controls and lose the caption first. */
+.oc-kept.on {
+  opacity: 1;
+}
+/* Narrow panes keep the controls and lose the explanation first. */
 @container lyricsbar (max-width: 340px) {
-  .ob-label {
+  .oc-sub,
+  .oc-kept {
     display: none;
   }
 }

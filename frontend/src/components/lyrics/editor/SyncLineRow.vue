@@ -2,7 +2,7 @@
   <li
     ref="rowEl"
     class="row"
-    :class="{ active, timed, error: q.error, warn: q.warn, editing }"
+    :class="{ active, sung, timed, error: q.error, warn: q.warn, editing }"
     :data-index="index"
     :tabindex="active ? 0 : -1"
     :aria-current="active ? 'true' : undefined"
@@ -38,6 +38,7 @@
       @click.stop
     ></textarea>
     <span v-else class="text" :class="{ 'is-break': !line.text }" dir="auto" @dblclick.stop="editor.startEdit(index)">
+      <Icon v-if="sung" icon="ph:speaker-simple-high-fill" class="sung-mark" :aria-label="t('publish.nowSinging')" />
       {{ line.text || '♪' }}
     </span>
 
@@ -85,6 +86,8 @@ const editor = s.editor
 
 const rowEl = ref(null)
 const active = computed(() => editor.active.value === props.index)
+// Being sung right now: the song's own place, beside the line to tap next.
+const sung = computed(() => session.sung.value === props.index)
 const editing = computed(() => editor.editing.value === props.index)
 const timed = computed(() => props.line.time != null)
 const q = computed(() => editor.quality.value[props.index] || {})
@@ -127,6 +130,17 @@ function onBlur() {
 </script>
 
 <style scoped>
+.row.sung .text {
+  color: rgb(var(--c-accent));
+}
+.sung-mark {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  color: rgb(var(--c-accent));
+}
 .row {
   display: grid;
   grid-template-columns: 2rem auto minmax(0, 1fr) auto;

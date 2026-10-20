@@ -65,6 +65,27 @@
         <span>{{ t('publish.keepsTiming') }}</span>
       </p>
 
+      <!-- A chorus sung four times is typed once: select it, repeat it.
+           The buttons keep the box's selection (mousedown would take it). -->
+      <div class="tools" role="toolbar" :aria-label="t('publish.repeatLines')">
+        <button
+          class="tool press"
+          :disabled="!form.raw.trim()"
+          :title="`${t('publish.repeatLines')} (Ctrl+D)`"
+          @mousedown.prevent
+          @click="repeat"
+        >
+          <Icon icon="ph:copy-simple-bold" class="h-4 w-4" />
+          <span>{{ t('publish.repeatLines') }}</span>
+          <kbd class="kbd">Ctrl D</kbd>
+        </button>
+        <button v-if="part" class="tool press" :title="part" @mousedown.prevent @click="putPart">
+          <Icon icon="ph:arrow-elbow-down-right-bold" class="h-4 w-4" />
+          <span class="truncate">{{ t('publish.insertPart', { start: partLabel(part) }) }}</span>
+        </button>
+        <span class="tools-hint">{{ t('publish.repeatHint') }}</span>
+      </div>
+
       <label class="paste-wrap">
         <span class="sr-only">{{ t('publish.pastePlaceholder') }}</span>
         <textarea
@@ -74,6 +95,7 @@
           dir="auto"
           :placeholder="t('publish.pastePlaceholder')"
           spellcheck="false"
+          @keydown="onPasteKey"
         ></textarea>
       </label>
 
@@ -116,10 +138,11 @@
 </template>
 
 <script setup>
-import { ref, computed, inject, onMounted } from 'vue'
+import { ref, computed, inject, nextTick, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useI18n } from '/src/i18n'
 import { LYRICS_EDITOR, SYNC } from '/src/model/lyrics/useLyricsSubmit'
+import { repeatLines, insertPart, partLabel } from '/src/model/lyrics/repeat'
 import EditorFooter from './EditorFooter.vue'
 
 const { t } = useI18n()
@@ -149,6 +172,43 @@ onMounted(() => {
   const el = s.missing.value.details ? titleEl.value : pasteEl.value
   el?.focus({ preventScroll: true })
 })
+
+// The part last repeated, kept to be put in again further down the song.
+const part = ref('')
+
+async function apply(result) {
+  if (!result) return
+  form.value.raw = result.text
+  await nextTick()
+  const el = pasteEl.value
+  if (!el) return
+  el.focus({ preventScroll: true })
+  el.setSelectionRange(result.selStart, result.selEnd)
+}
+
+function repeat() {
+  const el = pasteEl.value
+  if (!el) return
+  const result = repeatLines(form.value.raw, el.selectionStart, el.selectionEnd)
+  if (result) part.value = result.part
+  apply(result)
+}
+
+function putPart() {
+  const el = pasteEl.value
+  if (!el || !part.value) return
+  apply(insertPart(form.value.raw, el.selectionEnd, part.value))
+}
+
+// Ctrl+D in the box repeats, as in a code editor; it is kept from the app,
+// where it would save the song playing.
+function onPasteKey(e) {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'd') {
+    e.preventDefault()
+    e.stopPropagation()
+    repeat()
+  }
+}
 </script>
 
 <style scoped>
@@ -248,6 +308,45 @@ onMounted(() => {
 }
 .note-act:hover {
   text-decoration: underline;
+}
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.tool {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--c-tint) / 0.12);
+  background: rgb(var(--c-tint) / 0.05);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgb(var(--c-fg) / 0.85);
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+.tool:hover:not(:disabled) {
+  background: rgb(var(--c-tint) / 0.1);
+  border-color: rgb(var(--c-tint) / 0.2);
+}
+.tool:disabled {
+  opacity: 0.45;
+}
+.tool .kbd {
+  height: 18px;
+}
+.tools-hint {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 12px;
+  color: rgb(var(--c-fg) / 0.5);
 }
 .paste-wrap {
   display: flex;

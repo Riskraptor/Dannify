@@ -152,7 +152,7 @@ function scrubAt(clientX) {
   const rect = scrubEl.value?.getBoundingClientRect()
   if (!rect || !rect.width || !duration.value) return
   const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-  player.seek(duration.value * ratio)
+  session.seekTo(duration.value * ratio)
 }
 
 let stopDrag = null
@@ -174,8 +174,8 @@ const SCRUB_KEYS = { ArrowLeft: -5, ArrowDown: -5, ArrowRight: 5, ArrowUp: 5, Pa
 function onScrubKey(e) {
   if (e.altKey || e.ctrlKey || e.metaKey) return
   if (e.key in SCRUB_KEYS) session.seekBy(SCRUB_KEYS[e.key])
-  else if (e.key === 'Home') player.seek(0)
-  else if (e.key === 'End' && duration.value) player.seek(Math.max(0, duration.value - 1))
+  else if (e.key === 'Home') session.seekTo(0)
+  else if (e.key === 'End' && duration.value) session.seekTo(duration.value - 1)
   else return
   e.preventDefault()
 }

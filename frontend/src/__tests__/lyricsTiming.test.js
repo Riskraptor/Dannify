@@ -9,6 +9,7 @@ import {
   minTimed,
   enoughTimed,
   predictLine,
+  sungLine,
   loopWindow,
   stampTicks,
 } from '../model/lyrics/timing'
@@ -126,5 +127,24 @@ describe('stampTicks', () => {
 
   it('keeps marks on the bar when the length is unknown', () => {
     expect(stampTicks(at(5), 0)[0].left).toBe(100)
+  })
+})
+
+describe('sungLine', () => {
+  const lines = at(10, 15, 20, null)
+
+  it('is the line whose time has come, not the one about to be tapped', () => {
+    expect(sungLine(lines, 16)).toBe(1)
+    expect(predictLine(lines, 16)).toBe(2)
+  })
+
+  it('does not look ahead: a line is sung once its time is reached', () => {
+    expect(sungLine(lines, 19.9)).toBe(1)
+    expect(sungLine(lines, 20)).toBe(2)
+  })
+
+  it('is nothing before the first time, or with nothing timed', () => {
+    expect(sungLine(lines, 5)).toBe(-1)
+    expect(sungLine(at(null, null), 30)).toBe(-1)
   })
 })
