@@ -25,8 +25,6 @@ const Albums = () => import('/src/views/Albums.vue')
 const Album = () => import('/src/views/Album.vue')
 const Mix = () => import('/src/views/Mix.vue')
 const Recap = () => import('/src/views/Recap.vue')
-const Spotify = () => import('/src/views/Spotify.vue')
-const SpotifyList = () => import('/src/views/SpotifyList.vue')
 
 const routes = [
   { path: '/', name: 'Home', component: Home },
@@ -38,8 +36,6 @@ const routes = [
   { path: '/albums/:artist/:name', name: 'Album', component: Album },
   { path: '/mix/:id', name: 'Mix', component: Mix },
   { path: '/recap/:year?', name: 'Recap', component: Recap },
-  { path: '/spotify', name: 'Spotify', component: Spotify },
-  { path: '/spotify/:kind(playlist|album|liked|top|recent)/:id?', name: 'SpotifyList', component: SpotifyList },
   { path: '/liked', name: 'Liked', component: Liked },
   { path: '/stats', name: 'Stats', component: Stats },
   { path: '/history', name: 'History', component: History },

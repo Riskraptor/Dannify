@@ -65,7 +65,6 @@ const read = computed(() => readNotes(props.notes))
 // A picture for each card, from what it is about. Written out in full:
 // the icons are found in the source by name (vite.config.js).
 const ICONS = [
-  [/spotify/i, 'ph:spotify-logo'],
   [/settings|preferences/i, 'ph:gear-six'],
   [/special days|christmas|festive|new year/i, 'ph:confetti'],
   [/^your library|library, tidier|\bpin\b/i, 'ph:books'],

@@ -6,19 +6,8 @@ page](https://github.com/Riskraptor/Dannify/releases).
 
 ## 4.12.0
 
-Spotify comes to Dannify, with a fresh new look and a little festive cheer.
+A fresh new look and a little festive cheer.
 
-- **Spotify.** Connect your Spotify account in Settings, Accounts, next to
-  YouTube Music and ListenBrainz. Your Spotify, a page of its own, has your
-  playlists, Liked Songs, saved albums, the artists you follow, your top songs
-  and artists (over a month, half a year or all time) and what you played
-  lately, all playable in Dannify through YouTube Music. Your playlists also
-  appear in Your Library and on Home. Spotify lets an app like Dannify sign
-  in only the few people it lists, so Settings also takes a Spotify app of
-  your own (making one needs Spotify Premium).
-- **Copy from Spotify.** Any Spotify list, a playlist, an album, Liked Songs
-  or your top songs, becomes a Dannify playlist with the songs YouTube Music
-  has, or is saved to play offline.
 - **A new Settings.** Categories down the side, each with its own colour, a
   search box that finds any setting, and every account in one place. On a
   narrow window the categories fold into a compact rail.
@@ -31,7 +20,7 @@ Spotify comes to Dannify, with a fresh new look and a little festive cheer.
   confetti over the New Year, on Home, on the splash screen and in the
   installer, with a greeting on the day. Big updates open with a welcome
   that says what is new. Settings, Appearance turns it off in the app.
-- **Show on Discord is gone.** Spotify takes its place.
+- **Show on Discord is gone.**
 
 Fixed:
 
@@ -45,7 +34,6 @@ Fixed:
 - One or two songs in Jump back in sit side by side instead of stacked.
 - The artist card in the side panel says monthly listeners or subscribers,
   not a bare number.
-- F5 on a Spotify page shows a playlist you have just changed in Spotify.
 - A problem report keeps every log, even two with the same name.
 
 ## 4.11.0
