@@ -15,6 +15,7 @@ export default {
     minutes: '{m} min',
     hoursMinutes: '{h} h {m} min',
     hours: '{h} h',
+    starting: 'Votre musique démarre…',
   },
   fonts: {
     system: 'Système',
@@ -414,7 +415,8 @@ export default {
     saved: 'Enregistré',
     saveError: "Impossible d'enregistrer les paramètres.",
     language: 'Langue',
-    languageHint: "Choisissez la langue de l'interface.",
+    languageHint: 'Automatique parle la langue réglée sur cet ordinateur.',
+    languageAuto: 'Automatique ({language})',
     about: 'À propos',
     version: 'Version {version}',
     shortcutsHint: 'Tous les raccourcis clavier au même endroit (Ctrl+/).',

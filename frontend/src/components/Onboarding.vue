@@ -15,6 +15,15 @@
         <button v-if="step < LAST" class="ob-skip btn-ghost" @click="finish">
           {{ t('onboarding.skip') }}
         </button>
+        <!-- The language was guessed from the computer's: changeable before
+             a single step is read, under each language's own name. -->
+        <label class="ob-lang">
+          <Icon icon="ph:translate" class="h-4 w-4 shrink-0" aria-hidden="true" />
+          <select class="field-select" :value="choice" :aria-label="t('settings.language')" @change="setLocale($event.target.value)">
+            <option value="auto">{{ t('settings.languageAuto', { language: systemName }) }}</option>
+            <option v-for="l in locales" :key="l.code" :value="l.code">{{ l.name }}</option>
+          </select>
+        </label>
 
         <div class="ob-scroll">
           <div class="ob-col">
@@ -158,7 +167,8 @@ import { useAccount } from '/src/model/account'
 import { useUi } from '/src/model/ui'
 import { trapTab } from '/src/model/focusTrap'
 
-const { t } = useI18n()
+const { t, choice, setLocale, locales, systemLocale } = useI18n()
+const systemName = computed(() => locales.find((l) => l.code === systemLocale())?.name || 'English')
 const ob = useOnboarding()
 const theme = useTheme()
 const sm = useSettingsManager()
@@ -298,6 +308,20 @@ watch(step, async () => {
   top: 16px;
   right: 20px;
 }
+.ob-lang {
+  position: absolute;
+  z-index: 1;
+  top: 16px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgb(var(--c-fg) / 0.7);
+}
+.ob-lang .field-select {
+  width: auto;
+  max-width: 220px;
+}
 .ob-col {
   position: relative;
   display: flex;
@@ -424,11 +448,13 @@ watch(step, async () => {
   color: rgb(var(--c-accent-fg));
   background: rgb(var(--c-accent));
 }
+/* Four to a row: eight palettes as two even rows, not five and three. */
 .ob-swatches {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  margin-top: 20px;
+  max-width: calc(4 * 86px + 3 * 12px);
+  margin: 20px auto 0;
   gap: 12px;
 }
 .ob-swatch {
