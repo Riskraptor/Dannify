@@ -94,26 +94,6 @@
         />
       </Shelf>
 
-      <!-- From the person's Spotify, once they signed in to it: their
-           playlists, playing through YouTube Music. -->
-      <Shelf
-        v-if="spotifyShelf.length"
-        :title="t('spotify.homeShelf')"
-        :more-label="t('spotify.yours')"
-        @more="router.push({ name: 'Spotify' })"
-      >
-        <MediaCard
-          v-for="p in spotifyShelf"
-          :key="p.id"
-          :item="{ name: p.name, cover: p.image }"
-          kind="playlist"
-          :subtitle-text="p.mine ? t('spotify.byYou') : p.owner"
-          playable
-          @open="router.push({ name: 'SpotifyList', params: { kind: 'playlist', id: p.id } })"
-          @play="playSpotifyPlaylist(p.id)"
-        />
-      </Shelf>
-
       <!-- Your YouTube Music picks (personalized once signed in) -->
       <template v-for="(section, si) in feedSections" :key="section.title + si">
         <section v-if="section.songs" class="shelf-block">
@@ -298,7 +278,6 @@ import { useSupport } from '/src/model/support'
 import { useListens } from '/src/model/listens'
 import { entryRow } from '/src/model/playlists'
 import { mixCovers, MIXES, useMixes } from '/src/model/mixes'
-import { spotifyPlaylists } from '/src/model/spotify'
 import { occasionOn, prefersStill, seasonal } from '/src/model/occasions'
 import Particles from '/src/components/ui/Particles.vue'
 import Shelf from '/src/components/ui/Shelf.vue'
@@ -354,16 +333,6 @@ watch(listens.listensEpoch, loadListening)
 // Christmas, the New Year: snow or confetti at the top of the page.
 const festive = computed(() => (seasonal.value && !prefersStill() ? occasionOn() : null))
 
-// Spotify: the person's playlists there, a shelf's worth.
-const spotifyShelf = computed(() => spotifyPlaylists.value.slice(0, 12))
-async function playSpotifyPlaylist(id) {
-  try {
-    const res = await API.spotifyPlaylist(id)
-    playRows((res.data.songs || []).map(songRow), 0)
-  } catch {
-    // The playlist page says why, when opened.
-  }
-}
 const hasYear = computed(() => !!(year.value && year.value.plays >= 10))
 const yearCovers = computed(() => mixCovers(((year.value && year.value.top_songs) || []).map(entryRow)))
 

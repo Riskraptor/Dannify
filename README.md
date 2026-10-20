@@ -19,7 +19,6 @@ outside the app can reach.
 | | |
 | --- | --- |
 | ![Made for you: mixes on Home that keep up with your listening](docs/screenshots/made-for-you.png) | ![Your year in music, told as a story](docs/screenshots/year-in-music.png) |
-| ![Your Spotify: playlists, Liked Songs, top songs and artists](docs/screenshots/spotify.png) | ![A Spotify playlist, to play, copy into Dannify or save for offline](docs/screenshots/spotify-playlist.png) |
 | ![Now Playing, with synced lyrics](docs/screenshots/now-playing.png) | ![Your stats: time listened, streaks and a chart of every day](docs/screenshots/stats.png) |
 | ![Settings: categories down the side, every account in one place](docs/screenshots/settings.png) | ![The welcome after a big update](docs/screenshots/welcome.png) |
 | ![Albums in your library](docs/screenshots/albums.png) | ![An album, its songs in album order](docs/screenshots/album.png) |
@@ -64,19 +63,6 @@ Ctrl+Shift+P opens a command palette: any page, playback control, setting,
 playlist, artist or album, by typing a few letters.
 
 Sign in with Google and you get your own home feed, liked songs and playlists.
-
-Connect Spotify and your Spotify comes too: your playlists, Liked Songs, saved
-albums, the artists you follow, your top songs and artists and what you played
-lately, all playable in Dannify. The songs play through YouTube Music, matched
-one by one by name, artist and length. Any of them, a playlist, an album,
-Liked Songs or your top songs, can be copied into a Dannify playlist or saved
-to play offline. Spotify only lets an app
-like this sign in a few people it lists, so Settings, Accounts also takes a
-Spotify app of your own: make one on
-[developer.spotify.com](https://developer.spotify.com/dashboard) (it needs
-Spotify Premium), add the redirect address `http://127.0.0.1:43821/callback`
-exactly as written, tick Web API, and paste its Client ID into Dannify. Never its secret: Dannify
-signs in without one.
 
 Your Library, down the side, holds your playlists, artists and albums in one
 list, with chips to show just one kind, a sort, and a compact view. Pin the

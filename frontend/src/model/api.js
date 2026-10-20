@@ -441,53 +441,6 @@ function disconnectListenBrainz() {
   return API.post('/api/listenbrainz/disconnect')
 }
 
-// Spotify, for whoever signs in (Backend/dannify/spotify_account.py).
-function spotifyStatus() {
-  return API.get('/api/spotify')
-}
-function spotifyConnect() {
-  return API.post('/api/spotify/connect')
-}
-function spotifyDisconnect() {
-  return API.post('/api/spotify/disconnect')
-}
-function spotifySetApp(clientId) {
-  return API.post('/api/spotify/app', { client_id: clientId })
-}
-function spotifyRefresh() {
-  return API.post('/api/spotify/refresh')
-}
-function spotifyPlaylists() {
-  return API.get('/api/spotify/playlists')
-}
-function spotifyPlaylist(id) {
-  return API.get(`/api/spotify/playlist/${encodeURIComponent(id)}`)
-}
-function spotifyLiked() {
-  return API.get('/api/spotify/liked')
-}
-function spotifyAlbums() {
-  return API.get('/api/spotify/albums')
-}
-function spotifyAlbum(id) {
-  return API.get(`/api/spotify/album/${encodeURIComponent(id)}`)
-}
-function spotifyArtists() {
-  return API.get('/api/spotify/artists')
-}
-function spotifyTop(kind, span) {
-  return API.get('/api/spotify/top', { params: { kind, span } })
-}
-function spotifyRecent() {
-  return API.get('/api/spotify/recent')
-}
-function spotifyImport(kind, id = '', name = '') {
-  return API.post('/api/spotify/import', { kind, id, name })
-}
-function spotifyImportStatus(job) {
-  return API.get(`/api/spotify/import/${encodeURIComponent(job)}`)
-}
-
 // Saved music that will not open at all: look again ('retry'), or let new
 // songs be saved beside the ones that will not ('fresh').
 function recoverStorage(action) {
@@ -550,21 +503,6 @@ export default {
   listenBrainzStatus,
   connectListenBrainz,
   disconnectListenBrainz,
-  spotifyStatus,
-  spotifyConnect,
-  spotifyDisconnect,
-  spotifySetApp,
-  spotifyRefresh,
-  spotifyPlaylists,
-  spotifyPlaylist,
-  spotifyLiked,
-  spotifyAlbums,
-  spotifyAlbum,
-  spotifyArtists,
-  spotifyTop,
-  spotifyRecent,
-  spotifyImport,
-  spotifyImportStatus,
   repairStatus,
   repairTracks,
   repairStop,

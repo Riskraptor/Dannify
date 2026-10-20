@@ -164,10 +164,10 @@ describe('after a restart', () => {
 
   it('welcomes a release with something new in it: What’s new opens as a celebration', async () => {
     api.updateStatus.mockResolvedValue({
-      data: { just_updated: { version: '4.8.0', notes: '- New: Spotify' } },
+      data: { just_updated: { version: '4.8.0', notes: '- New: Special days' } },
     })
     await vi.advanceTimersByTimeAsync(2600)
-    expect((await import('../model/updates.js')).whatsNew.value).toEqual({ version: '4.8.0', notes: '- New: Spotify', celebrate: true })
+    expect((await import('../model/updates.js')).whatsNew.value).toEqual({ version: '4.8.0', notes: '- New: Special days', celebrate: true })
     expect(toasts.some((x) => x.msg.startsWith('update.updatedToast'))).toBe(false)
     expect(api.acknowledgeUpdate).toHaveBeenCalledTimes(1)
   })
@@ -176,7 +176,7 @@ describe('after a restart', () => {
     const { setSeasonal } = await import('/src/model/occasions')
     setSeasonal(false)
     api.updateStatus.mockResolvedValue({
-      data: { just_updated: { version: '4.8.0', notes: '- New: Spotify' } },
+      data: { just_updated: { version: '4.8.0', notes: '- New: Special days' } },
     })
     await vi.advanceTimersByTimeAsync(2600)
     expect((await import('../model/updates.js')).whatsNew.value).toBe(null)

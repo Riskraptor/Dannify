@@ -436,10 +436,6 @@
 .settings .row-brand.is-youtube {
   background: #ff0033;
 }
-.settings .row-brand.is-spotify {
-  background: #1ed760;
-  color: #000;
-}
 .settings .row-brand.is-listenbrainz {
   background: linear-gradient(135deg, #eb743b, #353070);
 }
