@@ -105,15 +105,20 @@ const root = ref(null)
 const primary = ref(null)
 const offline = computed(() => isOffline.value)
 
-// Each way it can fail, said in the user's language. The catalogue's own
-// reason, when it gave one, is more use than anything general.
+// Each way it can fail, said in the user's language, never in the
+// catalogue's own words.
+const FAILURE_TEXT = {
+  offline: 'publish.offline',
+  timeout: 'publish.timeout',
+  busy: 'publish.busy',
+  slow: 'publish.slow',
+  refused: 'publish.refused',
+  invalid: 'publish.needDetails',
+}
 const failureText = computed(() => {
   const f = s.failure.value
   if (!f) return ''
-  if (f.reason === 'offline') return t('publish.offline')
-  if (f.reason === 'timeout') return t('publish.timeout')
-  if (f.reason === 'rejected' && f.error) return f.error
-  return t('publish.failed')
+  return t(FAILURE_TEXT[f.reason] || 'publish.failed')
 })
 
 async function onSubmit() {

@@ -107,7 +107,32 @@ else:
 
 
 class PublishError(RuntimeError):
-    """Raised when the publish flow fails at any stage."""
+    """Raised when the publish flow fails at any stage.
+
+    ``kind`` is what the person is told, in their language; the message is
+    for the log only, since it carries the service's own words:
+
+    - ``offline``: the service could not be reached.
+    - ``busy``: it answered with a fault of its own (5xx, 429, a timeout).
+      Tried again here before it comes to this.
+    - ``slow``: the proof of work took too long on this computer.
+    - ``refused``: it turned these lyrics down (4xx).
+    - ``invalid``: something missing before anything was sent.
+    """
+
+    def __init__(self, message: str, kind: str = 'refused') -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
+def _kind_of(status: int) -> str:
+    return 'busy' if status >= 500 or status in (408, 429) else 'refused'
+
+
+# A fault of the service's own is tried again, with a fresh challenge each
+# time (a token is good once): someone pressing "Try again" a minute later
+# found it worked, so it is done for them.
+_RETRY_WAITS = (2.0, 5.0)
 
 
 # ---------------------------------------------------------------------------
@@ -119,21 +144,24 @@ def request_challenge() -> dict[str, str]:
         resp = _session.post(
             f'{LRCLIB_BASE}/request-challenge', timeout=_TIMEOUT,
         )
+    except requests.Timeout as exc:
+        raise PublishError(f'lrclib challenge timed out: {exc}', 'busy') from exc
     except requests.RequestException as exc:
-        raise PublishError(f'Could not reach lrclib: {exc}') from exc
+        raise PublishError(f'Could not reach lrclib: {exc}', 'offline') from exc
     if resp.status_code != 200:
         raise PublishError(
             f'lrclib challenge request failed: '
-            f'HTTP {resp.status_code} {resp.text[:200]}'
+            f'HTTP {resp.status_code} {resp.text[:200]}',
+            _kind_of(resp.status_code),
         )
     try:
         data = resp.json()
     except ValueError as exc:
-        raise PublishError('lrclib challenge response was not JSON') from exc
+        raise PublishError('lrclib challenge response was not JSON', 'busy') from exc
     prefix = data.get('prefix')
     target = data.get('target')
     if not isinstance(prefix, str) or not isinstance(target, str):
-        raise PublishError('lrclib challenge response missing prefix/target')
+        raise PublishError('lrclib challenge response missing prefix/target', 'busy')
     return {'prefix': prefix, 'target': target}
 
 
@@ -179,7 +207,8 @@ def _solve_inprocess(prefix: str, target_hex: str, deadline: float) -> int:
         if (nonce & 0xFFFF) == 0 and time.monotonic() >= deadline:
             raise PublishError(
                 f'Could not solve lrclib proof-of-work within '
-                f'{_SOLVER_TIMEOUT}s'
+                f'{_SOLVER_TIMEOUT}s',
+                'slow',
             )
 
 
@@ -249,7 +278,8 @@ def _solve_subproc(
             time.sleep(0.05)
         raise PublishError(
             f'Could not solve lrclib proof-of-work within '
-            f'{_SOLVER_TIMEOUT}s'
+            f'{_SOLVER_TIMEOUT}s',
+            'slow',
         )
     finally:
         for p, _ in procs:
@@ -340,14 +370,41 @@ def publish(
     plain_lyrics = (plain_lyrics or '').strip()
     synced_lyrics = (synced_lyrics or '').strip()
     if not track_name or not artist_name:
-        raise PublishError('track_name and artist_name are required')
+        raise PublishError('track_name and artist_name are required', 'invalid')
     try:
         duration_f = float(duration or 0)
     except (TypeError, ValueError):
-        raise PublishError('duration must be a number')
+        raise PublishError('duration must be a number', 'invalid')
     if duration_f <= 0:
-        raise PublishError('duration must be > 0')
+        raise PublishError('duration must be > 0', 'invalid')
 
+    attempt = 0
+    while True:
+        try:
+            return _publish_once(
+                track_name, artist_name, album_name, duration_f,
+                plain_lyrics, synced_lyrics,
+            )
+        except PublishError as exc:
+            if exc.kind != 'busy' or attempt >= len(_RETRY_WAITS):
+                raise
+            logger.info('lyrics publish: service fault, trying again ({})', exc)
+            _sleep(_RETRY_WAITS[attempt])
+            attempt += 1
+
+
+def _sleep(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def _publish_once(
+    track_name: str,
+    artist_name: str,
+    album_name: str,
+    duration_f: float,
+    plain_lyrics: str,
+    synced_lyrics: str,
+) -> dict[str, Any]:
     challenge = request_challenge()
     token = make_publish_token(challenge)
 
@@ -365,8 +422,10 @@ def publish(
             f'{LRCLIB_BASE}/publish',
             json=body, headers=headers, timeout=_TIMEOUT,
         )
+    except requests.Timeout as exc:
+        raise PublishError(f'lrclib publish timed out: {exc}', 'busy') from exc
     except requests.RequestException as exc:
-        raise PublishError(f'lrclib publish request failed: {exc}') from exc
+        raise PublishError(f'lrclib publish request failed: {exc}', 'offline') from exc
 
     if resp.status_code == 201:
         logger.info(
@@ -383,5 +442,6 @@ def publish(
     except ValueError:
         pass
     raise PublishError(
-        f'lrclib rejected publish (HTTP {resp.status_code}): {msg}'
+        f'lrclib rejected publish (HTTP {resp.status_code}): {msg}',
+        _kind_of(resp.status_code),
     )

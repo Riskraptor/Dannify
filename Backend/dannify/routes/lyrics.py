@@ -423,14 +423,16 @@ async def lyrics_publish_endpoint(request: Request) -> dict[str, Any]:
     contribution from lrclib.
 
     Returns ``{published: true}`` on success or ``{published: false,
-    error: '…'}`` on failure (HTTP 200 either way. The UI shows the
-    error inline; this avoids needing two error-handling paths).
+    reason: '…'}`` on failure (HTTP 200 either way). The reason is one of
+    lyrics_publish.PublishError's kinds, which the window says in the
+    person's language. What the service itself said goes to the log, never
+    to the screen.
     """
 
     try:
         payload = await request.json()
     except Exception:
-        return {'published': False, 'error': 'Invalid JSON body'}
+        return {'published': False, 'reason': 'invalid'}
 
     track = str(payload.get('track') or '').strip()
     artist = str(payload.get('artist') or '').strip()
@@ -440,25 +442,16 @@ async def lyrics_publish_endpoint(request: Request) -> dict[str, Any]:
     try:
         duration = float(payload.get('duration') or 0)
     except (TypeError, ValueError):
-        return {'published': False, 'error': 'duration must be a number'}
+        return {'published': False, 'reason': 'invalid'}
 
     if not track or not artist:
-        return {
-            'published': False,
-            'error': 'Track title and artist are required.',
-        }
+        return {'published': False, 'reason': 'invalid'}
     if duration <= 0:
-        return {
-            'published': False,
-            'error': 'Track duration is required (must be > 0).',
-        }
+        return {'published': False, 'reason': 'invalid'}
     if not plain.strip() and not synced.strip():
         # lrclib's docs allow empty-both (marks track as instrumental),
         # but our UI shouldn't be sending that: guard explicitly.
-        return {
-            'published': False,
-            'error': 'No lyrics provided. Add plain or synced lyrics.',
-        }
+        return {'published': False, 'reason': 'invalid'}
 
     try:
         await asyncio.to_thread(
@@ -471,11 +464,11 @@ async def lyrics_publish_endpoint(request: Request) -> dict[str, Any]:
             synced_lyrics=synced,
         )
     except lyrics_publish.PublishError as exc:
-        logger.warning('lyrics publish refused: {}', exc)
-        return {'published': False, 'error': str(exc)}
-    except Exception as exc:  # noqa: BLE001
+        logger.warning('lyrics publish refused ({}): {}', exc.kind, exc)
+        return {'published': False, 'reason': exc.kind}
+    except Exception:  # noqa: BLE001
         logger.exception('lyrics publish crashed')
-        return {'published': False, 'error': f'Unexpected error: {exc}'}
+        return {'published': False, 'reason': 'failed'}
 
     # Drop our caches for this song so the next lookup refreshes from
     # lrclib (which now serves the user's own contribution).

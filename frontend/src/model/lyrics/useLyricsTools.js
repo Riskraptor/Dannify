@@ -16,8 +16,15 @@ const refreshing = ref(false)
 const switching = ref(false)
 const saving = ref(false)
 const saved = ref(false)
+// The list of versions, open above the toolbar.
+const versionsOpen = ref(false)
+const versionsLoading = ref(false)
 let savedTimer = null
+let saveSoon = null
 let watchingNetwork = false
+// A timing correction keeps itself this long after the last change: there
+// is no Save to forget, and a run of nudges is one save.
+const AUTOSAVE_MS = 700
 
 export function useLyricsTools() {
   const player = usePlayer()
@@ -55,6 +62,53 @@ export function useLyricsTools() {
     switching.value = true
     try {
       await player.switchLyricVersion(1)
+    } finally {
+      switching.value = false
+    }
+  }
+
+  function keepSoon() {
+    saved.value = false
+    clearTimeout(saveSoon)
+    saveSoon = setTimeout(saveOffset, AUTOSAVE_MS)
+  }
+
+  /** Move the words earlier (negative) or later, and keep it. */
+  function nudge(delta) {
+    player.adjustLyricsOffset(delta)
+    keepSoon()
+  }
+
+  /** Line the words up by the line being heard now, and keep it. */
+  function alignTo(index) {
+    player.alignLyricToNow(index)
+    keepSoon()
+  }
+
+  function resetOffset() {
+    player.resetLyricsOffset()
+    keepSoon()
+  }
+
+  async function openVersions() {
+    if (versionsOpen.value) {
+      versionsOpen.value = false
+      return
+    }
+    versionsLoading.value = true
+    versionsOpen.value = true
+    try {
+      if (!(await player.loadLyricVersions())) versionsOpen.value = false
+    } finally {
+      versionsLoading.value = false
+    }
+  }
+
+  async function chooseVersion(index) {
+    if (switching.value) return
+    switching.value = true
+    try {
+      await player.chooseLyricVersion(index)
     } finally {
       switching.value = false
     }
@@ -110,6 +164,14 @@ export function useLyricsTools() {
     refresh,
     switchVersion,
     saveOffset,
+    nudge,
+    alignTo,
+    resetOffset,
+    versionsOpen,
+    versionsLoading,
+    versions: player.lyricVersionList,
+    openVersions,
+    chooseVersion,
     contribute: openLyricsEditor,
   }
 }
