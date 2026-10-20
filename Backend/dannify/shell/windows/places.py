@@ -93,6 +93,12 @@ def _splash_html(theme: str, native_frame: bool, body: str = '') -> str:
         "<div class='bar'></div>"
         "<div class='hint'>Starting your music…</div>"
     )
+    # A special day (Christmas, the New Year): a greeting, and snow or confetti.
+    from dannify import occasions  # noqa: PLC0415
+
+    hint, fx_css, fx = occasions.splash_extras() if not body else ('', '', '')
+    if hint:
+        content = content.replace('Starting your music…', hint)
     controls = '' if native_frame else (
         "<div class='caption' onmousedown='drag(event)' ondblclick='api(\"win_toggle_maximize\")'>"
         "<button onclick='api(\"win_minimize\")' title='Minimize'>&#xE921;</button>"
@@ -123,7 +129,8 @@ def _splash_html(theme: str, native_frame: bool, body: str = '') -> str:
   code{{font-size:12px;color:{muted}}}
   @keyframes slide{{to{{left:100%}}}}
   @keyframes fade{{from{{opacity:0;transform:scale(.97)}}to{{opacity:1}}}}
-</style></head><body>
+{fx_css}</style></head><body>
+  {fx}
   {controls}
   <div class='wrap'>{content}</div>
   <script>

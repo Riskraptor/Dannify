@@ -69,6 +69,8 @@
   <ReportDialog v-if="wanted.report" />
   <LyricsEditor v-if="wanted.editor" :open="submitOpen" @close="submitOpen = false" />
   <Onboarding v-if="wanted.onboarding" />
+  <!-- A special day's greeting: its code is fetched on such a day only. -->
+  <OccasionGreeting v-if="greetToday" />
 </template>
 
 <script setup>
@@ -85,6 +87,7 @@ import ContextMenuHost from './components/ui/ContextMenuHost.vue'
 import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
 import { startOnboarding, useOnboarding } from './model/onboarding'
+import { occasionOn, shouldGreet } from './model/occasions'
 import { useReporting } from './model/problems'
 import { whatsNew } from './model/updates'
 
@@ -98,6 +101,7 @@ const WhatsNewDialog = defineAsyncComponent(() => import('./components/ui/WhatsN
 const ReportDialog = defineAsyncComponent(() => import('/src/components/ui/ReportDialog.vue'))
 const LyricsEditor = defineAsyncComponent(() => import('./components/lyrics/LyricsEditor.vue'))
 const Onboarding = defineAsyncComponent(() => import('./components/Onboarding.vue'))
+const OccasionGreeting = defineAsyncComponent(() => import('./components/ui/OccasionGreeting.vue'))
 import { useUi } from './model/ui'
 import { usePlayer } from './model/player'
 import { desktop } from './desktop/bridge'
@@ -197,6 +201,9 @@ const removeAfter = router.afterEach((to, from) => {
 
 // --- Lyrics contribution modal (opened from several places) ---------------
 const submitOpen = ref(false)
+
+// Christmas, the New Year (model/occasions.js): greeted once, if still to be.
+const greetToday = shouldGreet(occasionOn())
 
 // Once wanted, kept: each dialog's closing animation needs it still there.
 const reporting = useReporting()
