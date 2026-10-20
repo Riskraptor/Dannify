@@ -284,11 +284,11 @@ def build_app() -> FastAPI:
     from dannify import scrobble as _scrobble
 
     _scrobble.init(DATABASE_DIR)
-    # Discord, for whoever turned it on (see presence.py): nothing at all
-    # happens otherwise.
-    from dannify import presence as _presence
-
-    _presence.init(DATABASE_DIR)
+    # Show on Discord was taken out in 4.12; the switch it kept goes too.
+    try:
+        (DATABASE_DIR / 'discord.json').unlink(missing_ok=True)
+    except OSError:
+        pass
     # This version is running, so whatever was downloaded to get here, or to
     # get to an older one, has done its job. A newer one still waiting stays.
     try:

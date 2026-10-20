@@ -43,8 +43,7 @@ It keeps a listening history, if you want it to. History shows what you
 played day by day, and Your stats shows time listened, streaks, the hours you
 listen at and your top songs, artists and albums. It stays on your computer;
 connect ListenBrainz in Settings and your listens go to your profile there
-too. Turn on Show on Discord and your Discord profile shows what you are
-playing, with its artwork and a progress bar.
+too.
 
 From that history Home makes you mixes that keep themselves up to date: On
 Repeat, Top This Month, Forgotten Favourites and Recently Added. Your year in
