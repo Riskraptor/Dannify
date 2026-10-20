@@ -79,7 +79,11 @@ namespace Dannify.Setup.UI
                 Visuals.Chrome(this);
                 if (!Visuals.IsWindows11) Edge.Visibility = Visibility.Visible;
             };
-            Loaded += (s, e) => Intro();
+            Loaded += (s, e) =>
+            {
+                Intro();
+                Season.Decorate(this, Season.Now);
+            };
 
             _tick = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
             _tick.Tick += (s, e) => StepBar();

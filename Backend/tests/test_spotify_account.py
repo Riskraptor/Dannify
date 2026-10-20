@@ -145,7 +145,8 @@ def visit(url):
         with urllib.request.urlopen(url, timeout=5) as res:
             return res.status, res.read().decode('utf-8')
     except urllib.error.HTTPError as exc:
-        return exc.code, exc.read().decode('utf-8')
+        with exc:
+            return exc.code, exc.read().decode('utf-8')
 
 
 def sign_in(fake):
@@ -246,9 +247,9 @@ def test_the_one_time_page_closes_after_its_answer(fake):
     deadline = time.time() + 5
     while time.time() < deadline:
         try:
-            urllib.request.urlopen(q['redirect_uri'], timeout=1)
-        except urllib.error.HTTPError:
-            pass
+            urllib.request.urlopen(q['redirect_uri'], timeout=1).close()
+        except urllib.error.HTTPError as exc:
+            exc.close()
         except (urllib.error.URLError, ConnectionError, OSError):
             return  # nobody listening any more
         time.sleep(0.1)

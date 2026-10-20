@@ -155,11 +155,20 @@ def pack(
     errors = [e for e in window_errors if e]
     error_text = scrub(json.dumps(errors, ensure_ascii=False, indent=2, default=str)) if errors else ''
     logs = []
+    used: set[str] = set()
     for log in _logs(Path(data_dir), log_file):
         try:
-            logs.append((log.name, scrub(_tail(log))))
+            text = scrub(_tail(log))
         except OSError:
             continue
+        # Two folders can each hold a dannify.log: both go in, under names
+        # of their own, not one written over the other in the zip.
+        name, n = log.name, 2
+        while name in used:
+            name = f'{log.stem}-{n}{log.suffix}'
+            n += 1
+        used.add(name)
+        logs.append((name, text))
 
     while True:
         buffer = io.BytesIO()
