@@ -166,15 +166,18 @@ function nearScreen(el) {
 // The observer only reports when the window draws a frame. A page in a
 // window nobody can see draws none, and one that has just been shown can
 // take a moment; a cover on screen is not left blank on that account.
+//
+// A cover out of the page is kept waiting, not let go. Pages are kept while
+// another is open, and Home's Jump back in gains a tile for the song just
+// started on an artist's page: it was dropped here while Home was away, and
+// stayed blank after going back, until the app was restarted. One taken out
+// for good stops waiting itself (CoverImage, when it goes).
 let fallbackTimer = null
 function checkByHand() {
   fallbackTimer = null
   if (document.visibilityState !== 'visible') return
   for (const [el, run] of [...watched]) {
-    if (!el.isConnected) {
-      watched.delete(el)
-      continue
-    }
+    if (!el.isConnected) continue
     if (nearScreen(el)) {
       watched.delete(el)
       observer?.unobserve(el)
@@ -184,6 +187,11 @@ function checkByHand() {
 }
 function scheduleCheck() {
   if (!fallbackTimer) fallbackTimer = setTimeout(checkByHand, 1500)
+}
+
+/** Look again soon: a kept page has just been shown again. */
+export function checkSoon() {
+  if (watched.size) scheduleCheck()
 }
 
 /** Call *fn* once, when *el* comes near the screen. Returns a way to stop. */
