@@ -1,5 +1,6 @@
 <template>
   <div class="recap" tabindex="-1">
+    <div class="recap-bg" aria-hidden="true" />
     <div class="recap-glow" aria-hidden="true" />
 
     <header class="recap-top">
@@ -285,11 +286,20 @@ function monthText(m) {
   overflow: hidden;
   color: #fff;
   outline: none;
-  background: linear-gradient(130deg, #2b0d4a, #6b1d6e 40%, #c2185b 75%, #ff6f3c);
-  background-size: 220% 220%;
-  animation: recap-shift 18s ease-in-out infinite alternate;
+  /* The colour under the moving layer, so nothing dark shows at its edges. */
+  background: #6b1d6e;
   --c-fg: 255 255 255;
   --c-tint: 255 255 255;
+}
+/* The slowly moving colours, on a layer of their own: moved, never redrawn.
+   Not on the page itself, whose own animations the page change waits for. */
+.recap-bg {
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(130deg, #2b0d4a, #6b1d6e 40%, #c2185b 75%, #ff6f3c);
+  will-change: transform;
+  animation: recap-shift 18s ease-in-out infinite alternate;
+  pointer-events: none;
 }
 .recap-glow {
   position: absolute;
@@ -302,10 +312,10 @@ function monthText(m) {
 }
 @keyframes recap-shift {
   from {
-    background-position: 0% 30%;
+    transform: translate3d(-12%, -8%, 0);
   }
   to {
-    background-position: 100% 70%;
+    transform: translate3d(12%, 8%, 0);
   }
 }
 @keyframes recap-float {
@@ -578,7 +588,7 @@ function monthText(m) {
   transform: translateX(-28px);
 }
 @media (prefers-reduced-motion: reduce) {
-  .recap,
+  .recap-bg,
   .recap-glow,
   .recap-huge,
   .recap-portrait,

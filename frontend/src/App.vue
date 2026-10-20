@@ -37,8 +37,12 @@
         <router-view v-slot="{ Component, route: r }">
           <!-- Views cross-fade instead of snapping in. `out-in` keeps the
                scroll container from having two children at once, which would
-               fight scroll restoration. -->
-          <transition name="view" mode="out-in">
+               fight scroll restoration. The times are given outright: left to
+               itself the transition waits for every animation on the page it
+               is leaving, and a page with one that never ends (Your year in
+               music's moving background) held the next one back for its
+               full length, eighteen seconds of an empty window. -->
+          <transition name="view" mode="out-in" :duration="{ enter: 260, leave: 100 }">
             <keep-alive :include="cachedViews" :max="12">
               <component :is="Component" :key="viewKey(r)" />
             </keep-alive>
