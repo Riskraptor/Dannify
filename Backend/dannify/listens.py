@@ -287,6 +287,19 @@ def forget(at: Any, key: str) -> bool:
     return True
 
 
+def played_between(key: str, start: int, end: int) -> bool:
+    """Whether the song *key* was listened to from *start* up to *end*."""
+
+    with _lock:
+        _load()
+        i = bisect.bisect_left(_plays, (int(start), -1, ''))
+        while i < len(_plays) and _plays[i][0] < end:
+            if _plays[i][2] == key:
+                return True
+            i += 1
+    return False
+
+
 def clear() -> None:
     """Forget everything that was listened to."""
 
