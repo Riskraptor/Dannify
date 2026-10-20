@@ -419,3 +419,22 @@ def test_answers_say_why_they_failed(fake):
     assert err.value.status_code == 400
     sign_in(fake)
     assert len(asyncio.run(routes.spotify_liked_endpoint())['songs']) == 51
+
+
+def test_a_stand_in_spotify_can_only_be_on_this_computer(monkeypatch):
+    monkeypatch.setenv('DANNIFY_X', 'http://127.0.0.1:8898/')
+    assert sp._base('DANNIFY_X', 'https://real') == 'http://127.0.0.1:8898'
+    for elsewhere in ('https://evil.example', 'http://127.0.0.1.evil.example', 'http://localhost:8898', ''):
+        monkeypatch.setenv('DANNIFY_X', elsewhere)
+        assert sp._base('DANNIFY_X', 'https://real') == 'https://real'
+
+
+def test_a_copied_song_without_a_cover_takes_youtubes(monkeypatch):
+    from dannify import providers
+
+    monkeypatch.setattr(providers, 'find_match', lambda song: (
+        'bbbbbbbbbb2', {'thumbnails': [{'url': 'https://yt/small'}, {'url': 'https://yt/big'}]}))
+    got = sp._match({'name': 'X', 'artists': ['Y'], 'cover_url': '', 'duration': 3})
+    assert got['cover_url'] == 'https://yt/big'
+    got = sp._match({'name': 'X', 'artists': ['Y'], 'cover_url': 'https://i.scdn.co/a', 'duration': 3})
+    assert got['cover_url'] == 'https://i.scdn.co/a'

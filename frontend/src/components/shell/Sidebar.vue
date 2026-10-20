@@ -52,7 +52,16 @@
           <Icon icon="ph:plus" class="h-4 w-4" />
         </button>
       </div>
-      <div v-if="!rail" class="sb-chips" role="tablist" :aria-label="t('nav.yourLibrary')">
+      <div
+        v-if="!rail"
+        ref="chipRow"
+        class="sb-chips"
+        :class="{ 'has-more': chipsMore }"
+        role="tablist"
+        :aria-label="t('nav.yourLibrary')"
+        @wheel="onChipWheel"
+        @scroll.passive="measureChips"
+      >
         <button
           v-if="filter"
           class="sb-chip sb-chip-clear"
@@ -63,7 +72,7 @@
           <Icon icon="ph:x" class="h-3.5 w-3.5" />
         </button>
         <button
-          v-for="f in filters"
+          v-for="f in filterList"
           v-show="!filter || filter === f.id"
           :key="f.id"
           class="sb-chip"
@@ -206,6 +215,7 @@ import VirtualList from '/src/components/ui/VirtualList.vue'
 import { useArtistLinks } from '/src/model/artistLinks'
 import { usePlaylists, entryRow } from '/src/model/playlists'
 import { useSupport } from '/src/model/support'
+import { loadSpotifyPlaylists, spotifyPlaylists, useSpotify } from '/src/model/spotify'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -356,6 +366,20 @@ function ytRow(p) {
   }
 }
 
+function spRow(p) {
+  return {
+    key: 'sp:' + p.id,
+    kind: 'sp',
+    to: { name: 'SpotifyList', params: { kind: 'playlist', id: p.id } },
+    title: p.name,
+    sub: `${t('playlists.playlist')} · ${p.mine ? t('spotify.byYou') : p.owner}`,
+    cover: p.image,
+    badge: 'ph:spotify-logo-fill',
+    badgeTone: 'is-sp',
+    menu: (e) => onSpMenu(e, p),
+  }
+}
+
 function followedRow(a) {
   return {
     key: 'fa:' + a.browse_id,
@@ -433,6 +457,10 @@ function rowForPin(key) {
     const a = savedArtists.value.find((x) => x.name === id)
     return a && artistRow(a)
   }
+  if (kind === 'sp') {
+    const pl = spotifyPlaylists.value.find((x) => x.id === id)
+    return pl && spRow(pl)
+  }
   if (kind === 'fa') {
     const a = followedArtists.value.find((x) => x.browse_id === id)
     return a && followedRow(a)
@@ -444,7 +472,8 @@ function rowForPin(key) {
   return null
 }
 const PIN_KINDS = {
-  playlists: ['playlist', 'yt'],
+  playlists: ['playlist', 'yt', 'sp'],
+  spotify: ['sp'],
   artists: ['artist', 'followed'],
   albums: ['album'],
 }
@@ -498,7 +527,18 @@ const rows = computed(() => {
   // runs out of stack with a library of a couple of hundred thousand.
   let out = []
 
-  if (f !== 'artists' && f !== 'albums') {
+  if (f === 'spotify') {
+    for (const pin of pins.value) {
+      if (pin.id !== 'spotify' || !match(pin.label)) continue
+      out.push({ key: 'pin:' + pin.id, kind: 'pin', to: pin.to, title: pin.label, sub: pin.sub,
+        icon: pin.icon, tile: pin.tile, badge: 'ph:push-pin-fill' })
+    }
+    let sp = spotifyPlaylists.value.filter((p) => match(p.name)).map(spRow)
+    if (sort.value === 'alpha') sp = sortedBy(sp, (r) => r.title)
+    out = out.concat(sp)
+  }
+
+  if (f !== 'artists' && f !== 'albums' && f !== 'spotify') {
     for (const pin of pins.value) {
       if (!match(pin.label)) continue
       out.push({ key: 'pin:' + pin.id, kind: 'pin', to: pin.to, title: pin.label, sub: pin.sub,
@@ -506,17 +546,19 @@ const rows = computed(() => {
     }
     let mine = playlists.recent.value.filter((p) => match(p.name)).map(playlistRow)
     let yt = ytPlaylists.value.filter((p) => match(p.name)).map(ytRow)
+    let sp = spotifyPlaylists.value.filter((p) => match(p.name)).map(spRow)
     if (sort.value === 'alpha') {
       mine = sortedBy(mine, (r) => r.title)
       yt = sortedBy(yt, (r) => r.title)
+      sp = sortedBy(sp, (r) => r.title)
     }
-    out = out.concat(mine, yt)
+    out = out.concat(mine, yt, sp)
     if (!q && playlists.loaded.value && !playlists.list.value.length) {
       out.push({ key: 'new', kind: 'new', title: t('playlists.new'), sub: t('playlists.noneShort') })
     }
   }
 
-  if (f !== 'playlists' && f !== 'albums') {
+  if (f !== 'playlists' && f !== 'albums' && f !== 'spotify') {
     const everyone = f === 'artists' || q
     const followed = followedArtists.value.filter((a) => match(a.name)).map(followedRow)
     const alpha = sort.value === 'alpha'
@@ -610,16 +652,48 @@ const filters = [
   { id: 'playlists', label: 'nav.filterPlaylists' },
   { id: 'artists', label: 'nav.filterArtists' },
   { id: 'albums', label: 'nav.filterAlbums' },
+  { id: 'spotify', label: 'nav.filterSpotify' },
 ]
+// The chip row, when it is wider than the sidebar: a wheel turned over it
+// slides it sideways, and the fade shows while more is out of view.
+const chipRow = ref(null)
+const chipsMore = ref(false)
+function measureChips() {
+  const el = chipRow.value
+  chipsMore.value = !!el && el.scrollLeft + el.clientWidth < el.scrollWidth - 2
+}
+function onChipWheel(e) {
+  const el = chipRow.value
+  if (!el || el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+  e.preventDefault()
+  el.scrollLeft += e.deltaY
+}
+// Spotify is a chip only for whoever signed in to it.
+const spotify = useSpotify()
+const filterList = computed(() => filters.filter((f) => f.id !== 'spotify' || spotify.connected.value))
+watch(
+  () => spotify.connected.value,
+  (on) => {
+    if (on) loadSpotifyPlaylists()
+    else if (filter.value === 'spotify') setFilter('')
+  }
+)
 function readFilter() {
   try {
     const v = localStorage.getItem(FILTER_KEY) || ''
-    return filters.some((f) => f.id === v) ? v : ''
+    // Not Spotify: whether there is a Spotify is known only a moment later.
+    return filters.some((f) => f.id === v && f.id !== 'spotify') ? v : ''
   } catch {
     return ''
   }
 }
 const filter = ref(readFilter())
+// Chips come and go (Spotify's, the chosen one alone): the fade follows.
+watch(
+  () => [filterList.value.length, filter.value, rail.value],
+  () => nextTick(measureChips),
+  { immediate: true }
+)
 function setFilter(v) {
   filter.value = v
   try {
@@ -650,6 +724,15 @@ const pins = computed(() => {
       sub: t('nav.artistSongs', { count: n }),
       icon: 'ph:music-notes-fill',
       tile: 'tile-songs',
+      pinned: true,
+    },
+    spotify.connected.value && {
+      id: 'spotify',
+      to: { name: 'Spotify' },
+      label: t('spotify.yours'),
+      sub: spotify.user.value.name ? `${t('spotify.title')} · ${spotify.user.value.name}` : t('spotify.title'),
+      icon: 'ph:spotify-logo-fill',
+      tile: 'tile-spotify',
       pinned: true,
     },
     account.signedIn.value && {
@@ -714,6 +797,17 @@ function onYtMenu(e, p) {
       action: () => router.push({ name: 'ExplorePlaylist', params: { id: p.browse_id } }),
     },
     pinItem('yt:' + p.browse_id),
+  ])
+}
+
+function onSpMenu(e, p) {
+  openContextMenu(e, [
+    {
+      label: t('playlists.open'),
+      icon: 'ph:playlist',
+      action: () => router.push({ name: 'SpotifyList', params: { kind: 'playlist', id: p.id } }),
+    },
+    pinItem('sp:' + p.id),
   ])
 }
 
@@ -926,12 +1020,26 @@ const SideLink = {
   background: rgb(var(--c-tint) / 0.1);
   transform: scale(1.04);
 }
+/* More chips than room (Spotify's joins the three): the row slides sideways,
+   by wheel, drag or the arrow keys, and fades at the edge it goes on past,
+   so a chip half out of view reads as "more this way", not as cut off. */
 .sb-chips {
   display: flex;
   gap: 8px;
   padding: 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.sb-chips::-webkit-scrollbar {
+  display: none;
+}
+.sb-chips.has-more {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
 }
 .sb-chip {
+  flex: none;
   height: 30px;
   padding: 0 12px;
   border-radius: 999px;

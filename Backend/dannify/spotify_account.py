@@ -25,6 +25,7 @@ import hashlib
 import hmac
 import html
 import json
+import os
 import secrets
 import threading
 import time
@@ -42,9 +43,19 @@ from loguru import logger
 # client has none, and every copy carries this.
 DEFAULT_CLIENT_ID = ''
 
-AUTHORIZE_URL = 'https://accounts.spotify.com/authorize'
-TOKEN_URL = 'https://accounts.spotify.com/api/token'
-API = 'https://api.spotify.com/v1'
+
+
+def _base(env: str, default: str) -> str:
+    # A stand-in Spotify for trying the app out, on this computer only: an
+    # address anywhere else is ignored.
+    value = os.environ.get(env, '').strip().rstrip('/')
+    return value if value.startswith('http://127.0.0.1:') else default
+
+
+_ACCOUNTS = _base('DANNIFY_SPOTIFY_ACCOUNTS', 'https://accounts.spotify.com')
+AUTHORIZE_URL = _ACCOUNTS + '/authorize'
+TOKEN_URL = _ACCOUNTS + '/api/token'
+API = _base('DANNIFY_SPOTIFY_API', 'https://api.spotify.com') + '/v1'
 # Registered in the dashboard as http://127.0.0.1/callback: Spotify lets the
 # port of a loopback address change from one sign-in to the next.
 CALLBACK_PATH = '/callback'
@@ -775,13 +786,15 @@ def _match(song: dict[str, Any]) -> Optional[dict[str, Any]]:
         return None
     if not video_id:
         return None
+    # Spotify's own cover, or YouTube Music's for the recording it matched.
+    thumbs = [x for x in (hit or {}).get('thumbnails') or [] if isinstance(x, dict) and x.get('url')]
     return {
         'video_id': video_id,
         'title': song.get('name') or '',
         'artists': song.get('artists') or [],
         'album': song.get('album_name') or '',
         'duration': song.get('duration') or 0,
-        'cover_url': song.get('cover_url') or '',
+        'cover_url': song.get('cover_url') or (thumbs[-1]['url'] if thumbs else ''),
     }
 
 

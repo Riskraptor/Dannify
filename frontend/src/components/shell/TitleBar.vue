@@ -112,6 +112,7 @@ import { Icon } from '@iconify/vue'
 import { desktop, bindWindowDrag, platform } from '/src/desktop/bridge'
 import { useUi } from '/src/model/ui'
 import { useAccount } from '/src/model/account'
+import { useSpotify } from '/src/model/spotify'
 import { useHomeFeed } from '/src/model/home'
 import { useOnboarding } from '/src/model/onboarding'
 import { openContextMenu } from '/src/model/contextMenu'
@@ -133,6 +134,10 @@ const win = desktop.state
 const bar = ref(null)
 const nav = reactive({ back: false, forward: false })
 const photoFailed = ref(false)
+const spotify = useSpotify()
+function openAccounts() {
+  router.push({ name: 'Settings', query: { pane: 'accounts' } })
+}
 
 const initials = computed(() =>
   (account.displayName.value || '?')
@@ -144,20 +149,13 @@ const initials = computed(() =>
 )
 
 function openAccountMenu(e) {
-  if (!account.signedIn.value) {
-    if (!account.busy.value) account.signIn()
-    return
-  }
-  openContextMenu(
-    e,
-    [
-      { label: account.displayName.value, icon: 'ph:user-circle', disabled: true },
-      { divider: true },
-      {
-        label: t('account.likedSongs'),
-        icon: 'ph:heart',
-        action: () => router.push({ name: 'Liked' }),
-      },
+  // Both services Dannify connects to, in one place: what each is, and what
+  // can be done with it from here.
+  const items = []
+  if (account.signedIn.value) {
+    items.push(
+      { header: `${t('settings.youtubeMusic')} · ${account.displayName.value}` },
+      { label: t('account.likedSongs'), icon: 'ph:heart', action: () => router.push({ name: 'Liked' }) },
       {
         label: t('account.refreshFeed'),
         icon: 'ph:arrows-clockwise',
@@ -168,9 +166,38 @@ function openAccountMenu(e) {
           useHomeFeed().load(true)
         },
       },
-      { divider: true },
-      { label: t('account.signOut'), icon: 'ph:sign-out', action: () => account.signOut() },
-    ],
+      { label: t('account.signOut'), icon: 'ph:sign-out', action: () => account.signOut() }
+    )
+  } else {
+    items.push(
+      { header: t('settings.youtubeMusic') },
+      {
+        label: t('account.connect'),
+        icon: 'ph:google-logo',
+        disabled: account.busy.value || !desktop.isDesktop,
+        action: () => account.signIn(),
+      }
+    )
+  }
+  items.push({ divider: true })
+  if (spotify.connected.value) {
+    items.push(
+      { header: spotify.user.value.name ? `${t('spotify.title')} · ${spotify.user.value.name}` : t('spotify.title') },
+      { label: t('spotify.yours'), icon: 'ph:spotify-logo', action: () => router.push({ name: 'Spotify' }) },
+      { label: t('spotify.disconnect'), icon: 'ph:sign-out', action: () => spotify.disconnect() }
+    )
+  } else {
+    items.push(
+      { header: t('spotify.title') },
+      spotify.configured.value
+        ? { label: t('spotify.connect'), icon: 'ph:spotify-logo', action: () => spotify.connect() }
+        : { label: t('spotify.setUp'), icon: 'ph:spotify-logo', action: () => openAccounts() }
+    )
+  }
+  items.push({ divider: true }, { label: t('spotify.accountsSettings'), icon: 'ph:gear-six', action: openAccounts })
+  openContextMenu(
+    e,
+    items,
     { anchor: true }
   )
 }
