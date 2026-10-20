@@ -19,7 +19,9 @@ outside the app can reach.
 | | |
 | --- | --- |
 | ![Made for you: mixes on Home that keep up with your listening](docs/screenshots/made-for-you.png) | ![Your year in music, told as a story](docs/screenshots/year-in-music.png) |
+| ![Your Spotify: playlists, Liked Songs, top songs and artists](docs/screenshots/spotify.png) | ![A Spotify playlist, to play, copy into Dannify or save for offline](docs/screenshots/spotify-playlist.png) |
 | ![Now Playing, with synced lyrics](docs/screenshots/now-playing.png) | ![Your stats: time listened, streaks and a chart of every day](docs/screenshots/stats.png) |
+| ![Settings: categories down the side, every account in one place](docs/screenshots/settings.png) | ![The welcome after a big update](docs/screenshots/welcome.png) |
 | ![Albums in your library](docs/screenshots/albums.png) | ![An album, its songs in album order](docs/screenshots/album.png) |
 | ![An artist page](docs/screenshots/artist.png) | ![Search](docs/screenshots/search.png) |
 | ![The command palette](docs/screenshots/palette.png) | ![The Sound panel on the play bar](docs/screenshots/sound.png) |
@@ -42,8 +44,8 @@ opens the whole album to save the rest of it.
 It keeps a listening history, if you want it to. History shows what you
 played day by day, and Your stats shows time listened, streaks, the hours you
 listen at and your top songs, artists and albums. It stays on your computer;
-connect ListenBrainz in Settings and your listens go to your profile there
-too.
+connect ListenBrainz in Settings, Accounts and your listens go to your profile
+there too.
 
 From that history Home makes you mixes that keep themselves up to date: On
 Repeat, Top This Month, Forgotten Favourites and Recently Added. Your year in
@@ -62,6 +64,29 @@ Ctrl+Shift+P opens a command palette: any page, playback control, setting,
 playlist, artist or album, by typing a few letters.
 
 Sign in with Google and you get your own home feed, liked songs and playlists.
+
+Connect Spotify and your Spotify comes too: your playlists, Liked Songs, saved
+albums, the artists you follow, your top songs and artists and what you played
+lately, all playable in Dannify. The songs play through YouTube Music, matched
+one by one by name, artist and length. Any of them, a playlist, an album,
+Liked Songs or your top songs, can be copied into a Dannify playlist or saved
+to play offline. Spotify only lets an app
+like this sign in a few people it lists, so Settings, Accounts also takes a
+Spotify app of your own: make one on
+[developer.spotify.com](https://developer.spotify.com/dashboard) (it needs
+Spotify Premium), add the redirect address `http://127.0.0.1/callback`, tick
+Web API, and paste its Client ID into Dannify. Never its secret: Dannify
+signs in without one.
+
+Your Library, down the side, holds your playlists, artists and albums in one
+list, with chips to show just one kind, a sort, and a compact view. Pin the
+ones you play most and they stay at the top.
+
+On special days it dresses up: snow from the week before Christmas to Boxing
+Day and confetti over the New Year, in the app, on the splash screen and in
+the installer, and there is a welcome after each big update. Settings,
+Appearance turns it off in the app, and nothing moves when the system asks
+for reduced motion.
 
 It picks up where you left off. Close it and the queue and the track you were
 on come back next launch, paused at the second you stopped.
