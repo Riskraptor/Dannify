@@ -284,11 +284,6 @@ def build_app() -> FastAPI:
     from dannify import scrobble as _scrobble
 
     _scrobble.init(DATABASE_DIR)
-    # Spotify, for whoever signed in (see spotify_account.py): nothing is
-    # asked of Spotify until a Spotify page in the window wants something.
-    from dannify import spotify_account as _spotify_account
-
-    _spotify_account.init(DATABASE_DIR)
     # Show on Discord was taken out in 4.12; the switch it kept goes too.
     try:
         (DATABASE_DIR / 'discord.json').unlink(missing_ok=True)
