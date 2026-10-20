@@ -58,9 +58,43 @@ const SIZES = {
   lantern: [14, 24],
   flame: [9, 15],
   puff: [70, 150],
+  crescent: [11, 19],
+  egg: [10, 16],
+  drop: [7, 12],
+  bat: [16, 26],
+  lotus: [15, 24],
+  flower: [11, 18],
 }
-// How long a piece takes, by how it moves.
-const SECONDS = { fall: [6, 13], rise: [7, 14], twinkle: [2.2, 4.4], drift: [5, 9] }
+// How long a piece takes, by how it moves. Every special day has its own
+// shape and movement (packaging/make_occasions.py, LOOKS):
+//   fall     straight down, turning           (honey drops)
+//   sway     down, side to side               (snow, leaves, eggs, flowers)
+//   flutter  down, flipping over              (petals, flag ribbons)
+//   shimmer  slowly down, glinting            (Eid's stars)
+//   rise     up                               (hearts, sky lanterns, flames)
+//   spiral   up, weaving                      (music notes, violets)
+//   bob      floating where it is             (lotus, lanterns, red eggs)
+//   swing    hanging, swinging                (Lunar New Year's lanterns)
+//   twinkle  where it is, growing and fading  (crescents)
+//   flicker  low down, a flame's flutter      (Diwali's lamps)
+//   flit     across, wings beating            (Halloween's bats)
+//   drift    big and soft, spreading          (Holi's colour)
+//   burst    fireworks                        (the New Year)
+const SECONDS = {
+  fall: [6, 13],
+  sway: [9, 16],
+  flutter: [7, 13],
+  shimmer: [10, 16],
+  rise: [7, 14],
+  spiral: [8, 14],
+  bob: [2.4, 4],
+  swing: [2, 3.4],
+  twinkle: [2.2, 4.4],
+  flicker: [0.9, 1.6],
+  flit: [7, 12],
+  drift: [5, 9],
+}
+const SPINS = new Set(['ribbon', 'leaf', 'petal', 'flower'])
 
 const pieces = computed(() => {
   const { shape, motion } = props.look
@@ -74,11 +108,13 @@ const pieces = computed(() => {
       '--y': `${rnd(2, 92).toFixed(1)}%`,
       '--drift': `${rnd(-40, 40).toFixed(0)}px`,
       '--d': `${rnd(d0, d1).toFixed(1)}s`,
+      // The side-to-side, the glint, the beat of a wing: a period of its own.
+      '--sd': `${rnd(2.2, 4.5).toFixed(1)}s`,
       '--delay': `${(-rnd(0, 14)).toFixed(1)}s`,
       '--o': (shape === 'dot' ? rnd(0.45, 0.9) : shape === 'puff' ? rnd(0.18, 0.32) : rnd(0.75, 1)).toFixed(2),
       '--s': `${rnd(s0, s1).toFixed(1)}px`,
       '--r0': `${rnd(-30, 30).toFixed(0)}deg`,
-      '--r': `${rnd(-40, 40) + (shape === 'ribbon' || shape === 'leaf' || shape === 'petal' ? rnd(300, 720) : 0)}deg`,
+      '--r': `${rnd(-40, 40) + (SPINS.has(shape) ? rnd(300, 720) : 0)}deg`,
       '--c': colour,
     }
     return { id, style, pale: pale(colour) }
@@ -159,7 +195,13 @@ const bursts = computed(() => {
 .is-petal .ptl-p,
 .is-clover .ptl-p,
 .is-lantern .ptl-p,
-.is-flame .ptl-p {
+.is-flame .ptl-p,
+.is-crescent .ptl-p,
+.is-egg .ptl-p,
+.is-drop .ptl-p,
+.is-bat .ptl-p,
+.is-lotus .ptl-p,
+.is-flower .ptl-p {
   -webkit-mask: var(--shape) center / contain no-repeat;
   mask: var(--shape) center / contain no-repeat;
 }
@@ -188,7 +230,191 @@ const bursts = computed(() => {
   --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1c1.5 3.6 6 6.6 6 12a6 6 0 0 1-12 0c0-3.2 1.7-5.3 3-6.8.2 2 1 3.3 2.3 3.8C11.9 7.5 11.5 4.3 12 1z'/%3E%3C/svg%3E");
 }
 
+.is-crescent {
+  --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M15 2.5A9.6 9.6 0 1 0 21.5 19 7.8 7.8 0 1 1 15 2.5z'/%3E%3C/svg%3E");
+}
+.is-egg {
+  --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5C7.7 1.5 4.5 8.6 4.5 14a7.5 7.5 0 0 0 15 0c0-5.4-3.2-12.5-7.5-12.5z'/%3E%3C/svg%3E");
+}
+.is-drop {
+  --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5S5 10 5 15a7 7 0 0 0 14 0c0-5-7-13.5-7-13.5z'/%3E%3C/svg%3E");
+}
+.is-bat {
+  --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 8.2c-.6 0-1 .3-1.3.8l-.6-1.2-.6 1.3C7.8 8.4 5 8.6 1 7.6c1.6 1.2 2.6 3 2.4 5.2 1.7-1.3 3.6-1.4 5.2-.4.4 1.5 1.3 2.6 2.4 3.4.3-.8.6-1.1 1-1.1s.7.3 1 1.1c1.1-.8 2-1.9 2.4-3.4 1.6-1 3.5-.9 5.2.4-.2-2.2.8-4 2.4-5.2-4 1-6.8.8-8.5-.5l-.6-1.3-.6 1.2c-.3-.5-.7-.8-1.3-.8z'/%3E%3C/svg%3E");
+}
+.is-lotus {
+  --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3.5c-2 2.4-3 4.9-3 7.4 0 2 1 3.6 3 4.6 2-1 3-2.6 3-4.6 0-2.5-1-5-3-7.4zM3.5 9.5c.4 3.6 2.5 6.1 6.6 6.9-1.5-1.7-2.2-3.5-2.2-5.2-1.4-.9-2.8-1.5-4.4-1.7zm17 0c-1.6.2-3 .8-4.4 1.7 0 1.7-.7 3.5-2.2 5.2 4.1-.8 6.2-3.3 6.6-6.9zM2.5 16.5c2.5 2.2 5.7 3.3 9.5 3.3s7-1.1 9.5-3.3c-2.9.7-6.1 1-9.5 1s-6.6-.3-9.5-1z'/%3E%3C/svg%3E");
+}
+.is-flower {
+  --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a3.6 3.6 0 0 1 3.4 4.8 3.6 3.6 0 1 1 1.3 6.3 3.6 3.6 0 1 1-4.7 4.3 3.6 3.6 0 1 1-4.7-4.3 3.6 3.6 0 1 1 1.3-6.3A3.6 3.6 0 0 1 12 2zm0 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4z'/%3E%3C/svg%3E");
+}
+
 /* --- How it moves ---------------------------------------------------------- */
+/* Two movements at once where a piece both travels and sways, flips or
+   glints: the journey on `translate`, the rest on `transform`, each with a
+   period of its own, so neither stutters the other. */
+.go-sway .ptl-p {
+  animation:
+    ptl-down var(--d) linear var(--delay) infinite,
+    ptl-side var(--sd) ease-in-out var(--delay) infinite alternate;
+}
+.go-flutter .ptl-p {
+  animation:
+    ptl-down var(--d) linear var(--delay) infinite,
+    ptl-flip var(--d) linear var(--delay) infinite;
+}
+.go-shimmer .ptl-p {
+  animation:
+    ptl-down var(--d) linear var(--delay) infinite,
+    ptl-side var(--sd) ease-in-out var(--delay) infinite alternate,
+    ptl-glint calc(var(--sd) * 0.6) ease-in-out var(--delay) infinite;
+}
+.go-spiral .ptl-p {
+  top: auto;
+  bottom: -28px;
+  animation:
+    ptl-up var(--d) linear var(--delay) infinite,
+    ptl-side calc(var(--sd) * 0.6) ease-in-out var(--delay) infinite alternate;
+}
+.go-bob .ptl-p,
+.go-swing .ptl-p,
+.go-flicker .ptl-p,
+.go-flit .ptl-p {
+  top: var(--y);
+}
+.go-bob .ptl-p {
+  animation: ptl-bob var(--d) ease-in-out var(--delay) infinite alternate;
+}
+/* Hung from above, in the top part of the window. */
+.go-swing .ptl-p {
+  top: calc(var(--y) * 0.4);
+  transform-origin: 50% -70%;
+  animation: ptl-swing var(--d) ease-in-out var(--delay) infinite alternate;
+}
+/* Lamps along the lower part of the window. */
+.go-flicker .ptl-p {
+  top: calc(52% + var(--y) / 2);
+  transform-origin: 50% 100%;
+  animation: ptl-flicker var(--d) ease-in-out var(--delay) infinite;
+}
+.go-flit .ptl-p {
+  animation:
+    ptl-flit var(--d) ease-in-out var(--delay) infinite,
+    ptl-flap 0.32s ease-in-out var(--delay) infinite alternate;
+}
+@keyframes ptl-down {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 var(--fall);
+  }
+}
+@keyframes ptl-up {
+  0% {
+    translate: 0 0;
+    opacity: 0;
+  }
+  12%,
+  85% {
+    opacity: var(--o);
+  }
+  100% {
+    translate: 0 calc(-1 * var(--fall) - 56px);
+    opacity: 0;
+  }
+}
+@keyframes ptl-side {
+  from {
+    transform: translateX(calc(var(--drift) * -1)) rotate(var(--r0));
+  }
+  to {
+    transform: translateX(var(--drift)) rotate(calc(var(--r0) * -1));
+  }
+}
+@keyframes ptl-flip {
+  from {
+    transform: rotate(var(--r0)) rotate3d(1, 0.3, 0, 0deg);
+  }
+  to {
+    transform: rotate(var(--r)) rotate3d(1, 0.3, 0, 720deg);
+  }
+}
+@keyframes ptl-glint {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: var(--o);
+  }
+}
+@keyframes ptl-bob {
+  from {
+    transform: translateY(-9px) rotate(calc(var(--r0) * 0.3));
+  }
+  to {
+    transform: translateY(9px) rotate(calc(var(--r0) * -0.3));
+  }
+}
+@keyframes ptl-swing {
+  from {
+    transform: rotate(-13deg);
+  }
+  to {
+    transform: rotate(13deg);
+  }
+}
+@keyframes ptl-flicker {
+  0%,
+  100% {
+    transform: scale(1, 1);
+    opacity: var(--o);
+  }
+  22% {
+    transform: scale(0.92, 1.1);
+    opacity: 0.8;
+  }
+  48% {
+    transform: scale(1.06, 0.93);
+    opacity: 1;
+  }
+  74% {
+    transform: scale(0.95, 1.12);
+    opacity: 0.85;
+  }
+}
+@keyframes ptl-flit {
+  0% {
+    transform: translate3d(-14vw, 0, 0);
+    opacity: 0;
+  }
+  10%,
+  90% {
+    opacity: var(--o);
+  }
+  30% {
+    transform: translate3d(-5vw, -26px, 0);
+  }
+  55% {
+    transform: translate3d(4vw, 14px, 0);
+  }
+  80% {
+    transform: translate3d(12vw, -18px, 0);
+  }
+  100% {
+    transform: translate3d(18vw, 0, 0);
+    opacity: 0;
+  }
+}
+@keyframes ptl-flap {
+  from {
+    scale: 1 1;
+  }
+  to {
+    scale: 1 0.55;
+  }
+}
 .go-fall .ptl-p {
   animation-name: ptl-fall;
 }
@@ -308,6 +534,8 @@ const bursts = computed(() => {
   animation: none;
   top: var(--y);
   bottom: auto;
+  translate: none;
+  scale: none;
   transform: rotate(var(--r0));
 }
 .is-still.go-twinkle .ptl-p,

@@ -264,3 +264,34 @@ def test_the_splash_words_are_kept_where_the_splash_reads_them(monkeypatch):
     assert len(writes) == 1
     api.app_set_splash_words('nonsense')
     assert len(writes) == 1
+
+
+# Two dates of one holiday, which may look alike.
+_TWINS = {'orthodox_christmas': 'christmas', 'thanksgiving_ca': 'thanksgiving'}
+_REPO = Path(__file__).resolve().parents[2]
+
+
+def test_every_special_day_has_a_look_of_its_own():
+    looks = occasions_table.DATA['looks']
+    seen = {}
+    for row in occasions_table.DATA['occasions']:
+        look = looks[row['look']]
+        pair = (look['shape'], look['motion'])
+        oid = _TWINS.get(row['id'], row['id'])
+        assert seen.setdefault(pair, oid) == oid, f"{row['id']} looks like {seen[pair]}"
+
+
+def test_every_movement_and_shape_is_drawn_by_the_window_the_splash_and_the_installer():
+    looks = occasions_table.DATA['looks'].values()
+    motions = {look['motion'] for look in looks} | {'flutter'}  # a country's flag
+    shapes = {look['shape'] for look in looks}
+    particles = (_REPO / 'frontend/src/components/ui/Particles.vue').read_text(encoding='utf-8')
+    season = (_REPO / 'installer/UI/Season.cs').read_text(encoding='utf-8')
+    for motion in motions:
+        assert motion in occasions._MOTIONS, motion
+        assert f'go-{motion}' in particles or motion in ('fall', 'rise', 'twinkle', 'drift', 'burst'), motion
+        assert f'"{motion}"' in season, f'installer: {motion}'
+    for shape in shapes - {'spark'}:
+        assert f'is-{shape}' in particles, shape
+    for shape in shapes:
+        assert f'"{shape}"' in season, f'installer: {shape}'

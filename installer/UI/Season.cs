@@ -254,6 +254,7 @@ namespace Dannify.Setup.UI
             object colours = null;
             if (day.Look == "flag")
             {
+                motion = "flutter";
                 Get(Data, "flags")?.TryGetValue(day.Country ?? "", out colours);
             }
             else
@@ -287,7 +288,18 @@ namespace Dannify.Setup.UI
         private static readonly Dictionary<string, string> Glyphs = new Dictionary<string, string>
         {
             ["heart"] = "♥", ["star"] = "✦", ["note"] = "♪", ["clover"] = "☘",
+            ["crescent"] = "☾", ["lotus"] = "❀", ["flower"] = "✿", ["bat"] = "\U0001F987",
         };
+
+        // How each movement goes (the app's Particles.vue has the same ones):
+        // down or up across the window, or where it is.
+        private static readonly HashSet<string> Down = new HashSet<string> { "fall", "sway", "flutter", "shimmer" };
+        private static readonly HashSet<string> Up = new HashSet<string> { "rise", "spiral" };
+        private static readonly HashSet<string> InPlace = new HashSet<string>
+        {
+            "twinkle", "burst", "drift", "bob", "swing", "flicker", "flit",
+        };
+        private static readonly HashSet<string> Spins = new HashSet<string> { "ribbon", "leaf", "petal", "flower" };
 
         private static FrameworkElement Piece(string shape, Color colour, Random random)
         {
@@ -306,6 +318,16 @@ namespace Dannify.Setup.UI
                 {
                     double size = 8 + random.NextDouble() * 6;
                     return new Ellipse { Width = size * 0.6, Height = size, Fill = brush, Opacity = 0.85 };
+                }
+                case "egg":
+                {
+                    double size = 9 + random.NextDouble() * 5;
+                    return new Ellipse { Width = size * 0.78, Height = size, Fill = brush, Opacity = 0.9 };
+                }
+                case "drop":
+                {
+                    double size = 6 + random.NextDouble() * 4;
+                    return new Ellipse { Width = size, Height = size * 1.3, Fill = brush, Opacity = 0.85 };
                 }
                 case "lantern":
                     return new Rectangle
@@ -330,21 +352,39 @@ namespace Dannify.Setup.UI
                     return new Ellipse { Width = size, Height = size, Fill = fill, Opacity = 0.3 };
                 }
                 default:
-                    return new TextBlock
+                {
+                    var text = new TextBlock
                     {
                         Text = Glyphs.TryGetValue(shape, out var g) ? g : "✦",
-                        FontSize = 11 + random.Next(8),
+                        FontSize = (shape == "bat" ? 15 : 11) + random.Next(8),
                         Foreground = brush,
                         Opacity = 0.9,
                     };
+                    // A bat is drawn from the emoji font, in the day's colour.
+                    if (shape == "bat") text.FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol");
+                    return text;
+                }
             }
+        }
+
+        private static DoubleAnimation Loop(double from, double to, double seconds, TimeSpan start, bool back = true)
+        {
+            return new DoubleAnimation(from, to, TimeSpan.FromSeconds(seconds))
+            {
+                RepeatBehavior = RepeatBehavior.Forever,
+                AutoReverse = back,
+                EasingFunction = back ? new SineEase { EasingMode = EasingMode.EaseInOut } : null,
+                BeginTime = start,
+            };
         }
 
         private static void Fall(Canvas canvas, string shape, string motion, List<Color> palette, double width, double height, bool moving)
         {
             var random = new Random();
             int count = shape == "puff" ? 14 : 36;
-            bool travels = motion == "fall" || motion == "rise";
+            bool down = Down.Contains(motion);
+            bool travels = down || Up.Contains(motion);
+            if (!travels && !InPlace.Contains(motion)) { motion = "fall"; down = travels = true; }
             for (int i = 0; i < count; i++)
             {
                 FrameworkElement piece = Piece(shape, palette[i % palette.Count], random);
@@ -356,62 +396,80 @@ namespace Dannify.Setup.UI
                 group.Children.Add(spin);
                 group.Children.Add(move);
                 piece.RenderTransform = group;
-                piece.RenderTransformOrigin = new Point(0.5, 0.5);
+                piece.RenderTransformOrigin = motion == "swing" ? new Point(0.5, -0.7)
+                    : motion == "flicker" ? new Point(0.5, 1) : new Point(0.5, 0.5);
                 piece.IsHitTestVisible = false;
                 Canvas.SetLeft(piece, random.NextDouble() * width);
-                // Still, or twinkling where it is: anywhere on the window.
-                // Falling or rising: from the edge it comes in at.
-                double y = random.NextDouble() * height;
-                Canvas.SetTop(piece, !moving || !travels ? y : motion == "fall" ? -16 : height + 16);
+                // Travelling: from the edge it comes in at. Hanging lanterns
+                // up top, lamps low down, the rest anywhere.
+                double y = motion == "swing" ? random.NextDouble() * height * 0.36
+                    : motion == "flicker" ? height * (0.56 + random.NextDouble() * 0.36)
+                    : random.NextDouble() * height;
+                Canvas.SetTop(piece, !moving || !travels ? y : down ? -16 : height + 16);
                 canvas.Children.Add(piece);
                 if (!moving) continue;
 
-                double seconds = travels ? 6 + random.NextDouble() * 7 : 2.2 + random.NextDouble() * 2.2;
+                double seconds = travels
+                    ? (motion == "sway" || motion == "shimmer" ? 9 + random.NextDouble() * 6 : 6 + random.NextDouble() * 7)
+                    : motion == "flicker" ? 0.9 + random.NextDouble() * 0.7
+                    : motion == "flit" ? 7 + random.NextDouble() * 5
+                    : 2.2 + random.NextDouble() * 2.2;
+                double second = 2.2 + random.NextDouble() * 2.3;
                 // Begun in the past, so the window opens with it all under way.
                 var start = TimeSpan.FromSeconds(-random.NextDouble() * seconds);
                 if (travels)
                 {
-                    double distance = (height + 32) * (motion == "fall" ? 1 : -1);
-                    move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, distance, TimeSpan.FromSeconds(seconds))
+                    double distance = (height + 32) * (down ? 1 : -1);
+                    move.BeginAnimation(TranslateTransform.YProperty, Loop(0, distance, seconds, start, back: false));
+                    double reach = motion == "sway" || motion == "spiral" || motion == "shimmer" ? 22 + random.NextDouble() * 8 : 14;
+                    move.BeginAnimation(TranslateTransform.XProperty, Loop(-reach, reach, motion == "spiral" ? second * 0.6 : second, start));
+                    if (Spins.Contains(shape) || motion == "flutter")
                     {
-                        RepeatBehavior = RepeatBehavior.Forever,
-                        BeginTime = start,
-                    });
-                    move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(-14 + random.NextDouble() * 6, 14 - random.NextDouble() * 6,
-                        TimeSpan.FromSeconds(2.5 + random.NextDouble() * 2.5))
+                        spin.BeginAnimation(RotateTransform.AngleProperty, Loop(0, 360 + random.Next(360), seconds, start, back: false));
+                    }
+                    if (motion == "flutter")
                     {
-                        RepeatBehavior = RepeatBehavior.Forever,
-                        AutoReverse = true,
-                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
-                        BeginTime = start,
-                    });
-                    if (shape == "ribbon" || shape == "leaf" || shape == "petal")
+                        // Turning over as it falls.
+                        scale.BeginAnimation(ScaleTransform.ScaleXProperty, Loop(1, -1, seconds / 5, start));
+                    }
+                    if (motion == "shimmer")
                     {
-                        spin.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, 360 + random.Next(360), TimeSpan.FromSeconds(seconds))
+                        piece.BeginAnimation(UIElement.OpacityProperty, Loop(0.25, piece.Opacity, second * 0.6, start));
+                    }
+                    continue;
+                }
+                switch (motion)
+                {
+                    case "bob":
+                        move.BeginAnimation(TranslateTransform.YProperty, Loop(-9, 9, seconds, start));
+                        break;
+                    case "swing":
+                        spin.BeginAnimation(RotateTransform.AngleProperty, Loop(-13, 13, seconds, start));
+                        break;
+                    case "flicker":
+                        scale.BeginAnimation(ScaleTransform.ScaleYProperty, Loop(0.9, 1.12, seconds / 2, start));
+                        scale.BeginAnimation(ScaleTransform.ScaleXProperty, Loop(1.05, 0.93, seconds / 2, start));
+                        piece.BeginAnimation(UIElement.OpacityProperty, Loop(0.8, 1, seconds / 3, start));
+                        break;
+                    case "flit":
+                        move.BeginAnimation(TranslateTransform.XProperty, Loop(-0.14 * width, 0.18 * width, seconds, start, back: false));
+                        move.BeginAnimation(TranslateTransform.YProperty, Loop(-22, 16, seconds / 3, start));
+                        scale.BeginAnimation(ScaleTransform.ScaleYProperty, Loop(1, 0.55, 0.16, start));
+                        break;
+                    default:
+                    {
+                        // Twinkling, bursting or drifting where it is.
+                        var pulse = Loop(0.35, motion == "drift" ? 1.25 : 1.0, seconds / 2, start);
+                        scale.BeginAnimation(ScaleTransform.ScaleXProperty, pulse);
+                        scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulse);
+                        piece.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.15, piece.Opacity, TimeSpan.FromSeconds(seconds / 2))
                         {
                             RepeatBehavior = RepeatBehavior.Forever,
+                            AutoReverse = true,
                             BeginTime = start,
                         });
+                        break;
                     }
-                }
-                else
-                {
-                    // Twinkling, bursting or drifting where it is.
-                    var pulse = new DoubleAnimation(0.35, motion == "drift" ? 1.25 : 1.0, TimeSpan.FromSeconds(seconds / 2))
-                    {
-                        RepeatBehavior = RepeatBehavior.Forever,
-                        AutoReverse = true,
-                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
-                        BeginTime = start,
-                    };
-                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, pulse);
-                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulse);
-                    piece.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.15, piece.Opacity, TimeSpan.FromSeconds(seconds / 2))
-                    {
-                        RepeatBehavior = RepeatBehavior.Forever,
-                        AutoReverse = true,
-                        BeginTime = start,
-                    });
                 }
             }
         }

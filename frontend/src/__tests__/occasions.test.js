@@ -115,10 +115,10 @@ describe('the days, all year, where they are kept', () => {
 
   it('each day has a look: a flag’s colours on a country’s own day', () => {
     const jamhuri = O.occasionOn(day('2026-12-12'), 'KE', data)
-    expect(jamhuri.look).toMatchObject({ name: 'flag', shape: 'ribbon', motion: 'fall' })
+    expect(jamhuri.look).toMatchObject({ name: 'flag', shape: 'ribbon', motion: 'flutter' })
     expect(jamhuri.look.palette).toEqual(data.flags.KE)
     expect(jamhuri.icon).toBe('ph:flag-banner-fill')
-    expect(O.occasionOn(day('2026-12-25'), 'KE', data).look).toMatchObject({ shape: 'dot', motion: 'fall' })
+    expect(O.occasionOn(day('2026-12-25'), 'KE', data).look).toMatchObject({ shape: 'dot', motion: 'sway' })
     expect(O.occasionOn(day('2027-01-01'), 'KE', data).look.motion).toBe('burst')
     expect(O.occasionOn(day('2026-03-17'), 'IE', data).look.shape).toBe('clover')
   })
