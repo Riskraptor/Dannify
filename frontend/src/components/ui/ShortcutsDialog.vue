@@ -21,12 +21,15 @@
           <div class="grid gap-x-8 gap-y-5 px-5 pb-5 pt-2 sm:grid-cols-2">
             <section v-for="group in groups" :key="group.title">
               <p class="eyebrow mb-2">{{ group.title }}</p>
-              <!-- Keyed by its keys as well: "Next / previous song" is there
-                   twice, once for each way of doing it. -->
-              <div v-for="row in group.rows" :key="row.label + row.keys.join('+')" class="sc-row">
+              <!-- One row for each thing, with every way of doing it: "Next /
+                   previous song" listed twice read like a mistake. -->
+              <div v-for="row in group.rows" :key="row.label" class="sc-row">
                 <span class="text-[13px] text-fg/80">{{ row.label }}</span>
-                <span class="flex gap-1">
-                  <kbd v-for="k in row.keys" :key="k" class="kbd">{{ k }}</kbd>
+                <span class="flex items-center gap-1">
+                  <template v-for="(set, i) in row.ways || [row.keys]" :key="set.join('+')">
+                    <span v-if="i" class="sc-or" aria-hidden="true" />
+                    <kbd v-for="k in set" :key="k" class="kbd">{{ k }}</kbd>
+                  </template>
                 </span>
               </div>
             </section>
@@ -84,8 +87,7 @@ const groups = computed(() => [
     title: t('shortcuts.playback'),
     rows: [
       { label: t('shortcuts.playPause'), keys: ['Space'] },
-      { label: t('shortcuts.nextPrev'), keys: ['N', 'P'] },
-      { label: t('shortcuts.nextPrev'), keys: ['Shift', '←/→'] },
+      { label: t('shortcuts.nextPrev'), ways: [['N', 'P'], ['Shift', '←/→']] },
       { label: t('shortcuts.seek'), keys: ['←', '→'] },
       { label: t('shortcuts.seekTo'), keys: ['0', '…', '9'] },
       { label: t('shortcuts.volume'), keys: ['↑', '↓'] },
@@ -147,6 +149,12 @@ const groups = computed(() => [
 </script>
 
 <style scoped>
+.sc-or {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: rgb(var(--c-fg) / 0.18);
+}
 .sc-layer {
   position: fixed;
   inset: 0;

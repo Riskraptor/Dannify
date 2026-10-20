@@ -325,10 +325,15 @@ function onMore(e) {
   width: min(100%, 440px, 58vh);
   margin-top: 24px;
 }
+/* Two lines before it is cut: "Girl Next Door (feat. tiwa savage)" read
+   "Girl Next Door (feat. ti…" with the room for the rest just below. */
 .np-title {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
   font-size: clamp(22px, 2.4vw, 30px);
   font-weight: 800;
   letter-spacing: -0.02em;
