@@ -215,6 +215,7 @@ const setTheme = (theme) => call('app_set_theme', theme)
 // The country whose special days are kept: the splash, drawn before the
 // window is, reads it.
 const setRegion = (code) => call('app_set_region', String(code || ''))
+const setSplashWords = (words) => call('app_set_splash_words', words)
 const readClipboard = () => call('clipboard_read')
 const setTaskbarProgress = (value, mode = 'normal') =>
   call('taskbar_progress', Number(value) || 0, mode)
@@ -382,6 +383,7 @@ export const desktop = {
   openExternal,
   setTheme,
   setRegion,
+  setSplashWords,
   readClipboard,
   setTaskbarProgress,
   setPlaybackState,

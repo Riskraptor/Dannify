@@ -374,19 +374,19 @@ def splash_html(theme: str, body: str = '') -> str:
     fg = '#e7e7ef' if dark else '#16181c'
     muted = '#8a8a98' if dark else '#6b6f78'
     track = '#23232e' if dark else '#d5d8de'
-    content = body or (
-        "<div class='logo'>Dan<span>nify</span></div>"
-        "<div class='bar'></div>"
-        "<div class='hint'>Starting your music…</div>"
-    )
     # A special day (Christmas, the New Year): a greeting, and snow or confetti.
+    # In the language the window was last in.
     from dannify import occasions  # noqa: PLC0415
 
     prefs = read_prefs()
+    words = occasions.clean_words(prefs.get('splash'))
     hint, fx_css, fx = ('', '', '') if body else occasions.splash_extras(
-        region=str(prefs.get('region') or '') or occasions.guess_region(), light=not dark)
-    if hint:
-        content = content.replace('Starting your music…', hint)
+        region=str(prefs.get('region') or '') or occasions.guess_region(), light=not dark, words=words)
+    content = body or (
+        "<div class='logo'>Dan<span>nify</span></div>"
+        "<div class='bar'></div>"
+        f"<div class='hint'>{hint or occasions.starting_words(words)}</div>"
+    )
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><style>
   html,body{{margin:0;height:100%;background:{bg};color:{fg};overflow:hidden;

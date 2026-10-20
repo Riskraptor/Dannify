@@ -6,6 +6,10 @@ import { useDownloadStats } from '/src/model/downloadStats'
 import { useProgressTracker } from '/src/model/download'
 import { toast } from '/src/model/toast'
 import { t, currentLocale } from '/src/i18n'
+import en from '/src/i18n/locales/en.js'
+
+// Every special day with a greeting of its own.
+const OCCASION_IDS = Object.keys(en.occasion).filter((id) => id !== 'national' && en.occasion[id]?.title)
 
 // Wires app state into the desktop: taskbar (or dock) progress while
 // downloading, the play/pause/next buttons under the Windows taskbar
@@ -133,10 +137,11 @@ export function installDesktopIntegration() {
   )
 
   // Tray menu strings, in the UI language. Re-sent when the language
-  // changes so the notification area never falls back to English.
+  // changes so the notification area never falls back to English. The
+  // splash, shown at the next start before this page is, gets its words too.
   watch(
     () => currentLocale.value,
-    () =>
+    (lang) => {
       desktop.setTrayLabels({
         nowPlaying: t('tray.nowPlaying'),
         play: t('player.play'),
@@ -146,7 +151,14 @@ export function installDesktopIntegration() {
         show: t('tray.show'),
         quit: t('tray.quit'),
         hidden: t('tray.hidden'),
-      }),
+      })
+      desktop.setSplashWords({
+        lang,
+        starting: t('common.starting'),
+        national: t('occasion.national.title'),
+        titles: Object.fromEntries(OCCASION_IDS.map((id) => [id, t(`occasion.${id}.title`)])),
+      })
+    },
     { immediate: true }
   )
 }

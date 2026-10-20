@@ -12,6 +12,7 @@ window which country the computer is set to.
 from __future__ import annotations
 
 import datetime
+import html
 import os
 import random
 import re
@@ -183,7 +184,8 @@ def look_of(occasion: dict[str, Any]) -> dict[str, Any]:
     return DATA['looks'].get(occasion.get('look', ''), DATA['looks']['confetti'])
 
 
-# What the splash says, in English: the window says it in every language.
+# What the splash says before the window has ever told it the words in its
+# own language: English. After that, the window's words (see clean_words).
 _TITLES = {
     'newyear': 'Happy New Year', 'christmas': 'Merry Christmas', 'orthodox_christmas': 'Merry Christmas',
     'lunar_new_year': 'Happy Lunar New Year', 'valentines': 'Happy Valentine’s Day',
@@ -197,11 +199,54 @@ _TITLES = {
 }
 
 
-def title_of(occasion: dict[str, Any], lang: str = 'en') -> str:
+_STARTING = 'starting your music…'
+_WORD_MAX = 80
+
+
+def clean_words(words: Any) -> dict[str, Any]:
+    """The splash's words in the window's language, as the window sent them.
+
+    Kept to short plain texts under the names the splash knows, so a page
+    that sent anything else changes nothing.
+    """
+
+    if not isinstance(words, dict):
+        return {}
+
+    def text(value: Any) -> str:
+        return ' '.join(value.split())[:_WORD_MAX] if isinstance(value, str) else ''
+
+    out: dict[str, Any] = {}
+    lang = str(words.get('lang') or '').strip().lower()
+    if 2 <= len(lang) <= 3 and lang.isascii() and lang.isalpha():
+        out['lang'] = lang
+    for key in ('starting', 'national'):
+        if value := text(words.get(key)):
+            out[key] = value
+    titles = words.get('titles')
+    if isinstance(titles, dict):
+        kept = {k: v for k, v in ((k, text(v)) for k, v in titles.items()) if k in _TITLES and v}
+        if kept:
+            out['titles'] = kept
+    return out
+
+
+def title_of(occasion: dict[str, Any], lang: str = 'en', words: Optional[dict[str, Any]] = None) -> str:
+    words = words or {}
     if occasion.get('kind') == 'national':
         names = occasion.get('names') or {}
-        return f"Happy {names.get(lang) or names.get('en') or ''}".strip()
-    return _TITLES.get(occasion.get('id', ''), '')
+        name = names.get(lang) or names.get('en') or ''
+        return (words.get('national') or 'Happy {name}').replace('{name}', name).strip()
+    oid = occasion.get('id', '')
+    title = (words.get('titles') or {}).get(oid) or _TITLES.get(oid, '')
+    on = occasion.get('on')
+    return title.replace('{year}', str(on.year) if isinstance(on, datetime.date) else '').strip()
+
+
+def starting_words(words: Optional[dict[str, Any]] = None) -> str:
+    """"Starting your music…" in the window's language, ready for the page."""
+
+    return html.escape((words or {}).get('starting') or _STARTING.capitalize())
 
 
 # ---------------------------------------------------------------------------
@@ -254,7 +299,8 @@ _MOTIONS = {
 
 
 def splash_extras(now: Optional[datetime.date] = None, seed: Optional[int] = None,
-                  region: str = '', lang: str = 'en', light: bool = False) -> tuple[str, str, str]:
+                  region: str = '', lang: str = '', light: bool = False,
+                  words: Optional[dict[str, Any]] = None) -> tuple[str, str, str]:
     """(hint, css, markup) for the splash on a special day; three '' on any other.
 
     Drawn with CSS alone. For anyone who asked the system for less motion it
@@ -290,5 +336,8 @@ def splash_extras(now: Optional[datetime.date] = None, seed: Optional[int] = Non
         # Less motion: everything where it would be, holding still.
         '@media (prefers-reduced-motion:reduce){.f{animation:none;top:var(--y)!important;bottom:auto!important}}'
     )
-    hint = f'{title_of(occasion, lang)} · starting your music…'
+    words = clean_words(words)
+    lang = lang or words.get('lang') or 'en'
+    starting = words.get('starting') or _STARTING
+    hint = html.escape(f'{title_of(occasion, lang, words)} · {starting}')
     return hint, css, "<div class='fx' aria-hidden='true'>" + ''.join(pieces) + '</div>'

@@ -414,6 +414,15 @@ class LinuxApi:
         if len(code) == 2 and code.isalpha() and code.isascii() and core.read_prefs().get('region') != code:
             core.write_prefs({'region': code})
 
+    def app_set_splash_words(self, words: dict) -> None:
+        """What the splash says, in the window's language, for the next start."""
+
+        from dannify import occasions  # noqa: PLC0415
+
+        clean = occasions.clean_words(words)
+        if clean and core.read_prefs().get('splash') != clean:
+            core.write_prefs({'splash': clean})
+
     def app_set_theme(self, theme: str) -> None:
         self._theme = 'light' if theme == 'light' else 'dark'
         core.write_prefs({'theme': self._theme})
