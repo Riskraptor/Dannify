@@ -75,7 +75,7 @@
 
 <script setup>
 import { ensureFullWindow } from '/src/desktop/fullWindow'
-import { ref, reactive, computed, provide, nextTick, onMounted, onUnmounted, watchEffect, defineAsyncComponent } from 'vue'
+import { ref, reactive, computed, provide, nextTick, onMounted, onUnmounted, watch, watchEffect, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TitleBar from './components/shell/TitleBar.vue'
 import HealthBanner from '/src/components/shell/HealthBanner.vue'
@@ -87,7 +87,7 @@ import ContextMenuHost from './components/ui/ContextMenuHost.vue'
 import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
 import { startOnboarding, useOnboarding } from './model/onboarding'
-import { occasionOn, shouldGreet } from './model/occasions'
+import { occasionOn, seasonal, shouldGreet } from './model/occasions'
 import { useReporting } from './model/problems'
 import { whatsNew } from './model/updates'
 
@@ -204,6 +204,8 @@ const submitOpen = ref(false)
 
 // Christmas, the New Year (model/occasions.js): greeted once, if still to be.
 const greetToday = shouldGreet(occasionOn())
+// Turned off in Settings, Appearance: off on the splash at the next start too.
+watch(seasonal, (on) => desktop.setSeasonal(on), { immediate: true })
 
 // Once wanted, kept: each dialog's closing animation needs it still there.
 const reporting = useReporting()

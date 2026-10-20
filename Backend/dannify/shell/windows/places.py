@@ -15,6 +15,7 @@ from .base import (
     MIN_W,
     _FROZEN,
     _THEME_BG,
+    _read_prefs,
     logger_print,
     state,
 )
@@ -96,7 +97,8 @@ def _splash_html(theme: str, native_frame: bool, body: str = '') -> str:
     # A special day (Christmas, the New Year): a greeting, and snow or confetti.
     from dannify import occasions  # noqa: PLC0415
 
-    hint, fx_css, fx = occasions.splash_extras() if not body else ('', '', '')
+    festive = not body and _read_prefs().get('seasonal', True) is not False
+    hint, fx_css, fx = occasions.splash_extras() if festive else ('', '', '')
     if hint:
         content = content.replace('Starting your music…', hint)
     controls = '' if native_frame else (
