@@ -495,7 +495,8 @@ export function saveCurrent() {
  * ctx: { source: rows the selection came from (for "Play" semantics),
  *        queue: true when invoked from the queue panel,
  *        playlist: { remove(rows) } on a playlist's own page,
- *        history: { remove(rows) } on the History page }
+ *        history: { remove(rows) } on the History page,
+ *        playing: the song playing, from the player's own menu }
  */
 export function trackMenu(rows, ctx = {}) {
   if (!rows || !rows.length) return []
@@ -525,7 +526,9 @@ export function trackMenu(rows, ctx = {}) {
       { divider: true }
     )
   }
-  if (ctx.queue && single) {
+  if (ctx.playing) {
+    // The song playing, from the player: playing it is what it is doing.
+  } else if (ctx.queue && single) {
     items.push({
       label: t('actions.play'),
       icon: 'ph:play',
@@ -572,6 +575,7 @@ export function trackMenu(rows, ctx = {}) {
       action: () => ctx.history.remove(rows),
     },
     ctx.queue &&
+      !ctx.playing &&
       single && {
         label: t('actions.removeFromQueue'),
         icon: 'ph:x',
