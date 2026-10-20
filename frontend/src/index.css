@@ -446,6 +446,10 @@
     --band: rgb(170 120 40 / 0.3);
     background: linear-gradient(135deg, #8a5a1c, #d9a441);
   }
+  .tile-spotify {
+    --band: rgb(30 215 96 / 0.3);
+    background: linear-gradient(135deg, #1ed760, #0b6b33);
+  }
   .tile-stats {
     --band: rgb(150 70 190 / 0.3);
     background: linear-gradient(135deg, #7a3fc4, #e0619d);

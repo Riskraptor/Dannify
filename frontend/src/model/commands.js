@@ -94,6 +94,7 @@ export function buildCommands() {
       keys: ['Ctrl', 'E'],
       run: go({ name: 'NowPlaying' }),
     },
+    { id: 'go.spotify', group: goTo, title: t('spotify.yours'), icon: 'ph:spotify-logo', run: go({ name: 'Spotify' }) },
     { id: 'go.settings', group: goTo, title: t('nav.settings'), icon: 'ph:gear-six', keys: ['Ctrl', ','], run: go({ name: 'Settings' }) },
 
     // ----- the music -----
