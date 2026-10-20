@@ -41,6 +41,7 @@ class FakeSpotify:
         self.token_posts: list[dict] = []
         self.gets: list[tuple[str, dict]] = []
         self.registered = True
+        self.refusal = 'Check settings on developer.spotify.com/dashboard, the user may not be registered.'
         self.refresh_ok = True
         self.access = 'access-1'
         self.expires_in = 3600
@@ -70,8 +71,7 @@ class FakeSpotify:
         path = url.replace(sp.API, '')
         self.gets.append((path, dict(params or {})))
         if not self.registered:
-            return self.respond(403, None) if False else self._text(
-                403, 'Check settings on developer.spotify.com/dashboard, the user may not be registered.')
+            return self._text(403, self.refusal)
         if path == '/me':
             return self.respond(200, {'id': 'dani', 'display_name': 'Dani M',
                                       'images': [{'url': 'https://i.scdn.co/me', 'width': 300}]})
@@ -160,7 +160,16 @@ def sign_in(fake):
 # ---------------------------------------------------------------------------
 # Signing in
 # ---------------------------------------------------------------------------
-def test_without_a_client_id_there_is_nothing_to_sign_in_with(fake):
+def test_dannifys_own_app_is_used_unless_one_brings_their_own(fake):
+    assert len(sp.DEFAULT_CLIENT_ID) == 32
+    assert sp.client_id() == sp.DEFAULT_CLIENT_ID
+    assert sp.status()['configured'] is True and sp.status()['own_app'] is False
+    q = {k: v[0] for k, v in parse_qs(urlsplit(sp.begin()).query).items()}
+    assert q['client_id'] == sp.DEFAULT_CLIENT_ID
+
+
+def test_without_a_client_id_there_is_nothing_to_sign_in_with(fake, monkeypatch):
+    monkeypatch.setattr(sp, 'DEFAULT_CLIENT_ID', '')
     assert sp.status()['configured'] is False
     with pytest.raises(sp.SpotifyError) as err:
         sp.begin()
@@ -298,8 +307,15 @@ def test_the_one_time_page_closes_after_its_answer(fake):
     pytest.fail('the sign-in page kept listening')
 
 
-def test_an_account_spotify_does_not_list_is_told_so(fake):
+@pytest.mark.parametrize('refusal', [
+    'Check settings on developer.spotify.com/dashboard, the user may not be registered.',
+    '{"error": {"status": 403, "message": "Forbidden"}}',
+    '',
+])
+def test_an_account_spotify_does_not_list_is_told_so(fake, refusal):
+    # However Spotify words it, or if it says nothing at all.
     fake.registered = False
+    fake.refusal = refusal
     _, status, page = sign_in(fake)
     assert status == 400 and 'not on the list' in page
     assert sp.status()['error'] == sp.NOT_ALLOWED and sp.status()['connected'] is False
@@ -457,10 +473,12 @@ def test_a_copy_with_nothing_found_makes_no_empty_playlist(fake, tmp_path, monke
 # ---------------------------------------------------------------------------
 # The window's side
 # ---------------------------------------------------------------------------
-def test_answers_say_why_they_failed(fake):
+def test_answers_say_why_they_failed(fake, monkeypatch):
     from fastapi import HTTPException
 
     from dannify.routes import spotify_account as routes
+
+    monkeypatch.setattr(sp, 'DEFAULT_CLIENT_ID', '')
 
     with pytest.raises(HTTPException) as err:
         asyncio.run(routes.spotify_connect_endpoint())
