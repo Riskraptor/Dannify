@@ -12,6 +12,9 @@ namespace Dannify.Setup.UI
         public static void Show(Args args, Env env, Payload payload)
         {
             string v = payload?.Version ?? "4.0.0";
+            // DANNIFY_SETUP_DATE=2026-12-24: the look of a special day, to check it.
+            if (System.DateTime.TryParse(System.Environment.GetEnvironmentVariable("DANNIFY_SETUP_DATE"), out var day))
+                Season.Override = day;
             string state = (args.UiState ?? "welcome").ToLowerInvariant();
             string music = System.IO.Path.Combine(
                 System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyMusic), "Dannify");

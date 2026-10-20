@@ -282,8 +282,13 @@ def _stop_login() -> None:
     if login and login.get('server'):
         server = login['server']
         login['server'] = None
-        # Not from the server's own thread: shutdown waits for it.
-        threading.Thread(target=server.shutdown, daemon=True).start()
+        # Not from the server's own thread: shutdown waits for it. Then the
+        # listening socket itself is closed, not left for the collector.
+        def stop() -> None:
+            server.shutdown()
+            server.server_close()
+
+        threading.Thread(target=stop, daemon=True).start()
 
 
 def finish(login: dict[str, Any], query: dict[str, str]) -> tuple[bool, str]:

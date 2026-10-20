@@ -53,6 +53,8 @@
                 </Ellipse.RenderTransform>
             </Ellipse>
         </Canvas>
+        <!-- A special day's weather (Season.cs): snow, or confetti. -->
+        <Canvas x:Name="Weather" Grid.RowSpan="4" IsHitTestVisible="False" ClipToBounds="True" />
         <Border x:Name="Edge" Grid.RowSpan="4" BorderThickness="1" BorderBrush="#1CFFFFFF" IsHitTestVisible="False" Visibility="Collapsed" />
 
         <!-- Top strip: drag anywhere here; minimise and close on the right. -->
@@ -119,6 +121,8 @@
         <!-- Pages. One is visible at a time. -->
         <Grid Grid.Row="2" Margin="40,2,40,0">
             <StackPanel x:Name="WelcomePage" VerticalAlignment="Top">
+                <TextBlock x:Name="SeasonLine" Style="{StaticResource Caption}" HorizontalAlignment="Center"
+                           Foreground="{StaticResource Accent}" FontWeight="SemiBold" Margin="0,0,0,4" Visibility="Collapsed" />
                 <TextBlock x:Name="WelcomeTitle" Style="{StaticResource Wordmark}" Text="Dannify" />
                 <TextBlock x:Name="WelcomeText" Style="{StaticResource Lead}" Margin="0,8,0,0" />
                 <TextBlock x:Name="WelcomeNote" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,4,0,0" Visibility="Collapsed" />

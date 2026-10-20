@@ -262,6 +262,8 @@ export default {
     },
   },
   settings: {
+    seasonal: 'Special days',
+    seasonalHint: 'Snow at Christmas, confetti for the New Year, and a welcome after a big update.',
     volumeLevel: 'Volume level',
     volumeLevelHint: 'How loud songs are evened out to. Loud suits a noisy room; quiet, a late night.',
     balance: 'Balance',
@@ -853,6 +855,9 @@ export default {
     doneText: 'Search for a song, an artist or a playlist to begin.',
   },
   update: {
+    welcomeEyebrow: 'A new Dannify',
+    welcomeTitle: 'Welcome to Dannify {version}',
+    letsGo: 'Let’s go',
     title: 'Updates',
     available: 'Version {version} is available',
     upToDate: 'Dannify {version} is up to date',
@@ -1224,6 +1229,17 @@ export default {
     recentSub: 'What you played lately',
     byYou: 'By you',
     homeShelf: 'From your Spotify',
+  },
+  occasion: {
+    go: 'Let’s play',
+    christmas: {
+      title: 'Merry Christmas',
+      text: 'May your days be merry, bright and full of music.',
+    },
+    newyear: {
+      title: 'Happy New Year {year}',
+      text: 'Here’s to a whole new year of music.',
+    },
   },
   mixes: {
     shelf: 'Made for you',
