@@ -201,9 +201,12 @@ function onMore(e) {
   margin: 16px 0 18px;
 }
 .npa-title {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
   font-family: var(--font-display, inherit);
   font-size: 22px;
   font-weight: 700;

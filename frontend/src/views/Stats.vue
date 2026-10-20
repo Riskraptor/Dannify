@@ -2,7 +2,6 @@
   <div class="stats pb-12">
     <ViewHeader
       :title="t('stats.title')"
-      :eyebrow="t('nav.yourLibrary')"
       :tile="{ icon: 'ph:chart-bar-fill', kind: 'tile-stats' }"
     >
       <template #meta>

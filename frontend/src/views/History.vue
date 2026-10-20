@@ -2,7 +2,6 @@
   <div class="pb-12">
     <ViewHeader
       :title="t('history.title')"
-      :eyebrow="t('nav.yourLibrary')"
       :tile="{ icon: 'ph:clock-counter-clockwise-bold', kind: 'tile-history' }"
     >
       <template #meta>

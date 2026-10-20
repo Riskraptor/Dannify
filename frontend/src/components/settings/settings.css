@@ -256,11 +256,21 @@
   color: rgb(var(--c-accent));
   background: rgb(var(--c-accent) / 0.12);
 }
+/* Eight palettes a side: one row of eight where they fit, two of four where
+   they do not. Filling rows as they came left Forest alone on a second row. */
+.settings .palette-side {
+  container-type: inline-size;
+}
 .settings .palette-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 112px));
   gap: 10px;
   width: 100%;
+}
+@container (min-width: 680px) {
+  .settings .palette-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
 }
 .settings .palette {
   display: flex;
