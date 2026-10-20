@@ -118,10 +118,13 @@ const isNowPlaying = computed(() => route.name === 'NowPlaying')
 // in music, a story told across the window with nothing beside it.
 const isFullView = computed(() => isNowPlaying.value || route.name === 'Recap')
 // The panel only earns its space once something is loaded in the player.
+// Settings gets the whole width too: squeezed between the sidebar and the
+// lyrics it read like a web page.
 const showPanel = computed(
   () =>
     !!ui.panel.value &&
     !isFullView.value &&
+    route.name !== 'Settings' &&
     (!!player.currentTrack.value || player.playlist.value.length > 0)
 )
 const showResizeHandles = computed(
