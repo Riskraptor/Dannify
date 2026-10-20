@@ -45,8 +45,12 @@
         </div>
         <div class="npa-about-body">
           <p class="npa-about-name">{{ artist.name }}</p>
-          <p v-if="artist.monthly_listeners || artist.subscribers" class="npa-about-meta">
-            {{ artist.monthly_listeners || artist.subscribers }}
+          <!-- A bare "1.74M" said nothing: it says what it counts. -->
+          <p v-if="artist.monthly_listeners" class="npa-about-meta">
+            {{ artist.monthly_listeners }} {{ t('explore.monthlyListeners') }}
+          </p>
+          <p v-else-if="artist.subscribers" class="npa-about-meta">
+            {{ artist.subscribers }} {{ t('explore.subscribers') }}
           </p>
           <p v-if="artist.description" class="npa-bio" :class="{ 'is-open': bioOpen }">
             {{ artist.description }}
