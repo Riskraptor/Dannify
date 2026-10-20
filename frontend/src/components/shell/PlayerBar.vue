@@ -210,7 +210,7 @@
       >
         <Icon icon="ph:sliders-horizontal" class="h-[18px] w-[18px]" />
       </button>
-      <SoundPanel :open="soundOpen" :anchor="soundBtn" @close="soundOpen = false" />
+      <SoundPanel v-if="soundWanted" :open="soundOpen" :anchor="soundBtn" @close="soundOpen = false" />
       <div class="pb-volume">
         <button
           class="icon-btn is-round"
@@ -257,7 +257,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, defineAsyncComponent, ref, watch, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { usePlayer, formatTime } from '/src/model/player'
@@ -271,7 +271,10 @@ import { useI18n } from '/src/i18n'
 import CoverImage from '../ui/CoverImage.vue'
 import ArtistLinks from '../ui/ArtistLinks.vue'
 import RangeSlider from '../ui/RangeSlider.vue'
-import SoundPanel from './SoundPanel.vue'
+// The sound panel and its equaliser are fetched when first opened, and
+// quietly a little after start, so that first opening is still instant.
+const loadSoundPanel = () => import('./SoundPanel.vue')
+const SoundPanel = defineAsyncComponent(loadSoundPanel)
 
 const { t } = useI18n()
 const router = useRouter()
@@ -288,6 +291,13 @@ const cur = computed(() => player.currentTrack.value)
 const now = ref(Date.now())
 // The sound panel (SoundPanel.vue), from its button beside the volume.
 const soundOpen = ref(false)
+// Drawn from its first opening on, so closing can animate.
+const soundWanted = ref(false)
+watch(soundOpen, (on) => on && (soundWanted.value = true))
+if (typeof window !== 'undefined') {
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500))
+  setTimeout(() => idle(() => loadSoundPanel().catch(() => {}), { timeout: 5000 }), 3500)
+}
 const soundBtn = ref(null)
 let sleepTick = 0
 watch(

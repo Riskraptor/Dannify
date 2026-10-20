@@ -360,7 +360,10 @@ watch(
     const bottom = r ? Math.max(8, window.innerHeight - r.top + 10) : 96
     place.value = { right: `${Math.min(right, window.innerWidth - width - 8)}px`, bottom: `${bottom}px`, width: `${width}px` }
     box.value && box.value.focus({ preventScroll: true })
-  }
+  },
+  // It is fetched on its first opening (PlayerBar.vue), and so arrives
+  // already open: placed then too, not left in the window's corner.
+  { immediate: true }
 )
 
 function close() {

@@ -77,7 +77,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useUi } from '/src/model/ui'
 import { usePlayer } from '/src/model/player'
@@ -88,7 +88,8 @@ import CoverImage from '../ui/CoverImage.vue'
 import LyricsView from '../lyrics/LyricsView.vue'
 import LyricsToolbar from '../lyrics/LyricsToolbar.vue'
 import QueueList from './QueueList.vue'
-import NowPlayingAbout from './NowPlayingAbout.vue'
+// The About tab is fetched the first time it is shown.
+const NowPlayingAbout = defineAsyncComponent(() => import('./NowPlayingAbout.vue'))
 
 const { t } = useI18n()
 const ui = useUi()
