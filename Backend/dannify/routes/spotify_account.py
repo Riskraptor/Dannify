@@ -59,6 +59,14 @@ async def spotify_app_endpoint(payload: dict[str, Any] = Body(default={})) -> di
     return await _ask(sp.set_client_id, str(value or ''))
 
 
+@router.post('/api/spotify/refresh')
+def spotify_refresh_endpoint() -> dict[str, Any]:
+    """Forget what was read, so the next answers come from Spotify."""
+
+    sp.forget()
+    return {'ok': True}
+
+
 @router.get('/api/spotify/playlists')
 async def spotify_playlists_endpoint() -> dict[str, Any]:
     return {'playlists': await _ask(sp.playlists)}
