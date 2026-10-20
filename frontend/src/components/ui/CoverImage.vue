@@ -20,10 +20,10 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, onBeforeUnmount } from 'vue'
+import { ref, watch, computed, onActivated, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
 import { libraryEpoch } from '/src/model/library'
-import { canThumb, thumbNow, thumbnail, whenVisible } from '/src/model/thumbs'
+import { canThumb, checkSoon, thumbNow, thumbnail, whenVisible } from '/src/model/thumbs'
 
 const props = defineProps({
   src: { type: String, default: '' },
@@ -143,6 +143,11 @@ watch(
 )
 watch(shown, () => {
   skipSmall.value = false
+})
+// Back on a kept page: a cover still waiting for its small copy is looked at
+// now, not whenever the window next happens to report it.
+onActivated(() => {
+  if (awaitingSmall.value) checkSoon()
 })
 onBeforeUnmount(() => stopWatching?.())
 
