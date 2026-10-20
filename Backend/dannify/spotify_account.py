@@ -6,8 +6,8 @@ as it plays, the same way a pasted Spotify link does.
 Signing in is Spotify's own way for an app on someone's computer: the
 authorization code flow with PKCE, which needs no secret in the app. The
 browser opens Spotify's page; Spotify sends the person back to a one-time
-page that a tiny server here listens on (127.0.0.1, a port of its own, for ten
-minutes at most, and for that one answer only). What comes back is checked
+page that a tiny server here listens on (127.0.0.1:43821, for ten minutes at
+most, and for that one answer only). What comes back is checked
 against a value made for this sign-in alone, so no other page can sign
 someone in. The refresh token is kept sealed the way the Google sign-in is
 (vault._protect); the access token lives in memory for its hour.
@@ -56,9 +56,15 @@ _ACCOUNTS = _base('DANNIFY_SPOTIFY_ACCOUNTS', 'https://accounts.spotify.com')
 AUTHORIZE_URL = _ACCOUNTS + '/authorize'
 TOKEN_URL = _ACCOUNTS + '/api/token'
 API = _base('DANNIFY_SPOTIFY_API', 'https://api.spotify.com') + '/v1'
-# Registered in the dashboard as http://127.0.0.1/callback: Spotify lets the
-# port of a loopback address change from one sign-in to the next.
+# Where Spotify sends the person back, registered in the dashboard exactly
+# as REDIRECT_URI. The dashboard takes a loopback address only with its port
+# (one without is refused as "not secure", whatever the documentation says),
+# and Spotify sends people only to the address registered: so one port,
+# always this one. It is below the range Windows lends programs (49152 and
+# up), so it is not handed to something else in passing.
+CALLBACK_PORT = 43821
 CALLBACK_PATH = '/callback'
+REDIRECT_URI = f'http://127.0.0.1:{CALLBACK_PORT}{CALLBACK_PATH}'
 SCOPES = ' '.join((
     'user-read-private',
     'user-library-read',
@@ -87,6 +93,7 @@ NOT_ALLOWED = 'not_allowed'  # this account is not on the app's list
 EXPIRED = 'expired'  # the sign-in was revoked or ran out
 DENIED = 'denied'  # the person said no on Spotify's page
 FAILED = 'failed'  # anything else that went wrong signing in
+BUSY = 'busy'  # another program holds the address Spotify sends people back to
 
 
 class SpotifyError(RuntimeError):
@@ -236,12 +243,15 @@ def begin() -> str:
     cid = client_id()
     if not cid:
         raise SpotifyError(NOT_CONFIGURED)
+    # A sign-in already waiting lets go of the address first: there is one.
     with _lock:
-        _stop_login()
+        old = _detach_login()
+    if old is not None:
+        _close(old)
+    server = _listen()
+    with _lock:
         verifier = secrets.token_urlsafe(72)[:96]
         state = secrets.token_urlsafe(24)
-        server = ThreadingHTTPServer(('127.0.0.1', 0), _CallbackHandler)
-        server.daemon_threads = True
         redirect = f'http://127.0.0.1:{server.server_address[1]}{CALLBACK_PATH}'
         login = {
             'verifier': verifier,
@@ -255,7 +265,10 @@ def begin() -> str:
         server.dannify_login = login  # type: ignore[attr-defined]
         _state['login'] = login
         _state['error'] = ''
-    threading.Thread(target=server.serve_forever, name='spotify-sign-in', daemon=True).start()
+    # Checked often for the word to stop, so a sign-in started again gets
+    # the address back at once.
+    threading.Thread(target=server.serve_forever, kwargs={'poll_interval': 0.1},
+                     name='spotify-sign-in', daemon=True).start()
     timer = threading.Timer(LOGIN_WINDOW, lambda: _expire(login))
     timer.daemon = True
     timer.start()
@@ -276,19 +289,51 @@ def _expire(login: dict[str, Any]) -> None:
             _stop_login()
 
 
-def _stop_login() -> None:
+class _CallbackServer(ThreadingHTTPServer):
+    daemon_threads = True
+    # On Windows this lets a second socket share the port, and which of them
+    # hears Spotify's answer is anyone's guess. Elsewhere it only lets a new
+    # sign-in listen while the last one's connections wind down.
+    allow_reuse_address = os.name != 'nt'
+
+
+def _listen() -> ThreadingHTTPServer:
+    """The one-time page's server, on the registered address."""
+
+    for attempt in range(30):
+        try:
+            return _CallbackServer(('127.0.0.1', CALLBACK_PORT), _CallbackHandler)
+        except OSError as exc:
+            # A sign-in that has just ended can hold it for a moment;
+            # anything holding it longer is another program.
+            if attempt == 29:
+                logger.warning('Spotify sign-in: 127.0.0.1:{} is in use ({})', CALLBACK_PORT, exc)
+                raise SpotifyError(BUSY) from exc
+            time.sleep(0.1)
+    raise SpotifyError(BUSY)
+
+
+def _detach_login() -> Optional[ThreadingHTTPServer]:
     login = _state['login']
     _state['login'] = None
-    if login and login.get('server'):
-        server = login['server']
-        login['server'] = None
-        # Not from the server's own thread: shutdown waits for it. Then the
-        # listening socket itself is closed, not left for the collector.
-        def stop() -> None:
-            server.shutdown()
-            server.server_close()
+    if not login or not login.get('server'):
+        return None
+    server = login['server']
+    login['server'] = None
+    return server
 
-        threading.Thread(target=stop, daemon=True).start()
+
+def _close(server: ThreadingHTTPServer) -> None:
+    # Then the listening socket itself is closed, not left for the collector.
+    server.shutdown()
+    server.server_close()
+
+
+def _stop_login() -> None:
+    server = _detach_login()
+    if server is not None:
+        # Not from the server's own thread: shutdown waits for it.
+        threading.Thread(target=_close, args=(server,), daemon=True).start()
 
 
 def finish(login: dict[str, Any], query: dict[str, str]) -> tuple[bool, str]:
