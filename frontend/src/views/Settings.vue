@@ -84,6 +84,7 @@
 
         <!-- Appearance -->
         <SettingsAppearance v-show="showPane('appearance')" @vue:updated="onSectionUpdated" />
+        <SettingsSpecialDays v-show="showPane('appearance')" @vue:updated="onSectionUpdated" />
 
         <!-- Playback -->
         <SettingsPlayback v-show="showPane('playback')" @vue:updated="onSectionUpdated" />
@@ -134,6 +135,7 @@ import '/src/components/settings/settings.css'
 import SettingsAccount from '/src/components/settings/SettingsAccount.vue'
 import SettingsListenBrainz from '/src/components/settings/SettingsListenBrainz.vue'
 import SettingsAppearance from '/src/components/settings/SettingsAppearance.vue'
+import SettingsSpecialDays from '/src/components/settings/SettingsSpecialDays.vue'
 import SettingsSystem from '/src/components/settings/SettingsSystem.vue'
 import SettingsPlayback from '/src/components/settings/SettingsPlayback.vue'
 import SettingsHistory from '/src/components/settings/SettingsHistory.vue'

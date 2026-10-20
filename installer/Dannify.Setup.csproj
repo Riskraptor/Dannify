@@ -50,5 +50,7 @@
 
   <ItemGroup>
     <Resource Include="Fonts\*.ttf" />
+    <!-- Special days: the calendar the app uses (packaging/make_occasions.py). -->
+    <EmbeddedResource Include="UI\Occasions.json" LogicalName="Occasions.json" />
   </ItemGroup>
 </Project>

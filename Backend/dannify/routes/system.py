@@ -59,6 +59,16 @@ async def net_endpoint() -> dict[str, Any]:
     return {'online': await asyncio.to_thread(_reachable)}
 
 
+@router.get('/api/region')
+def region_endpoint() -> dict[str, Any]:
+    """The country the computer is set to, for special days. The window
+    weighs it against the time zone (model/occasions.js detectRegion)."""
+
+    from .. import occasions  # noqa: PLC0415
+
+    return {'system': occasions.system_region()}
+
+
 @router.get('/api/health')
 def health() -> dict[str, Any]:
     """Anything wrong that the person using the app should be told about.

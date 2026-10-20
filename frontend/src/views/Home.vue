@@ -3,10 +3,15 @@
     <div class="home-band" aria-hidden="true" />
     <!-- A special day's weather at the top of the page, behind everything. -->
     <div v-if="festive" class="home-fx" aria-hidden="true">
-      <Particles :kind="festive.effect" :count="festive.effect === 'snow' ? 30 : 34" contain fall="300px" />
+      <Particles :look="festive.look" :count="festive.look.motion === 'burst' ? 40 : 34" contain fall="300px" />
     </div>
-    <header class="view-pad relative flex items-end justify-between gap-4 pb-5 pt-7">
+    <header class="view-pad relative flex flex-col items-start gap-2 pb-5 pt-7">
       <h1 class="text-[32px] font-bold tracking-tight">{{ greeting }}</h1>
+      <!-- The day, said: a chip that opens its music. -->
+      <button v-if="festive" class="home-day press" :style="{ '--day': festiveTone }" @click="openDayMusic">
+        <Icon :icon="festive.icon" class="h-4 w-4" />
+        <span>{{ festiveWords.title }}</span>
+      </button>
     </header>
 
     <!-- First run: nothing downloaded, nothing played, no feed yet -->
@@ -63,6 +68,21 @@
     </section>
 
     <div class="shelves">
+      <!-- A special day: its music, from YouTube Music. -->
+      <Shelf
+        v-if="festive && dayPlaylists.length"
+        :title="t('occasion.musicFor', { day: festiveWords.name })"
+        :more-label="t('home.showAll')"
+        @more="openDayMusic"
+      >
+        <MediaCard
+          v-for="it in dayPlaylists"
+          :key="it.type + it.browse_id"
+          :item="it"
+          :kind="it.type"
+          @open="openCard(it)"
+        />
+      </Shelf>
       <!-- Mixes made from the listening and the library (model/mixes.js),
            and the year so far: there signed out and offline, unlike the feed. -->
       <Shelf
@@ -258,7 +278,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, computed, watch, onActivated, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, computed, watch, onActivated, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
@@ -278,14 +298,15 @@ import { useSupport } from '/src/model/support'
 import { useListens } from '/src/model/listens'
 import { entryRow } from '/src/model/playlists'
 import { mixCovers, MIXES, useMixes } from '/src/model/mixes'
-import { occasionOn, prefersStill, seasonal } from '/src/model/occasions'
-import Particles from '/src/components/ui/Particles.vue'
+import { loadCalendar, today, toneOf, wordsFor } from '/src/model/occasions'
+// Only on a special day: fetched then.
+const Particles = defineAsyncComponent(() => import('/src/components/ui/Particles.vue'))
 import Shelf from '/src/components/ui/Shelf.vue'
 import SongTile from '/src/components/ui/SongTile.vue'
 import MediaCard from '/src/components/MediaCard.vue'
 import MixCard from '/src/components/MixCard.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const player = usePlayer()
 const lib = useLibrary()
@@ -330,8 +351,32 @@ async function loadListening() {
 }
 loadListening()
 watch(listens.listensEpoch, loadListening)
-// Christmas, the New Year: snow or confetti at the top of the page.
-const festive = computed(() => (seasonal.value && !prefersStill() ? occasionOn() : null))
+// A special day (model/occasions.js): its weather at the top of the page,
+// its name under the greeting, and its music from YouTube Music.
+loadCalendar()
+const festive = computed(() => today.value)
+const festiveWords = computed(() => wordsFor(festive.value, t, locale.value))
+const festiveTone = computed(() => toneOf(festive.value))
+const dayPlaylists = shallowRef([])
+let dayAsked = ''
+watch(
+  () => festiveWords.value.music,
+  async (query) => {
+    if (!query || query === dayAsked) return
+    dayAsked = query
+    try {
+      const res = await API.exploreSearch(query, 12)
+      if (dayAsked === query) dayPlaylists.value = ((res.data && res.data.playlists) || []).slice(0, 12)
+    } catch {
+      // No connection: the shelf is simply not there.
+    }
+  },
+  { immediate: true }
+)
+function openDayMusic() {
+  const query = festiveWords.value.music
+  if (query) router.push({ name: 'Search', params: { query } })
+}
 
 const hasYear = computed(() => !!(year.value && year.value.plays >= 10))
 const yearCovers = computed(() => mixCovers(((year.value && year.value.top_songs) || []).map(entryRow)))
@@ -676,6 +721,26 @@ function submitWelcome() {
 .home {
   position: relative;
   isolation: isolate;
+}
+.home-day {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 14px 0 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgb(var(--c-fg));
+  background: color-mix(in srgb, var(--day) 22%, rgb(var(--c-raised)));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--day) 40%, transparent);
+  transition: background 0.15s ease;
+}
+.home-day svg {
+  color: var(--day);
+}
+.home-day:hover {
+  background: color-mix(in srgb, var(--day) 32%, rgb(var(--c-raised)));
 }
 .home-fx {
   position: absolute;

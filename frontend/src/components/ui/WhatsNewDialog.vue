@@ -3,8 +3,8 @@
     <transition name="dlg">
       <div v-if="shown" class="wnd-layer" @mousedown.self="close">
         <!-- A release with something new in it is welcomed: confetti, or
-             snow on a Christmas day. -->
-        <Particles v-if="shown.celebrate && !still" :kind="effect" :count="effect === 'snow' ? 60 : 80" />
+             the day's own weather on a special day. -->
+        <Particles v-if="shown.celebrate" :look="look" :count="look.motion === 'burst' ? 80 : 70" />
         <div
           ref="box"
           v-overlay-scroll
@@ -22,7 +22,7 @@
           <header v-if="shown.celebrate" class="wnd-hero">
             <span class="wnd-hero-mark"><Icon :icon="occasion ? occasion.icon : 'ph:sparkle-fill'" class="h-7 w-7" /></span>
             <p class="wnd-hero-eyebrow">
-              {{ occasion ? t(`occasion.${occasion.id}.title`, { year: occasionYear(occasion) }) : t('update.welcomeEyebrow') }}
+              {{ occasion ? wordsFor(occasion, t, locale).title : t('update.welcomeEyebrow') }}
             </p>
             <h2 class="wnd-hero-title">{{ t('update.welcomeTitle', { version: shown.version }) }}</h2>
           </header>
@@ -46,15 +46,14 @@ import { rememberFocus, trapTab } from '/src/model/focusTrap'
 import { useI18n } from '/src/i18n'
 import WhatsNew from '/src/components/ui/WhatsNew.vue'
 import Particles from '/src/components/ui/Particles.vue'
-import { occasionOn, occasionYear, prefersStill } from '/src/model/occasions'
+import { lookOf, today, wordsFor } from '/src/model/occasions'
 
 // "What's new", once, after Dannify has updated itself (model/updates.js).
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const shown = computed(() => whatsNew.value)
-const occasion = occasionOn()
-const effect = occasion ? occasion.effect : 'confetti'
-const still = prefersStill()
+const occasion = computed(() => today.value)
+const look = computed(() => (occasion.value ? occasion.value.look : lookOf({ look: 'confetti' })))
 const box = ref(null)
 const okBtn = ref(null)
 let giveBack = null

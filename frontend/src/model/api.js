@@ -378,6 +378,11 @@ function discardUpdate() {
 }
 
 // --- Online explorer (Spotify-style discovery) ---
+// The country the computer is set to (Windows, macOS or Linux), for special
+// days (model/occasions.js).
+function region() {
+  return API.get('/api/region')
+}
 function exploreSearch(q, limit = 20) {
   return API.get('/api/explore/search', { params: { q, limit } })
 }
@@ -561,6 +566,7 @@ export default {
   refreshDetails,
   refreshArtists,
   exploreSearch,
+  region,
   searchSuggest,
   exploreArtist,
   getMoods,
