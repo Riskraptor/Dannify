@@ -41,7 +41,12 @@
           {{ t('history.title') }}
         </button>
       </header>
-      <div ref="quickGrid" class="tile-grid" :class="{ 'is-few': quick.length < 3 }">
+      <div
+        ref="quickGrid"
+        class="tile-grid"
+        :class="{ 'is-few': quick.length < 3 }"
+        :style="{ '--n': quickShown.length }"
+      >
         <SongTile
           v-for="(row, i) in quickShown"
           :key="row.key + i"
@@ -567,9 +572,12 @@ function submitWelcome() {
   padding: 0 10px;
 }
 /* One or two recent songs: they share the row instead of sitting at the left
-   of a mostly empty grid, but stop short of turning into one long bar. */
+   of a mostly empty grid, but stop short of turning into one long bar. The
+   row is what is capped, not each column: with a fixed largest column the
+   grid counted how many 420px columns fit, found one, and stacked them. */
 .tile-grid.is-few {
-  grid-template-columns: repeat(auto-fit, minmax(250px, 420px));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  max-width: calc(var(--n, 2) * 420px + (var(--n, 2) - 1) * 8px);
 }
 .shelves {
   padding: 0 14px;

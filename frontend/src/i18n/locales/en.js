@@ -944,6 +944,7 @@ export default {
     playlist: 'Playlist',
     tracks: 'tracks',
     subscribers: 'subscribers',
+    monthlyListeners: 'monthly listeners',
     yourArtist: 'In your library',
     videosOnly: 'Videos only',
   },

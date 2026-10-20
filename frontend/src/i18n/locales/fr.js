@@ -949,6 +949,7 @@ export default {
     playlist: 'Playlist',
     tracks: 'titres',
     subscribers: 'abonnés',
+    monthlyListeners: 'auditeurs mensuels',
     yourArtist: 'Dans votre bibliothèque',
     videosOnly: 'Vidéos uniquement',
   },

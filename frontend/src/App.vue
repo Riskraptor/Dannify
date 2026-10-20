@@ -33,7 +33,7 @@
         tabindex="-1"
       >
         <!-- Not on Now Playing: that screen is the music and nothing else. -->
-        <HealthBanner :away="isNowPlaying" />
+        <HealthBanner :away="isFullView" />
         <router-view v-slot="{ Component, route: r }">
           <!-- Views cross-fade instead of snapping in. `out-in` keeps the
                scroll container from having two children at once, which would
@@ -114,11 +114,14 @@ const scroller = ref(null)
 provide('viewScroller', scroller)
 
 const isNowPlaying = computed(() => route.name === 'NowPlaying')
+// Screens that are the whole window's business: Now Playing, and Your year
+// in music, a story told across the window with nothing beside it.
+const isFullView = computed(() => isNowPlaying.value || route.name === 'Recap')
 // The panel only earns its space once something is loaded in the player.
 const showPanel = computed(
   () =>
     !!ui.panel.value &&
-    !isNowPlaying.value &&
+    !isFullView.value &&
     (!!player.currentTrack.value || player.playlist.value.length > 0)
 )
 const showResizeHandles = computed(
