@@ -28,20 +28,6 @@
         {{ t('settings.lbConnect') }}
       </button>
     </div>
-    <label class="row">
-      <Icon icon="ph:discord-logo" class="row-icon" />
-      <div class="row-text">
-        <p class="row-label">{{ t('settings.discord') }}</p>
-        <p class="row-hint">{{ discordHint }}</p>
-      </div>
-      <input
-        type="checkbox"
-        class="switch"
-        :checked="discordOn"
-        :disabled="discordBusy"
-        @change="toggleDiscord($event.target.checked)"
-      />
-    </label>
     <div class="row">
       <Icon icon="ph:clock-counter-clockwise" class="row-icon" />
       <div class="row-text">
@@ -61,7 +47,6 @@ import { computed, onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
 import { useListens } from '/src/model/listens'
-import { discordConnected, discordOn, refreshDiscord, setDiscord } from '/src/model/presence'
 import { confirmDialog, promptDialog } from '/src/model/dialog'
 import { toast } from '/src/model/toast'
 import { useI18n } from '/src/i18n'
@@ -139,25 +124,6 @@ async function disconnectLb() {
     toast(t('settings.lbFailed'), { tone: 'error' })
   } finally {
     lbBusy.value = false
-  }
-}
-
-// Discord: the song playing on the person's profile (model/presence.js).
-const discordBusy = ref(false)
-const discordHint = computed(() => {
-  if (!discordOn.value) return t('settings.discordHint')
-  return discordConnected.value ? t('settings.discordConnected') : t('settings.discordWaiting')
-})
-onMounted(refreshDiscord)
-
-async function toggleDiscord(on) {
-  discordBusy.value = true
-  try {
-    await setDiscord(on)
-  } catch {
-    toast(t('settings.discordFailed'), { tone: 'error' })
-  } finally {
-    discordBusy.value = false
   }
 }
 
