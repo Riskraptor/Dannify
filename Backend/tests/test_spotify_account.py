@@ -186,7 +186,8 @@ def test_the_sign_in_page_is_spotifys_with_pkce_and_a_loopback_address(fake):
     assert q['client_id'] == CLIENT
     assert q['response_type'] == 'code'
     assert q['code_challenge_method'] == 'S256'
-    assert q['redirect_uri'].startswith('http://127.0.0.1:') and q['redirect_uri'].endswith('/callback')
+    # Exactly the address registered in Spotify's dashboard, port and all.
+    assert q['redirect_uri'] == sp.REDIRECT_URI == 'http://127.0.0.1:43821/callback'
     assert set(q['scope'].split()) == set(sp.SCOPES.split())
     assert len(q['state']) >= 24
     assert sp.status()['signing_in'] is True
@@ -231,6 +232,47 @@ def test_only_the_callback_page_is_answered(fake):
     redirect = parse_qs(urlsplit(url).query)['redirect_uri'][0]
     status, _ = visit(redirect.replace('/callback', '/favicon.ico'))
     assert status == 404
+
+
+def test_signing_in_again_straight_away_uses_the_same_address(fake):
+    sp.set_client_id(CLIENT)
+    first = {k: v[0] for k, v in parse_qs(urlsplit(sp.begin()).query).items()}
+    # Started again before the first came back: the first lets go.
+    second = {k: v[0] for k, v in parse_qs(urlsplit(sp.begin()).query).items()}
+    assert first['redirect_uri'] == second['redirect_uri'] == sp.REDIRECT_URI
+    status, page = visit(f"{second['redirect_uri']}?code=good-code&state={second['state']}")
+    assert status == 200 and 'Connected to Spotify' in page
+    # And once more, after an answer.
+    sp.disconnect()
+    _, status, page = sign_in(fake)
+    assert status == 200 and 'Connected to Spotify' in page
+
+
+def test_another_program_on_the_address_is_said_plainly(fake, monkeypatch):
+    import os
+    import socket
+
+    sp.set_client_id(CLIENT)
+    holder = socket.socket()
+    try:
+        if os.name != 'nt':
+            # Past the last test's connections still winding down, as the
+            # sign-in's own server gets past them.
+            holder.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        for _ in range(50):  # the last test's sign-in letting go of it
+            try:
+                holder.bind(('127.0.0.1', sp.CALLBACK_PORT))
+                break
+            except OSError:
+                time.sleep(0.1)
+        holder.listen()
+        monkeypatch.setattr(sp.time, 'sleep', lambda seconds: None)
+        with pytest.raises(sp.SpotifyError) as err:
+            sp.begin()
+        assert err.value.reason == sp.BUSY
+        assert sp.status()['signing_in'] is False
+    finally:
+        holder.close()
 
 
 def test_saying_no_on_spotifys_page_is_reported(fake):

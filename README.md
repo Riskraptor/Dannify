@@ -74,8 +74,8 @@ to play offline. Spotify only lets an app
 like this sign in a few people it lists, so Settings, Accounts also takes a
 Spotify app of your own: make one on
 [developer.spotify.com](https://developer.spotify.com/dashboard) (it needs
-Spotify Premium), add the redirect address `http://127.0.0.1/callback`, tick
-Web API, and paste its Client ID into Dannify. Never its secret: Dannify
+Spotify Premium), add the redirect address `http://127.0.0.1:43821/callback`
+exactly as written, tick Web API, and paste its Client ID into Dannify. Never its secret: Dannify
 signs in without one.
 
 Your Library, down the side, holds your playlists, artists and albums in one
