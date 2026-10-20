@@ -209,9 +209,8 @@ export default {
     emptyHint:
       'Trouvez un titre, un album ou une playlist et lancez le téléchargement : la progression s’affiche ici.',
     removeFromQueue: 'Retirer de la liste',
-    clearAll: 'Tout effacer',
-    clearAllPrompt:
-      'Retirer tous les éléments de la liste ? Les téléchargements en cours s’arrêtent. Les titres déjà enregistrés restent où ils sont.',
+    clearAll: 'Vider la liste',
+    clearAllPrompt: 'Vider la liste des téléchargements ? Ce qui se télécharge encore s’arrête. Les titres déjà enregistrés restent dans votre bibliothèque.',
     clearFailed: 'Impossible de vider la liste. Réessayez dans un instant.',
   },
   downloads: {
@@ -221,7 +220,7 @@ export default {
     filterDone: 'Terminés',
     filterFailed: 'Échecs',
     nothingHere: 'Rien dans cette liste',
-    clearFinished: 'Effacer les terminés',
+    clearFinished: 'Retirer les terminés de la liste',
     statusQueued: 'En attente',
     statusDownloading: 'Téléchargement…',
     stageFinding: 'Recherche de la meilleure source…',
@@ -241,6 +240,10 @@ export default {
     tooltipFailed: '{count} échec(s)',
     finished: 'Téléchargements terminés',
     finishedWithErrors: 'Téléchargements terminés. {failed} échec(s)',
+    listNote: 'Ce n’est qu’une liste de ce qui a été récupéré. La vider ne supprime jamais un titre : ils restent dans votre bibliothèque.',
+    toLibrary: 'Vos titres',
+    removeFromList: 'Retirer de la liste',
+    tidyHint: 'Range cette liste. Vos titres restent dans votre bibliothèque.',
   },
   library: {
     title: 'Titres',

@@ -14,16 +14,32 @@
           <Icon icon="ph:folder-open" class="h-4 w-4" />
           {{ t('settings.openFolder') }}
         </button>
-        <button v-if="stats.done > 0" class="btn" @click="clearFinished">
-          <Icon icon="ph:broom" class="h-4 w-4" />
+        <!-- Tidying the list, never the songs: said in the words, with a
+             list's mark rather than a bin's, and without danger red. "Clear
+             completed" in red beside a bin read as deleting what was just
+             saved, and people left the list full rather than risk it. -->
+        <button
+          v-if="stats.done > 0"
+          class="btn"
+          :title="t('downloads.tidyHint')"
+          @click="clearFinished"
+        >
+          <Icon icon="ph:list-checks" class="h-4 w-4" />
           {{ t('downloads.clearFinished') }}
         </button>
-        <button v-if="items.length" class="btn-ghost text-danger hover:text-danger" @click="clearAll">
-          <Icon icon="ph:trash" class="h-4 w-4" />
+        <button v-if="items.length" class="btn-ghost" :title="t('downloads.tidyHint')" @click="clearAll">
+          <Icon icon="ph:x-circle" class="h-4 w-4" />
           {{ t('queue.clearAll') }}
         </button>
       </template>
     </ViewHeader>
+
+    <!-- What this page is: a record of what was fetched, not the music. -->
+    <p v-if="items.length" class="dl-note view-pad">
+      <Icon icon="ph:shield-check" class="h-4 w-4 shrink-0" />
+      <span>{{ t('downloads.listNote') }}</span>
+      <button class="dl-note-link" @click="router.push({ name: 'Library' })">{{ t('downloads.toLibrary') }}</button>
+    </p>
 
     <div v-if="items.length" class="chips view-pad">
       <button
@@ -120,9 +136,10 @@
                 <Icon icon="ph:arrow-clockwise" class="h-4 w-4" />
               </button>
               <button
-                class="icon-btn hover:text-danger"
-                :title="t('queue.removeFromQueue')"
-                :aria-label="t('queue.removeFromQueue')"
+                class="icon-btn"
+                :class="{ 'hover:text-danger': stateOf(item) !== 'done' }"
+                :title="stateOf(item) === 'done' ? t('downloads.removeFromList') : t('queue.removeFromQueue')"
+                :aria-label="stateOf(item) === 'done' ? t('downloads.removeFromList') : t('queue.removeFromQueue')"
                 @click="dm.remove(item.song)"
               >
                 <Icon icon="ph:x" class="h-4 w-4" />
@@ -137,6 +154,7 @@
 
 <script setup>
 import { ref, computed, inject } from 'vue'
+import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
 import { useProgressTracker, useDownloadManager } from '/src/model/download'
@@ -153,6 +171,7 @@ import VirtualList from '/src/components/ui/VirtualList.vue'
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
 
+const router = useRouter()
 const { t } = useI18n()
 const pt = useProgressTracker()
 const dm = useDownloadManager()
@@ -273,7 +292,11 @@ function onMenu(e, item) {
       },
     s === 'error' && { label: t('common.retry'), icon: 'ph:arrow-clockwise', action: () => retry(item) },
     { divider: true },
-    { label: t('queue.removeFromQueue'), icon: 'ph:x', action: () => dm.remove(item.song) },
+    {
+      label: s === 'done' ? t('downloads.removeFromList') : t('queue.removeFromQueue'),
+      icon: 'ph:x',
+      action: () => dm.remove(item.song),
+    },
   ])
 }
 
@@ -283,19 +306,44 @@ function clearFinished() {
   }
 }
 
+// Asked about only while something is still on its way: that is all it
+// can stop. A list of finished songs is cleared at once, and the songs stay.
 async function clearAll() {
-  const ok = await confirmDialog({
-    title: t('queue.clearAll'),
-    message: t('queue.clearAllPrompt'),
-    confirmText: t('queue.clearAll'),
-    danger: true,
-    icon: 'ph:trash',
-  })
-  if (ok) await dm.clearAll()
+  if (stats.value.active > 0) {
+    const ok = await confirmDialog({
+      title: t('queue.clearAll'),
+      message: t('queue.clearAllPrompt'),
+      confirmText: t('queue.clearAll'),
+      icon: 'ph:x-circle',
+    })
+    if (!ok) return
+  }
+  await dm.clearAll()
 }
 </script>
 
 <style scoped>
+.dl-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 14px;
+  font-size: 12.5px;
+  color: rgb(var(--c-fg) / var(--fg-60));
+}
+.dl-note svg {
+  color: rgb(var(--c-accent));
+}
+.dl-note-link {
+  font-weight: 600;
+  color: rgb(var(--c-fg) / 0.85);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dl-note-link:hover {
+  color: rgb(var(--c-fg));
+}
 .chips {
   display: flex;
   flex-wrap: wrap;
