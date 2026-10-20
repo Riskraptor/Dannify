@@ -64,6 +64,7 @@ describe('Spotify in the window', () => {
   it('says what each reason means', () => {
     expect(S.errorKey('not_allowed')).toBe('spotify.errorNotAllowed')
     expect(S.errorKey('expired')).toBe('spotify.errorExpired')
+    expect(S.errorKey('busy')).toBe('spotify.errorBusy')
     expect(S.errorKey('something new')).toBe('spotify.errorFailed')
     expect(S.reasonOf({ response: { data: { detail: 'not_configured' } } })).toBe('not_configured')
     expect(S.reasonOf({ response: { data: {} } })).toBe('failed')

@@ -65,6 +65,7 @@ export function errorKey(reason) {
       expired: 'spotify.errorExpired',
       denied: 'spotify.errorDenied',
       unreachable: 'spotify.errorUnreachable',
+      busy: 'spotify.errorBusy',
     }[reason] || 'spotify.errorFailed'
   )
 }

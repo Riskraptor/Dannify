@@ -17,6 +17,7 @@ _STATUS = {
     sp.NOT_CONFIGURED: 409,
     sp.EXPIRED: 401,
     sp.NOT_ALLOWED: 403,
+    sp.BUSY: 409,
     'forbidden': 403,
     'not_found': 404,
 }
