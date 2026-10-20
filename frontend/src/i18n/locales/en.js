@@ -166,6 +166,7 @@ export default {
     tipLyrics: 'Synced lyrics',
   },
   panel: {
+    tabs: 'Side panel',
     aboutButton: 'Now playing',
     about: 'About',
     aboutIdle: 'Play a song to see more about it here.',
