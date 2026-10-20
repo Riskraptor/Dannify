@@ -1,15 +1,17 @@
 <template>
   <section>
-    <h2 class="group-title">{{ t('account.title') }}</h2>
+    <h2 class="group-title">{{ t('settings.youtubeMusic') }}</h2>
     <div class="row">
-      <img
-        v-if="account.profile.value.photo"
-        :src="account.profile.value.photo"
-        alt=""
-        class="row-icon h-9 w-9 rounded-full object-cover"
-        referrerpolicy="no-referrer"
-      />
-      <Icon v-else icon="ph:user-circle" class="row-icon h-9 w-9" />
+      <span class="row-brand is-youtube" aria-hidden="true">
+        <img
+          v-if="account.profile.value.photo && !photoFailed"
+          :src="account.profile.value.photo"
+          alt=""
+          referrerpolicy="no-referrer"
+          @error="photoFailed = true"
+        />
+        <Icon v-else icon="ph:youtube-logo-fill" class="h-5 w-5" />
+      </span>
       <div class="row-text">
         <p class="row-label">
           {{ account.signedIn.value ? account.displayName.value || t('account.connected') : t('account.signedOutTitle') }}
@@ -56,6 +58,7 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAccount } from '/src/model/account'
 import { desktop } from '/src/desktop/bridge'
@@ -63,4 +66,5 @@ import { useI18n } from '/src/i18n'
 
 const { t } = useI18n()
 const account = useAccount()
+const photoFailed = ref(false)
 </script>

@@ -1,6 +1,10 @@
 <template>
   <div class="home pb-12">
     <div class="home-band" aria-hidden="true" />
+    <!-- A special day's weather at the top of the page, behind everything. -->
+    <div v-if="festive" class="home-fx" aria-hidden="true">
+      <Particles :kind="festive.effect" :count="festive.effect === 'snow' ? 30 : 34" contain fall="300px" />
+    </div>
     <header class="view-pad relative flex items-end justify-between gap-4 pb-5 pt-7">
       <h1 class="text-[32px] font-bold tracking-tight">{{ greeting }}</h1>
     </header>
@@ -41,7 +45,12 @@
           {{ t('history.title') }}
         </button>
       </header>
-      <div ref="quickGrid" class="tile-grid" :class="{ 'is-few': quick.length < 3 }">
+      <div
+        ref="quickGrid"
+        class="tile-grid"
+        :class="{ 'is-few': quick.length < 3 }"
+        :style="{ '--n': quickShown.length }"
+      >
         <SongTile
           v-for="(row, i) in quickShown"
           :key="row.key + i"
@@ -269,6 +278,8 @@ import { useSupport } from '/src/model/support'
 import { useListens } from '/src/model/listens'
 import { entryRow } from '/src/model/playlists'
 import { mixCovers, MIXES, useMixes } from '/src/model/mixes'
+import { occasionOn, prefersStill, seasonal } from '/src/model/occasions'
+import Particles from '/src/components/ui/Particles.vue'
 import Shelf from '/src/components/ui/Shelf.vue'
 import SongTile from '/src/components/ui/SongTile.vue'
 import MediaCard from '/src/components/MediaCard.vue'
@@ -319,6 +330,9 @@ async function loadListening() {
 }
 loadListening()
 watch(listens.listensEpoch, loadListening)
+// Christmas, the New Year: snow or confetti at the top of the page.
+const festive = computed(() => (seasonal.value && !prefersStill() ? occasionOn() : null))
+
 const hasYear = computed(() => !!(year.value && year.value.plays >= 10))
 const yearCovers = computed(() => mixCovers(((year.value && year.value.top_songs) || []).map(entryRow)))
 
@@ -567,9 +581,12 @@ function submitWelcome() {
   padding: 0 10px;
 }
 /* One or two recent songs: they share the row instead of sitting at the left
-   of a mostly empty grid, but stop short of turning into one long bar. */
+   of a mostly empty grid, but stop short of turning into one long bar. The
+   row is what is capped, not each column: with a fixed largest column the
+   grid counted how many 420px columns fit, found one, and stacked them. */
 .tile-grid.is-few {
-  grid-template-columns: repeat(auto-fit, minmax(250px, 420px));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  max-width: calc(var(--n, 2) * 420px + (var(--n, 2) - 1) * 8px);
 }
 .shelves {
   padding: 0 14px;
@@ -659,6 +676,15 @@ function submitWelcome() {
 .home {
   position: relative;
   isolation: isolate;
+}
+.home-fx {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: -1;
+  height: 300px;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
 }
 .home-band {
   position: absolute;

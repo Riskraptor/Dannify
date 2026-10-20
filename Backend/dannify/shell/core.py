@@ -379,6 +379,13 @@ def splash_html(theme: str, body: str = '') -> str:
         "<div class='bar'></div>"
         "<div class='hint'>Starting your music…</div>"
     )
+    # A special day (Christmas, the New Year): a greeting, and snow or confetti.
+    from dannify import occasions  # noqa: PLC0415
+
+    festive = not body and read_prefs().get('seasonal', True) is not False
+    hint, fx_css, fx = occasions.splash_extras() if festive else ('', '', '')
+    if hint:
+        content = content.replace('Starting your music…', hint)
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><style>
   html,body{{margin:0;height:100%;background:{bg};color:{fg};overflow:hidden;
@@ -396,7 +403,7 @@ def splash_html(theme: str, body: str = '') -> str:
   .hint{{margin-top:14px;font-size:12px;color:{muted}}}
   @keyframes slide{{to{{left:100%}}}}
   @keyframes fade{{from{{opacity:0;transform:scale(.97)}}to{{opacity:1}}}}
-</style></head><body><div class='wrap'>{content}</div></body></html>"""
+{fx_css}</style></head><body>{fx}<div class='wrap'>{content}</div></body></html>"""
 
 
 def failed_html(theme: str) -> str:

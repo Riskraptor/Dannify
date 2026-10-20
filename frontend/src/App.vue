@@ -33,12 +33,16 @@
         tabindex="-1"
       >
         <!-- Not on Now Playing: that screen is the music and nothing else. -->
-        <HealthBanner :away="isNowPlaying" />
+        <HealthBanner :away="isFullView" />
         <router-view v-slot="{ Component, route: r }">
           <!-- Views cross-fade instead of snapping in. `out-in` keeps the
                scroll container from having two children at once, which would
-               fight scroll restoration. -->
-          <transition name="view" mode="out-in">
+               fight scroll restoration. The times are given outright: left to
+               itself the transition waits for every animation on the page it
+               is leaving, and a page with one that never ends (Your year in
+               music's moving background) held the next one back for its
+               full length, eighteen seconds of an empty window. -->
+          <transition name="view" mode="out-in" :duration="{ enter: 260, leave: 100 }">
             <keep-alive :include="cachedViews" :max="12">
               <component :is="Component" :key="viewKey(r)" />
             </keep-alive>
@@ -65,11 +69,13 @@
   <ReportDialog v-if="wanted.report" />
   <LyricsEditor v-if="wanted.editor" :open="submitOpen" @close="submitOpen = false" />
   <Onboarding v-if="wanted.onboarding" />
+  <!-- A special day's greeting: its code is fetched on such a day only. -->
+  <OccasionGreeting v-if="greetToday" />
 </template>
 
 <script setup>
 import { ensureFullWindow } from '/src/desktop/fullWindow'
-import { ref, reactive, computed, provide, nextTick, onMounted, onUnmounted, watchEffect, defineAsyncComponent } from 'vue'
+import { ref, reactive, computed, provide, nextTick, onMounted, onUnmounted, watch, watchEffect, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TitleBar from './components/shell/TitleBar.vue'
 import HealthBanner from '/src/components/shell/HealthBanner.vue'
@@ -81,6 +87,7 @@ import ContextMenuHost from './components/ui/ContextMenuHost.vue'
 import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
 import { startOnboarding, useOnboarding } from './model/onboarding'
+import { occasionOn, seasonal, shouldGreet } from './model/occasions'
 import { useReporting } from './model/problems'
 import { whatsNew } from './model/updates'
 
@@ -94,6 +101,7 @@ const WhatsNewDialog = defineAsyncComponent(() => import('./components/ui/WhatsN
 const ReportDialog = defineAsyncComponent(() => import('/src/components/ui/ReportDialog.vue'))
 const LyricsEditor = defineAsyncComponent(() => import('./components/lyrics/LyricsEditor.vue'))
 const Onboarding = defineAsyncComponent(() => import('./components/Onboarding.vue'))
+const OccasionGreeting = defineAsyncComponent(() => import('./components/ui/OccasionGreeting.vue'))
 import { useUi } from './model/ui'
 import { usePlayer } from './model/player'
 import { desktop } from './desktop/bridge'
@@ -110,11 +118,17 @@ const scroller = ref(null)
 provide('viewScroller', scroller)
 
 const isNowPlaying = computed(() => route.name === 'NowPlaying')
+// Screens that are the whole window's business: Now Playing, and Your year
+// in music, a story told across the window with nothing beside it.
+const isFullView = computed(() => isNowPlaying.value || route.name === 'Recap')
 // The panel only earns its space once something is loaded in the player.
+// Settings gets the whole width too: squeezed between the sidebar and the
+// lyrics it read like a web page.
 const showPanel = computed(
   () =>
     !!ui.panel.value &&
-    !isNowPlaying.value &&
+    !isFullView.value &&
+    route.name !== 'Settings' &&
     (!!player.currentTrack.value || player.playlist.value.length > 0)
 )
 const showResizeHandles = computed(
@@ -187,6 +201,11 @@ const removeAfter = router.afterEach((to, from) => {
 
 // --- Lyrics contribution modal (opened from several places) ---------------
 const submitOpen = ref(false)
+
+// Christmas, the New Year (model/occasions.js): greeted once, if still to be.
+const greetToday = shouldGreet(occasionOn())
+// Turned off in Settings, Appearance: off on the splash at the next start too.
+watch(seasonal, (on) => desktop.setSeasonal(on), { immediate: true })
 
 // Once wanted, kept: each dialog's closing animation needs it still there.
 const reporting = useReporting()

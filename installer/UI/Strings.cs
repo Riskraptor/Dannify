@@ -25,6 +25,8 @@ namespace Dannify.Setup.UI
         private const string Nb = " ";
 
         public static string AppName => "Dannify";
+        public static string MerryChristmas => T("Merry Christmas", "Joyeux Noël");
+        public static string HappyNewYear(int year) => T("Happy New Year " + year, "Bonne année " + year);
         public static string Tagline => T("Stream and save the music you love.", "Écoutez et gardez la musique que vous aimez.");
         public static string Version(string v) => T("Version ", "Version ") + v;
 

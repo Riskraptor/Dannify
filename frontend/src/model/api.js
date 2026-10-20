@@ -441,16 +441,6 @@ function disconnectListenBrainz() {
   return API.post('/api/listenbrainz/disconnect')
 }
 
-// Discord, for whoever turns it on (Backend/dannify/presence.py).
-function discordStatus() {
-  return API.get('/api/discord')
-}
-function setDiscord(enabled) {
-  return API.post('/api/discord', { enabled })
-}
-function discordNowPlaying(song) {
-  return API.post('/api/discord/now-playing', song)
-}
 // Saved music that will not open at all: look again ('retry'), or let new
 // songs be saved beside the ones that will not ('fresh').
 function recoverStorage(action) {
@@ -513,9 +503,6 @@ export default {
   listenBrainzStatus,
   connectListenBrainz,
   disconnectListenBrainz,
-  discordStatus,
-  setDiscord,
-  discordNowPlaying,
   repairStatus,
   repairTracks,
   repairStop,

@@ -272,6 +272,13 @@ def _install_crash_hooks() -> None:
         if args.exc_type is SystemExit:
             return
         name = args.thread.name if args.thread else '?'
+        # pywebview hands each call's answer back to the page from a thread
+        # of its own. When the page has just reloaded (as it does once after
+        # an update) the answer has nowhere to go: not a fault, and it put a
+        # traceback in the log every time.
+        if args.exc_type.__name__ == 'JavascriptException' and '(_call)' in name:
+            logger_print(f'{name}: the page reloaded before an answer reached it')
+            return
         logger_print(
             f'uncaught in thread {name}: '
             + ''.join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))

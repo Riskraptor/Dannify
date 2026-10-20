@@ -209,3 +209,20 @@ def test_window_errors_are_logged_once_and_not_without_limit():
     assert logged.count(True) == api.WINDOW_ERRORS_PER_MINUTE - 1
     api._window_errors.clear()
     api._window_error_times.clear()
+
+
+def test_two_logs_with_one_name_are_both_kept(tmp_path):
+    import io
+    import zipfile
+
+    from dannify import report
+
+    (tmp_path / 'data').mkdir()
+    (tmp_path / 'elsewhere').mkdir()
+    (tmp_path / 'data' / 'dannify.log').write_text('from the data folder', encoding='utf-8')
+    other = tmp_path / 'elsewhere' / 'dannify.log'
+    other.write_text('from somewhere else', encoding='utf-8')
+    data = report.pack(tmp_path / 'data', '4.12.0', log_file=other)
+    names = zipfile.ZipFile(io.BytesIO(data)).namelist()
+    logs = sorted(n for n in names if n.startswith('logs/'))
+    assert logs == ['logs/dannify-2.log', 'logs/dannify.log']

@@ -1,6 +1,8 @@
 <template>
   <div class="wn" :class="{ 'is-flat': flat }">
-    <header class="wn-head">
+    <!-- Under a welcome that already names the version: the summary alone. -->
+    <p v-if="bare && read.summary" class="wn-intro">{{ read.summary }}</p>
+    <header v-if="!bare" class="wn-head">
       <span class="wn-badge" aria-hidden="true">
         <Icon icon="ph:sparkle-fill" class="h-5 w-5" />
       </span>
@@ -53,6 +55,8 @@ const props = defineProps({
   notes: { type: String, default: '' },
   // Inside a dialog: no box of its own around it.
   flat: { type: Boolean, default: false },
+  // Without its own heading, under one that already says it.
+  bare: { type: Boolean, default: false },
 })
 
 const { t } = useI18n()
@@ -61,7 +65,9 @@ const read = computed(() => readNotes(props.notes))
 // A picture for each card, from what it is about. Written out in full:
 // the icons are found in the source by name (vite.config.js).
 const ICONS = [
-  [/discord/i, 'ph:discord-logo'],
+  [/settings|preferences/i, 'ph:gear-six'],
+  [/special days|christmas|festive|new year/i, 'ph:confetti'],
+  [/^your library|library, tidier|\bpin\b/i, 'ph:books'],
   [/made for you|\bmix(es)?\b/i, 'ph:music-notes-plus'],
   [/year in music|recap/i, 'ph:confetti'],
   [/now playing/i, 'ph:play-circle'],
@@ -111,6 +117,14 @@ function iconFor(item) {
   background: none;
 }
 
+.wn-intro {
+  margin: -6px auto 4px;
+  max-width: 52ch;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+  color: rgb(var(--c-fg) / var(--fg-70, 0.72));
+}
 .wn-head {
   display: flex;
   align-items: flex-start;
