@@ -4,6 +4,50 @@ What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
 page](https://github.com/Riskraptor/Dannify/releases).
 
+## 4.12.0
+
+Spotify comes to Dannify, with a fresh new look and a little festive cheer.
+
+- **Spotify.** Connect your Spotify account in Settings, Accounts, next to
+  YouTube Music and ListenBrainz. Your Spotify, a page of its own, has your
+  playlists, Liked Songs, saved albums, the artists you follow, your top songs
+  and artists (over a month, half a year or all time) and what you played
+  lately, all playable in Dannify through YouTube Music. Your playlists also
+  appear in Your Library and on Home. Spotify lets an app like Dannify sign
+  in only the few people it lists, so Settings also takes a Spotify app of
+  your own (making one needs Spotify Premium).
+- **Copy from Spotify.** Any Spotify list, a playlist, an album, Liked Songs
+  or your top songs, becomes a Dannify playlist with the songs YouTube Music
+  has, or is saved to play offline.
+- **A new Settings.** Categories down the side, each with its own colour, a
+  search box that finds any setting, and every account in one place. On a
+  narrow window the categories fold into a compact rail.
+- **Your Library, tidier.** Playlists, artists and albums in one list, with
+  chips to show one kind at a time. Pin the ones you play most to the top,
+  and switch to a compact view from the sort menu.
+- **Side panel tabs.** Lyrics, Queue and About are tabs drawn the way a
+  desktop app's are, with the arrow keys moving between them.
+- **Special days.** Snow from the week before Christmas to Boxing Day and
+  confetti over the New Year, on Home, on the splash screen and in the
+  installer, with a greeting on the day. Big updates open with a welcome
+  that says what is new. Settings, Appearance turns it off in the app.
+- **Show on Discord is gone.** Spotify takes its place.
+
+Fixed:
+
+- Closing Your year in music left the window empty for about 18 seconds.
+- The lyric line being sung had a hard-edged box behind it.
+- An update waited for the music to stop before it downloaded, so someone
+  listening all day never got it. Now only streamed music holds it back, and
+  for half an hour at most.
+- A song you have just played shows its cover in Jump back in straight away,
+  instead of after a restart.
+- One or two songs in Jump back in sit side by side instead of stacked.
+- The artist card in the side panel says monthly listeners or subscribers,
+  not a bare number.
+- F5 on a Spotify page shows a playlist you have just changed in Spotify.
+- A problem report keeps every log, even two with the same name.
+
 ## 4.11.0
 
 Music made for you.
