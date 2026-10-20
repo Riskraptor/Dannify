@@ -538,11 +538,12 @@ class MacApi:
         self._push_state()
         return self.win_state()
 
-    def app_set_seasonal(self, on: bool) -> None:
-        """Special days on or off (Settings, Appearance), for the splash."""
+    def app_set_region(self, code: str) -> None:
+        """The country whose special days are kept, for the splash."""
 
-        if core.read_prefs().get('seasonal', True) is not bool(on):
-            core.write_prefs({'seasonal': bool(on)})
+        code = str(code or '').strip().upper()
+        if len(code) == 2 and code.isalpha() and code.isascii() and core.read_prefs().get('region') != code:
+            core.write_prefs({'region': code})
 
     def app_set_theme(self, theme: str) -> None:
         self._theme = 'light' if theme == 'light' else 'dark'
