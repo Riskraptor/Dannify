@@ -106,24 +106,24 @@ const ICONS = {
   valentines: 'ph:heart-fill',
   womens_day: 'ph:flower-tulip',
   holi: 'ph:palette',
-  nowruz: 'ph:flower',
+  nowruz: 'ph:plant-fill',
   ramadan: 'ph:moon-stars-fill',
-  eid_fitr: 'ph:moon-stars-fill',
-  eid_adha: 'ph:moon-stars-fill',
+  eid_fitr: 'ph:star-and-crescent-fill',
+  eid_adha: 'ph:star-and-crescent',
   easter: 'ph:egg',
   orthodox_easter: 'ph:egg',
   vesak: 'ph:flower-lotus',
   world_music_day: 'ph:music-notes-fill',
   mid_autumn: 'ph:moon-stars',
-  rosh_hashanah: 'ph:star-four-fill',
+  rosh_hashanah: 'ph:drop-fill',
   diwali: 'ph:fire',
   halloween: 'ph:ghost',
   day_of_dead: 'ph:flower',
   thanksgiving: 'ph:leaf-fill',
   thanksgiving_ca: 'ph:leaf-fill',
-  hanukkah: 'ph:star-four-fill',
-  mothers_day: 'ph:heart-straight-fill',
-  fathers_day: 'ph:heart-straight-fill',
+  hanukkah: 'ph:flame-fill',
+  mothers_day: 'ph:hand-heart-fill',
+  fathers_day: 'ph:gift-fill',
   national: 'ph:flag-banner-fill',
 }
 // A few countries' days have a look of their own.
@@ -184,7 +184,7 @@ function resolve(row, start, data) {
 export function lookOf(row, data = calendar.value) {
   if (row.look === 'flag') {
     const flag = (data && data.flags && data.flags[row.country]) || ['#1ed760', '#ffd166', '#ffffff']
-    return { name: 'flag', shape: 'ribbon', motion: 'fall', palette: flag }
+    return { name: 'flag', shape: 'ribbon', motion: 'flutter', palette: flag }
   }
   const look = (data && data.looks && data.looks[row.look]) || { shape: 'ribbon', motion: 'fall', palette: ['#1ed760', '#ffd166'] }
   return { name: row.look, ...look }

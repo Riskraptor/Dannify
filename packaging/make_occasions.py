@@ -81,25 +81,34 @@ NO_VALENTINES = ['AF', 'IR', 'PK', 'SA']
 # --- How days look ------------------------------------------------------------
 # shape: what each piece is; motion: fall, rise, twinkle, burst or drift.
 LOOKS = {
-    'snow': {'shape': 'dot', 'motion': 'fall', 'palette': ['#ffffff']},
+    # Each day its own shape and movement (frontend Particles.vue lists the
+    # movements). Two dates of one holiday (Orthodox Christmas, Canadian
+    # Thanksgiving) share their twin's.
+    'snow': {'shape': 'dot', 'motion': 'sway', 'palette': ['#ffffff']},
     'fireworks': {'shape': 'spark', 'motion': 'burst', 'palette': ['#ffd166', '#ef476f', '#3fa9f5', '#1ed760', '#c77dff']},
     'confetti': {'shape': 'ribbon', 'motion': 'fall', 'palette': ['#1ed760', '#ffd166', '#ef476f', '#3fa9f5', '#c77dff']},
     'hearts': {'shape': 'heart', 'motion': 'rise', 'palette': ['#ff4d6d', '#ff8fa3', '#c9184a', '#ffb3c1']},
-    'lanterns': {'shape': 'lantern', 'motion': 'rise', 'palette': ['#e63946', '#f4a261', '#ffb703']},
+    'lanterns': {'shape': 'lantern', 'motion': 'swing', 'palette': ['#e63946', '#d62828', '#ffb703']},
     'moonlanterns': {'shape': 'lantern', 'motion': 'rise', 'palette': ['#f4a261', '#ffd166', '#e76f51']},
-    'crescent': {'shape': 'star', 'motion': 'twinkle', 'palette': ['#ffd166', '#fff3b0', '#e9c46a']},
-    'lights': {'shape': 'flame', 'motion': 'rise', 'palette': ['#ffb703', '#fb8500', '#ffd166']},
-    'bluelights': {'shape': 'star', 'motion': 'twinkle', 'palette': ['#4cc9f0', '#ffffff', '#4361ee']},
-    'goldlights': {'shape': 'star', 'motion': 'twinkle', 'palette': ['#ffd166', '#ffffff', '#f4a261']},
+    'lotus': {'shape': 'lotus', 'motion': 'bob', 'palette': ['#ffc8dd', '#ffffff', '#ffd166', '#ffafcc']},
+    'crescent': {'shape': 'crescent', 'motion': 'twinkle', 'palette': ['#ffd166', '#fff3b0', '#e9c46a']},
+    'goldstars': {'shape': 'star', 'motion': 'shimmer', 'palette': ['#ffd166', '#2a9d8f', '#fff3b0', '#e9c46a']},
+    'fanous': {'shape': 'lantern', 'motion': 'bob', 'palette': ['#e9c46a', '#2a9d8f', '#f4a261']},
+    'lights': {'shape': 'flame', 'motion': 'flicker', 'palette': ['#ffb703', '#fb8500', '#ffd166']},
+    'bluelights': {'shape': 'flame', 'motion': 'rise', 'palette': ['#4cc9f0', '#ffffff', '#4361ee']},
+    'honey': {'shape': 'drop', 'motion': 'fall', 'palette': ['#f4a261', '#e9c46a', '#d4a017', '#c1121f']},
     'colour': {'shape': 'puff', 'motion': 'drift', 'palette': ['#ff006e', '#fb5607', '#ffbe0b', '#3a86ff', '#8338ec', '#06d6a0']},
-    'notes': {'shape': 'note', 'motion': 'rise', 'palette': ['#1ed760', '#3fa9f5', '#c77dff', '#ffd166']},
-    'petals': {'shape': 'petal', 'motion': 'fall', 'palette': ['#ffafcc', '#ffc8dd', '#cdb4db', '#bde0fe']},
-    'violet': {'shape': 'petal', 'motion': 'fall', 'palette': ['#7b2cbf', '#c77dff', '#e0aaff', '#ffffff']},
-    'spring': {'shape': 'petal', 'motion': 'fall', 'palette': ['#80ed99', '#ffafcc', '#fff3b0', '#cdb4db']},
-    'marigold': {'shape': 'petal', 'motion': 'fall', 'palette': ['#ff9f1c', '#ffbf69', '#f77f00', '#d62828']},
-    'leaves': {'shape': 'leaf', 'motion': 'fall', 'palette': ['#e76f51', '#f4a261', '#e9c46a', '#bc6c25']},
-    'spooky': {'shape': 'leaf', 'motion': 'fall', 'palette': ['#ff7b00', '#9d4edd', '#ff9e00', '#3c096c']},
-    'shamrock': {'shape': 'clover', 'motion': 'fall', 'palette': ['#2d6a4f', '#40916c', '#52b788', '#95d5b2']},
+    'notes': {'shape': 'note', 'motion': 'spiral', 'palette': ['#1ed760', '#3fa9f5', '#c77dff', '#ffd166']},
+    'eggs': {'shape': 'egg', 'motion': 'sway', 'palette': ['#ffafcc', '#bde0fe', '#fff3b0', '#cdb4db', '#b9fbc0']},
+    'redeggs': {'shape': 'egg', 'motion': 'bob', 'palette': ['#c1121f', '#e63946', '#ffd166']},
+    'flowers': {'shape': 'flower', 'motion': 'sway', 'palette': ['#ff8fab', '#ffc2d1', '#fb6f92', '#ffe5ec']},
+    'violet': {'shape': 'petal', 'motion': 'spiral', 'palette': ['#7b2cbf', '#c77dff', '#e0aaff', '#ffffff']},
+    'spring': {'shape': 'leaf', 'motion': 'flutter', 'palette': ['#80ed99', '#38b000', '#ffafcc', '#fff3b0']},
+    'marigold': {'shape': 'petal', 'motion': 'flutter', 'palette': ['#ff9f1c', '#ffbf69', '#f77f00', '#d62828']},
+    'leaves': {'shape': 'leaf', 'motion': 'sway', 'palette': ['#e76f51', '#f4a261', '#e9c46a', '#bc6c25']},
+    'bats': {'shape': 'bat', 'motion': 'flit', 'palette': ['#9d4edd', '#ff7b00', '#5a189a', '#ff9e00']},
+    'stars': {'shape': 'star', 'motion': 'rise', 'palette': ['#3a86ff', '#ffd166', '#8ecae6', '#023e8a']},
+    'shamrock': {'shape': 'clover', 'motion': 'sway', 'palette': ['#2d6a4f', '#40916c', '#52b788', '#95d5b2']},
 }
 # Above the others when two fall together: a country's own day first, then a
 # family's, then one kept in a region, then one kept everywhere.
@@ -189,17 +198,17 @@ OCCASIONS = [
     ('holi', 'regional', 'colour', SOUTH_ASIAN_HINDU, ['LK', 'MY', 'SG'], 1, 2, lambda y: _in(y, _HINDU.holi_date(y))),
     ('nowruz', 'regional', 'spring', PERSIAN_NEW_YEAR, [], 0, 3, nowruz),
     ('ramadan', 'regional', 'crescent', MUSLIM, [], 0, 3, lambda y: _in(y, _ISLAMIC.ramadan_beginning_dates(y))),
-    ('eid_fitr', 'regional', 'crescent', MUSLIM, [], 0, 3, lambda y: _in(y, _ISLAMIC.eid_al_fitr_dates(y))),
-    ('easter', 'regional', 'petals', WESTERN_CHRISTIAN, [], 1, 3, lambda y: easter(y, EASTER_WESTERN)),
-    ('orthodox_easter', 'regional', 'petals', ORTHODOX, [], 1, 3, lambda y: easter(y, EASTER_ORTHODOX)),
-    ('vesak', 'regional', 'lanterns', BUDDHIST, [], 0, 1, lambda y: _in(y, _BUDDHIST.vesak_may_date(y))),
+    ('eid_fitr', 'regional', 'goldstars', MUSLIM, [], 0, 3, lambda y: _in(y, _ISLAMIC.eid_al_fitr_dates(y))),
+    ('easter', 'regional', 'eggs', WESTERN_CHRISTIAN, [], 1, 3, lambda y: easter(y, EASTER_WESTERN)),
+    ('orthodox_easter', 'regional', 'redeggs', ORTHODOX, [], 1, 3, lambda y: easter(y, EASTER_ORTHODOX)),
+    ('vesak', 'regional', 'lotus', BUDDHIST, [], 0, 1, lambda y: _in(y, _BUDDHIST.vesak_may_date(y))),
     ('world_music_day', 'global', 'notes', '*', [], 0, 1, lambda y: dt.date(y, 6, 21)),
-    ('eid_adha', 'regional', 'crescent', MUSLIM, [], 0, 3, lambda y: _in(y, _ISLAMIC.eid_al_adha_dates(y))),
+    ('eid_adha', 'regional', 'fanous', MUSLIM, [], 0, 3, lambda y: _in(y, _ISLAMIC.eid_al_adha_dates(y))),
     ('mid_autumn', 'regional', 'moonlanterns', ['CN', 'TW', 'HK', 'MO', 'SG', 'MY', 'VN'], [], 0, 2,
      lambda y: _in(y, _CHINESE.mid_autumn_date(y))),
-    ('rosh_hashanah', 'regional', 'goldlights', ['IL'], [], 0, 2, lambda y: _in(y, _HEBREW.rosh_hashanah_date(y))),
+    ('rosh_hashanah', 'regional', 'honey', ['IL'], [], 0, 2, lambda y: _in(y, _HEBREW.rosh_hashanah_date(y))),
     ('diwali', 'regional', 'lights', SOUTH_ASIAN_HINDU, [], 1, 3, lambda y: _in(y, _HINDU.diwali_india_date(y))),
-    ('halloween', 'regional', 'spooky', ['US', 'CA', 'GB', 'IE', 'AU', 'NZ', 'NL', 'DE', 'JP'], [], 1, 2,
+    ('halloween', 'regional', 'bats', ['US', 'CA', 'GB', 'IE', 'AU', 'NZ', 'NL', 'DE', 'JP'], [], 1, 2,
      lambda y: dt.date(y, 10, 31)),
     ('day_of_dead', 'regional', 'marigold', ['MX', 'GT'], [], 0, 2, lambda y: dt.date(y, 11, 1)),
     ('thanksgiving', 'regional', 'leaves', ['US'], [], 0, 1, lambda y: nth_weekday(y, 11, THU, 4)),
@@ -568,7 +577,7 @@ def occasion_rows() -> list[dict]:
         for days_of, ccs in groups.items():
             out.append({**row, 'where': sorted(ccs),
                         **compact({y: d - dt.timedelta(days=before) for y, d in zip(YEARS, days_of)})})
-    for oid, rules, look in (('mothers_day', MOTHERS, 'petals'), ('fathers_day', FATHERS, 'confetti')):
+    for oid, rules, look in (('mothers_day', MOTHERS, 'flowers'), ('fathers_day', FATHERS, 'stars')):
         for i, (where, rule) in enumerate(rules):
             out.append({'id': oid, 'kind': 'family', 'look': look, 'priority': PRIORITY['family'],
                         'where': where, 'days': 1, 'day': 0, **compact({y: rule(y) for y in YEARS})})

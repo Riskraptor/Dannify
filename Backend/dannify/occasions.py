@@ -180,7 +180,7 @@ def today(now: Optional[datetime.date] = None, region: str = '') -> Optional[dic
 def look_of(occasion: dict[str, Any]) -> dict[str, Any]:
     if occasion.get('look') == 'flag':
         flag = DATA['flags'].get(occasion.get('country', '')) or ['#1ed760', '#ffd166', '#ffffff']
-        return {'shape': 'ribbon', 'motion': 'fall', 'palette': flag}
+        return {'shape': 'ribbon', 'motion': 'flutter', 'palette': flag}
     return DATA['looks'].get(occasion.get('look', ''), DATA['looks']['confetti'])
 
 
@@ -254,7 +254,9 @@ def starting_words(words: Optional[dict[str, Any]] = None) -> str:
 # ---------------------------------------------------------------------------
 # A piece of each shape, drawn with CSS and a character or two: the splash is
 # up for a second or two, before anything else is loaded.
-_GLYPHS = {'heart': '♥', 'star': '✦', 'note': '♪', 'clover': '☘'}
+_GLYPHS = {'heart': '♥', 'star': '✦', 'note': '♪', 'clover': '☘', 'crescent': '☾',
+           'lotus': '❀', 'flower': '✿', 'bat': '\U0001F987'}
+_SPINS = ('ribbon', 'leaf', 'petal', 'flower')
 
 
 def _piece(shape: str, colour: str, rng: random.Random) -> tuple[str, str]:
@@ -276,6 +278,14 @@ def _piece(shape: str, colour: str, rng: random.Random) -> tuple[str, str]:
         size = rng.uniform(4, 7)
         return (f'width:{size:.1f}px;height:{size:.1f}px;border-radius:50%;background:{colour};'
                 f'box-shadow:0 0 10px {colour};'), ''
+    if shape == 'egg':
+        size = rng.uniform(9, 14)
+        return (f'width:{size * 0.78:.1f}px;height:{size:.1f}px;border-radius:50%/60% 60% 40% 40%;'
+                f'background:{colour};'), ''
+    if shape == 'drop':
+        size = rng.uniform(6, 10)
+        return (f'width:{size:.1f}px;height:{size * 1.3:.1f}px;border-radius:50% 50% 50% 50%/30% 30% 70% 70%;'
+                f'background:{colour};'), ''
     if shape == 'puff':
         size = rng.uniform(70, 140)
         return (f'width:{size:.0f}px;height:{size:.0f}px;border-radius:50%;opacity:.3;'
@@ -284,17 +294,56 @@ def _piece(shape: str, colour: str, rng: random.Random) -> tuple[str, str]:
     return f'font-size:{size:.0f}px;line-height:1;color:{colour};', _GLYPHS.get(shape, '✦')
 
 
+# How each movement is drawn (frontend Particles.vue has the same ones).
+# Travelling is on `translate` and the sway, flip or glint on `transform`,
+# each with its own period. Pieces carry --d, --sd (the second period) and
+# --delay; `.f` animates `go` unless the movement says otherwise.
+_DOWN = '@keyframes go{to{translate:0 110vh}}'
+_SIDE = '@keyframes side{from{transform:translateX(-22px)}to{transform:translateX(22px)}}'
 _MOTIONS = {
-    # name: (keyframes, starts at the top or the bottom, seconds)
-    'fall': ('@keyframes go{to{transform:translateY(110vh) rotate(var(--r))}}', 'top:-16px;', (6, 11)),
+    # name: (css, where it starts: top, bottom, upper, lower or anywhere, seconds)
+    'fall': ('@keyframes go{to{transform:translateY(110vh) rotate(var(--r))}}', 'top', (6, 11)),
+    'sway': (_DOWN + _SIDE + '.f{animation:go var(--d) linear var(--delay) infinite,'
+             'side var(--sd) ease-in-out var(--delay) infinite alternate}', 'top', (9, 15)),
+    'flutter': (_DOWN + '@keyframes flip{to{transform:rotate(var(--r)) rotate3d(1,.3,0,720deg)}}'
+                '.f{animation:go var(--d) linear var(--delay) infinite,flip var(--d) linear var(--delay) infinite}',
+                'top', (7, 12)),
+    'shimmer': (_DOWN + _SIDE + '@keyframes glint{0%,100%{opacity:.25}50%{opacity:1}}'
+                '.f{animation:go var(--d) linear var(--delay) infinite,side var(--sd) ease-in-out var(--delay) '
+                'infinite alternate,glint var(--sd) ease-in-out var(--delay) infinite}', 'top', (10, 15)),
     'rise': ('@keyframes go{0%{opacity:0}15%{opacity:1}85%{opacity:1}'
-             '100%{transform:translateY(-110vh) rotate(var(--r));opacity:0}}', 'bottom:-24px;', (7, 12)),
+             '100%{transform:translateY(-110vh) rotate(var(--r));opacity:0}}', 'bottom', (7, 12)),
+    'spiral': ('@keyframes go{0%{opacity:0}15%,85%{opacity:1}100%{translate:0 -110vh;opacity:0}}' + _SIDE +
+               '.f{animation:go var(--d) linear var(--delay) infinite,'
+               'side calc(var(--sd) * .6) ease-in-out var(--delay) infinite alternate}', 'bottom', (8, 13)),
+    'bob': ('@keyframes go{from{transform:translateY(-9px)}to{transform:translateY(9px)}}'
+            '.f{animation:go var(--d) ease-in-out var(--delay) infinite alternate}', 'anywhere', (2.4, 4)),
+    'swing': ('@keyframes go{from{transform:rotate(-13deg)}to{transform:rotate(13deg)}}'
+              '.f{transform-origin:50% -70%;animation:go var(--d) ease-in-out var(--delay) infinite alternate}',
+              'upper', (2, 3.4)),
     'twinkle': ('@keyframes go{0%,100%{transform:scale(.35);opacity:.2}50%{transform:scale(1);opacity:1}}',
-                '', (2.2, 4.4)),
+                'anywhere', (2.2, 4.4)),
+    'flicker': ('@keyframes go{0%,100%{transform:scale(1,1)}22%{transform:scale(.92,1.1);opacity:.8}'
+                '48%{transform:scale(1.06,.93);opacity:1}74%{transform:scale(.95,1.12);opacity:.85}}'
+                '.f{transform-origin:50% 100%;animation:go var(--d) ease-in-out var(--delay) infinite}',
+                'lower', (0.9, 1.6)),
+    'flit': ('@keyframes go{0%{transform:translate3d(-14vw,0,0);opacity:0}10%,90%{opacity:.9}'
+             '30%{transform:translate3d(-5vw,-26px,0)}55%{transform:translate3d(4vw,14px,0)}'
+             '80%{transform:translate3d(12vw,-18px,0)}100%{transform:translate3d(18vw,0,0);opacity:0}}'
+             '@keyframes flap{to{scale:1 .55}}'
+             '.f{animation:go var(--d) ease-in-out var(--delay) infinite,flap .32s ease-in-out var(--delay) '
+             'infinite alternate}', 'anywhere', (7, 12)),
     'burst': ('@keyframes go{0%,100%{transform:scale(.2);opacity:0}30%{transform:scale(1.4);opacity:1}'
-              '70%{transform:scale(1);opacity:.6}}', '', (1.8, 3.2)),
+              '70%{transform:scale(1);opacity:.6}}', 'anywhere', (1.8, 3.2)),
     'drift': ('@keyframes go{0%{transform:scale(.6);opacity:0}50%{opacity:.3}'
-              '100%{transform:scale(1.25) translateY(-30px);opacity:0}}', '', (5, 9)),
+              '100%{transform:scale(1.25) translateY(-30px);opacity:0}}', 'anywhere', (5, 9)),
+}
+_PLACES = {
+    'top': lambda rng: 'top:-16px;',
+    'bottom': lambda rng: 'bottom:-24px;',
+    'upper': lambda rng: f'top:{rng.uniform(4, 36):.1f}%;',
+    'lower': lambda rng: f'top:{rng.uniform(56, 92):.1f}%;',
+    'anywhere': lambda rng: f'top:{rng.uniform(6, 88):.1f}%;',
 }
 
 
@@ -315,26 +364,27 @@ def splash_extras(now: Optional[datetime.date] = None, seed: Optional[int] = Non
     if light:
         # White on white is nothing at all.
         palette = ['#96b4d7' if c.lower() in ('#fff', '#ffffff') else c for c in palette]
-    keyframes, anchor, (d0, d1) = _MOTIONS.get(motion, _MOTIONS['fall'])
+    keyframes, where, (d0, d1) = _MOTIONS.get(motion, _MOTIONS['fall'])
     rng = random.Random(seed)
     pieces = []
     for i in range(26):
         colour = palette[i % len(palette)]
         style, text = _piece(shape, colour, rng)
         left = rng.uniform(0, 100)
-        place = anchor or f'top:{rng.uniform(6, 88):.1f}%;'
-        spin = rng.uniform(-40, 40) + (rng.uniform(300, 600) if shape in ('ribbon', 'leaf', 'petal') else 0)
+        place = _PLACES[where](rng)
+        spin = rng.uniform(-40, 40) + (rng.uniform(300, 600) if shape in _SPINS else 0)
         pieces.append(
             f"<i class='f' style='left:{left:.1f}%;{place}{style}--r:{spin:.0f}deg;"
-            f"--y:{rng.uniform(4, 90):.1f}%;animation-delay:{-rng.uniform(0, 9):.1f}s;"
-            f"animation-duration:{rng.uniform(d0, d1):.1f}s'>{text}</i>"
+            f"--y:{rng.uniform(4, 90):.1f}%;--delay:{-rng.uniform(0, 9):.1f}s;"
+            f"--d:{rng.uniform(d0, d1):.1f}s;--sd:{rng.uniform(2.2, 4.5):.1f}s'>{text}</i>"
         )
     css = (
         '.fx{position:fixed;inset:0;pointer-events:none;overflow:hidden}'
-        '.f{position:absolute;font-style:normal;opacity:.85;animation:go linear infinite}'
+        '.f{position:absolute;font-style:normal;opacity:.85;animation:go var(--d) linear var(--delay) infinite}'
         + keyframes +
         # Less motion: everything where it would be, holding still.
-        '@media (prefers-reduced-motion:reduce){.f{animation:none;top:var(--y)!important;bottom:auto!important}}'
+        '@media (prefers-reduced-motion:reduce){.f{animation:none;translate:none;scale:none;'
+        'top:var(--y)!important;bottom:auto!important}}'
     )
     words = clean_words(words)
     lang = lang or words.get('lang') or 'en'
