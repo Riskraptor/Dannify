@@ -173,7 +173,7 @@ app = BUNDLE(
         'NSHighResolutionCapable': True,
         'NSRequiresAquaSystemAppearance': False,
         'NSSupportsAutomaticGraphicsSwitching': True,
-        'NSHumanReadableCopyright': 'Copyright \N{COPYRIGHT SIGN} Daniel Mwendwa. MIT licence.',
+        'NSHumanReadableCopyright': 'Copyright \N{COPYRIGHT SIGN} Daniel Mwendwa. All rights reserved.',
         # The window shows the app's own server, on this Mac only, over http.
         'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True},
         'CFBundleDocumentTypes': [

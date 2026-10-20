@@ -1,21 +1,85 @@
-MIT License
+Dannify Licence
 
-Copyright (c) 2026 Daniel Mwendwa
+Copyright (c) 2026 Daniel Mwendwa. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Dannify, its source code, its design, its name and its logo belong to
+Daniel Mwendwa ("the author"). This licence says what you may do with them.
+Anything it does not allow is not allowed.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+YOU MAY
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+1. Download Dannify from its official releases page,
+   https://github.com/Riskraptor/Dannify/releases, and use it for free on
+   your own devices, as much as you like.
+
+2. Read the source code in this repository, to see how Dannify works and to
+   decide whether you trust it.
+
+3. Help Dannify grow: report problems, suggest ideas, and send translations,
+   lyrics and changes to this repository, as CONTRIBUTING.md describes.
+
+YOU MAY NOT, WITHOUT THE AUTHOR'S WRITTEN PERMISSION
+
+1. Copy, reproduce, host or distribute Dannify, or any part of its source
+   code, in source or built form, except as GitHub does when you view this
+   repository or fork it to propose a change to it.
+
+2. Modify Dannify, or build, publish or distribute anything derived from it
+   or from any part of its source code.
+
+3. Publish Dannify, a modified Dannify, or anything built from its code,
+   under another name, or under its own name from anywhere other than its
+   official releases page.
+
+4. Sell, rent, lease, sublicense or otherwise commercialise Dannify, or
+   include it or any part of it in another product or service.
+
+5. Remove or alter this licence, the copyright notice, or the name Dannify
+   and its logo, in any copy.
+
+FORKS
+
+GitHub's Terms of Service let anyone view a public repository and fork it on
+GitHub. A fork carries this licence with it. It gives no right to use, run,
+change or distribute the code beyond what this licence allows; it exists only
+to propose changes back to this repository.
+
+CONTRIBUTIONS
+
+By sending a contribution to Dannify (a pull request, an issue, a
+translation, a patch, lyrics or anything else), you confirm that you have the
+right to send it, and you grant the author a perpetual, worldwide,
+irrevocable, royalty-free licence to use, copy, modify, distribute and
+relicense it, as part of Dannify or otherwise. You keep the copyright in what
+you wrote.
+
+THIRD-PARTY COMPONENTS
+
+Dannify uses components made by others, listed in THIRD-PARTY-NOTICES.md.
+Each of them stays under its own licence; this licence does not change those
+licences or the rights they give.
+
+EARLIER VERSIONS
+
+Versions of Dannify published before 4.13.0 were released under the MIT
+licence. This licence applies to version 4.13.0 and every version after it,
+and to this repository from that version on.
+
+ENDING
+
+If you break this licence, every permission it gives you ends at once, and
+you must stop using Dannify and delete any copies you made against it.
+
+NO WARRANTY
+
+DANNIFY IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH DANNIFY OR THE USE OR OTHER DEALINGS IN IT.
+
+PERMISSION AND QUESTIONS
+
+To ask for a permission this licence does not give, open an issue at
+https://github.com/Riskraptor/Dannify/issues.

@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>dannify</id>
   <metadata_license>MIT</metadata_license>
-  <project_license>MIT</project_license>
+  <project_license>LicenseRef-proprietary=https://github.com/Riskraptor/Dannify/blob/main/LICENSE</project_license>
   <name>Dannify</name>
   <summary>Search, play and keep songs with artwork, tags and synced lyrics</summary>
   <description>

@@ -1,0 +1,18 @@
+name: A translation
+description: Dannify in your language, or a better word in one it speaks.
+labels: [translation]
+body:
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      placeholder: "Kiswahili"
+    validations:
+      required: true
+  - type: textarea
+    id: words
+    attributes:
+      label: The words
+      description: Which text, where it is in the app, and what it should say. For a whole new language, say so and you will be sent the list of texts.
+    validations:
+      required: true
