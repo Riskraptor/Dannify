@@ -41,7 +41,7 @@ from loguru import logger
 
 # Dannify's own app on Spotify's developer dashboard. Not a secret: a PKCE
 # client has none, and every copy carries this.
-DEFAULT_CLIENT_ID = ''
+DEFAULT_CLIENT_ID = 'f8e661baed564a31ac0d99653d93907d'
 
 
 
@@ -448,12 +448,19 @@ def _api(path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
             time.sleep(wait)
             continue
         if res.status_code == 403:
-            text = res.text[:300].lower()
-            if 'registered' in text or 'developer.spotify.com' in text:
+            said = res.text[:300]
+            logger.warning('Spotify said no to {}: {}', url.split('?')[0].replace(API, ''), said or '(nothing)')
+            # An account the app does not serve: one not on its list in the
+            # dashboard (or an app whose owner has no Premium). Spotify words
+            # it differently from one time to the next, or not at all, and
+            # says it even to the profile, which asks nothing else: so a no
+            # there is always this.
+            text = said.lower()
+            if path == '/me' or 'registered' in text or 'developer.spotify.com' in text:
                 with _lock:
                     _state['error'] = NOT_ALLOWED
                 raise SpotifyError(NOT_ALLOWED)
-            raise SpotifyError('forbidden', res.text[:200])
+            raise SpotifyError('forbidden', said[:200])
         if res.status_code == 404:
             raise SpotifyError('not_found')
         res.raise_for_status()
