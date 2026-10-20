@@ -54,6 +54,14 @@
         @change="account.setSendHistory($event.target.checked)"
       />
     </label>
+    <label v-if="account.signedIn.value" class="row">
+      <Icon icon="ph:chart-bar" class="row-icon" />
+      <div class="row-text">
+        <p class="row-label">{{ t('account.bringHistory') }}</p>
+        <p class="row-hint">{{ t('account.bringHistoryHint') }}</p>
+      </div>
+      <input type="checkbox" class="switch" :checked="ytmSyncOn" @change="setYtmSync($event.target.checked)" />
+    </label>
   </section>
 </template>
 
@@ -63,6 +71,7 @@ import { Icon } from '@iconify/vue'
 import { useAccount } from '/src/model/account'
 import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
+import { setYtmSync, ytmSyncOn } from '/src/model/ytmSync'
 
 const { t } = useI18n()
 const account = useAccount()

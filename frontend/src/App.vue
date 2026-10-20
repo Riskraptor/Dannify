@@ -88,6 +88,7 @@ import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
 import { startOnboarding, useOnboarding } from './model/onboarding'
 import { loadCalendar, region, shouldGreet, systemRegion, today } from './model/occasions'
+import { startYtmSync } from './model/ytmSync'
 import { useReporting } from './model/problems'
 import { whatsNew } from './model/updates'
 
@@ -216,6 +217,8 @@ API.region()
   .catch(() => {})
 // The splash is drawn before the window: it is told where we are.
 watch(region, (code) => code && desktop.setRegion(code))
+// YouTube Music's history, into Your stats (model/ytmSync.js).
+startYtmSync()
 
 // Once wanted, kept: each dialog's closing animation needs it still there.
 const reporting = useReporting()
