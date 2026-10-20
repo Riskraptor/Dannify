@@ -139,7 +139,8 @@ async function load() {
   }
 }
 watch([kind, ident], load, { immediate: true })
-onRefresh(load)
+// F5: from Spotify itself, not from what was read a few minutes ago.
+onRefresh(() => API.spotifyRefresh().catch(() => {}).then(load))
 // Signed in or out elsewhere (Settings): asked again.
 const onChanged = () => load()
 onMounted(() => window.addEventListener('dannify:spotify-changed', onChanged))

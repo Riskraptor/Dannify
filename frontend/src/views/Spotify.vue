@@ -154,7 +154,8 @@ async function load() {
   else if (failed && ['expired', 'not_allowed'].includes(reasonOf(failed.reason))) problem.value = reasonOf(failed.reason)
 }
 watch(() => spotify.connected.value, (on) => on && load(), { immediate: true })
-onRefresh(load)
+// F5: from Spotify itself, not from what was read a few minutes ago.
+onRefresh(() => API.spotifyRefresh().catch(() => {}).then(load))
 const onChanged = () => load()
 onMounted(() => window.addEventListener('dannify:spotify-changed', onChanged))
 onBeforeUnmount(() => window.removeEventListener('dannify:spotify-changed', onChanged))

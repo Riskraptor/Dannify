@@ -360,6 +360,17 @@ def test_what_was_read_is_kept_a_while(fake):
     assert len(fake.gets) == asked
 
 
+def test_a_refresh_reads_from_spotify_again(fake):
+    from dannify.routes import spotify_account as routes
+
+    sign_in(fake)
+    sp.liked()
+    asked = len(fake.gets)
+    assert routes.spotify_refresh_endpoint() == {'ok': True}
+    sp.liked()
+    assert len(fake.gets) > asked
+
+
 def test_nothing_is_read_signed_out(fake):
     with pytest.raises(sp.SpotifyError) as err:
         sp.playlists()

@@ -527,6 +527,15 @@ def song_from_track(track: Any, added: str = '') -> Optional[dict[str, Any]]:
     return song
 
 
+def forget() -> None:
+    """Read everything from Spotify afresh next time: the person asked
+    (F5 on a Spotify page), so a playlist they have just changed in Spotify
+    shows as it is now, not as it was up to five minutes ago."""
+
+    with _lock:
+        _cache.clear()
+
+
 def _cached(key: str, make: Callable[[], Any]) -> Any:
     with _lock:
         hit = _cache.get(key)
