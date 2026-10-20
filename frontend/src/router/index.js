@@ -1,13 +1,15 @@
 import { createWebHistory, createRouter } from 'vue-router'
 import Home from '/src/views/Home.vue'
-import Library from '/src/views/Library.vue'
 import config from '/src/config'
 import { ensureFullWindow } from '/src/desktop/fullWindow'
 
-// Home and Songs are where the app opens, so they come with it. Every other
-// page is its own file, read the first time it is needed: the window has less
-// to read before it can show anything. They are all fetched quietly once the
-// app has settled (below), so going to one later is still instant.
+// Home is where the app opens, so it comes with it. Every other page is its
+// own file, read the first time it is needed: the window has less to read
+// before it can show anything. They are all fetched quietly once the app has
+// settled (below), Songs first, so going to one later is still instant.
+// Songs came with the app as well, and brought the track table with it:
+// most of a tenth of what every start read, for a page opened later if at all.
+const Library = () => import('/src/views/Library.vue')
 const Search = () => import('/src/views/Search.vue')
 const Artists = () => import('/src/views/Artists.vue')
 const Artist = () => import('/src/views/Artist.vue')
@@ -92,7 +94,7 @@ router.afterEach((to, from) => {
 
 // Fetch the other pages once things are quiet, so none waits on its file.
 function warmPages() {
-  for (const load of [Search, Artists, Artist, Downloads, Liked, Playlist, NowPlaying, ExploreArtist, ExploreCollection, Settings, Mood, Stats, History, Albums, Album]) {
+  for (const load of [Library, Search, Artists, Artist, Downloads, Liked, Playlist, NowPlaying, ExploreArtist, ExploreCollection, Settings, Mood, Stats, History, Albums, Album]) {
     load().catch(() => {})
   }
 }
