@@ -13,7 +13,6 @@ import { installDesktopIntegration } from './desktop/integration'
 import { startArtAccent } from './model/artAccent'
 import { installErrorReporting } from './model/problems'
 import { startListening } from './model/listens'
-import { startPresence } from './model/presence'
 import { localeReady } from './i18n'
 import { vOverlayScroll } from './model/overlayScroll'
 
@@ -33,4 +32,3 @@ installDesktopIntegration()
 localeReady.finally(() => app.mount('#app'))
 startArtAccent()
 startListening()
-startPresence()
