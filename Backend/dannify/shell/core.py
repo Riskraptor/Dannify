@@ -382,7 +382,8 @@ def splash_html(theme: str, body: str = '') -> str:
     # A special day (Christmas, the New Year): a greeting, and snow or confetti.
     from dannify import occasions  # noqa: PLC0415
 
-    hint, fx_css, fx = occasions.splash_extras() if not body else ('', '', '')
+    festive = not body and read_prefs().get('seasonal', True) is not False
+    hint, fx_css, fx = occasions.splash_extras() if festive else ('', '', '')
     if hint:
         content = content.replace('Starting your music…', hint)
     return f"""<!doctype html>
