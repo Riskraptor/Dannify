@@ -196,6 +196,12 @@ class ActionsMixin:
             return False
 
     # --- app / shell --------------------------------------------------------
+    def app_set_seasonal(self, on: bool) -> None:
+        """Special days on or off (Settings, Appearance), for the splash."""
+
+        if _read_prefs().get('seasonal', True) is not bool(on):
+            _write_prefs({'seasonal': bool(on)})
+
     def app_set_theme(self, theme: str) -> None:
         theme = 'light' if theme == 'light' else 'dark'
         if theme == self._theme and _read_prefs().get('theme') == theme:

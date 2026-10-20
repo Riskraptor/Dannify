@@ -407,6 +407,12 @@ class LinuxApi:
         self._push_state()
         return self.win_state()
 
+    def app_set_seasonal(self, on: bool) -> None:
+        """Special days on or off (Settings, Appearance), for the splash."""
+
+        if core.read_prefs().get('seasonal', True) is not bool(on):
+            core.write_prefs({'seasonal': bool(on)})
+
     def app_set_theme(self, theme: str) -> None:
         self._theme = 'light' if theme == 'light' else 'dark'
         core.write_prefs({'theme': self._theme})

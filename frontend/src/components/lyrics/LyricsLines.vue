@@ -248,19 +248,17 @@ function onFocusOut(e) {
   text-shadow: none;
 }
 /* A soft pool of light behind the line playing: barely there, but it is
-   what makes it findable at a glance in a wall of text. */
+   what makes it findable at a glance in a wall of text. It fades to nothing
+   before every edge: brightest at an edge, the side panel cut it off there
+   and it showed as a box. */
 .lyric-line.active::before {
   content: '';
   position: absolute;
-  inset: -0.35rem -1.1rem;
+  inset: -0.6rem -0.4rem;
   z-index: -1;
-  border-radius: 16px;
-  background: radial-gradient(120% 100% at 0% 50%, rgb(var(--c-accent) / 0.13), transparent 72%);
+  background: radial-gradient(closest-side, rgb(var(--c-accent) / 0.16), rgb(var(--c-accent) / 0.05) 60%, transparent);
   animation: lyric-glow 0.5s var(--ease-out) both;
   pointer-events: none;
-}
-.lyric-line.active:dir(rtl)::before {
-  background: radial-gradient(120% 100% at 100% 50%, rgb(var(--c-accent) / 0.13), transparent 72%);
 }
 .lyric-line.active .lyric-text {
   animation: lyric-land 0.42s var(--ease-out) both;

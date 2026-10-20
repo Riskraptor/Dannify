@@ -41,6 +41,10 @@ class NotFound(KeyError):
 def init(data_dir: Path) -> None:
     global _path, _data
     _path = Path(data_dir) / 'playlists.json'
+    # A folder with no playlists (or an unreadable file) starts empty, not
+    # with whatever the last folder had.
+    with _lock:
+        _data = {'version': 1, 'playlists': []}
     try:
         raw = json.loads(_path.read_text(encoding='utf-8'))
         if isinstance(raw, dict) and isinstance(raw.get('playlists'), list):

@@ -4,6 +4,7 @@ import { desktop } from '/src/desktop/bridge'
 import { toast } from '/src/model/toast'
 import { confirmDialog } from '/src/model/dialog'
 import { hasNotes, readNotes } from '/src/model/releaseNotes'
+import { isBigRelease, seasonal } from '/src/model/occasions'
 import { t, currentLocale } from '/src/i18n'
 
 // In-app updates.
@@ -257,8 +258,8 @@ function skipVersion() {
 /** The version Dannify just updated to, while its "What's new" is open. */
 export const whatsNew = ref(null)
 
-function showWhatsNew(version, notes) {
-  whatsNew.value = { version, notes: String(notes || '') }
+function showWhatsNew(version, notes, { celebrate = false } = {}) {
+  whatsNew.value = { version, notes: String(notes || ''), celebrate }
 }
 
 let rollbackShown = false
@@ -290,6 +291,12 @@ async function loadStatus() {
     if (data && data.just_updated && data.just_updated.version) {
       const { version, notes } = data.just_updated
       API.acknowledgeUpdate().catch(() => {})
+      // A release with something new in it is welcomed: What's new opens on
+      // its own, as a celebration. A fix is told in a line.
+      if (isBigRelease(version) && seasonal.value && hasNotes(readNotes(notes))) {
+        showWhatsNew(version, notes, { celebrate: true })
+        return
+      }
       toast(t('update.updatedToast', { version }), {
         icon: 'ph:sparkle-fill',
         tone: 'success',
@@ -316,6 +323,9 @@ async function loadStatus() {
 // do. Failures retry with a widening gap rather than hammering.
 
 let autoTimer = null
+// When waiting on streaming music began, and the longest it waits.
+let deferredSince = 0
+const MAX_DEFER = 30 * 60_000
 let autoAttempts = 0
 const RETRY_STEPS = [60_000, 5 * 60_000, 20 * 60_000, 60 * 60_000]
 
@@ -332,17 +342,23 @@ async function tryAutoDownload() {
   clearTimeout(autoTimer)
   if (!autoUpdate.value || !available.value || ready.value || downloading.value || manual.value) return
   // Wait for a quiet moment rather than fighting the stream for bandwidth.
+  // Waiting while music streams keeps the connection for the music. A saved
+  // song needs none, so it does not hold the update back; and someone who
+  // streams all day still gets it within half an hour.
   let playing = false
   try {
     const { usePlayer } = await import('/src/model/player')
-    playing = !!usePlayer().isPlaying.value
+    const player = usePlayer()
+    const track = player.currentTrack.value
+    playing = !!player.isPlaying.value && !!track && track.type !== 'local'
   } catch {
     // Player not up yet; treat that as quiet.
   }
-  if (playing) {
+  if (playing && Date.now() - (deferredSince || (deferredSince = Date.now())) < MAX_DEFER) {
     autoTimer = setTimeout(tryAutoDownload, 90_000)
     return
   }
+  deferredSince = 0
   const ok = await download({ quiet: true })
   if (ok) {
     autoAttempts = 0

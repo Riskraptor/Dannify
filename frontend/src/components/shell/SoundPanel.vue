@@ -375,12 +375,7 @@ function onKey(e) {
 }
 function openSettings() {
   close()
-  try {
-    localStorage.setItem('dn.settingsPane', 'playback')
-  } catch {
-    // opens on the pane it was on
-  }
-  router.push({ name: 'Settings' })
+  router.push({ name: 'Settings', query: { pane: 'playback' } })
 }
 </script>
 

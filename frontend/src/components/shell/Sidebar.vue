@@ -1,7 +1,7 @@
 <template>
   <nav
     class="sidebar"
-    :class="{ 'is-rail': rail, 'is-drawer': ui.isCompact.value }"
+    :class="{ 'is-rail': rail, 'is-drawer': ui.isCompact.value, 'is-dense': dense && !rail }"
     :aria-label="t('nav.navigation')"
     @keydown="onNavKey"
   >
@@ -15,6 +15,16 @@
         :rail="rail"
         :active="route.name === 'Search'"
         @click="ui.focusSearch()"
+      />
+      <!-- What you played, added up: a place to go, not something you own,
+           so up here with Home and Search rather than in your library. -->
+      <SideLink
+        :to="{ name: 'Stats' }"
+        icon="ph:chart-bar"
+        active-icon="ph:chart-bar-fill"
+        :label="t('stats.nav')"
+        :rail="rail"
+        :active="['Stats', 'History', 'Recap'].includes(route.name)"
       />
     </div>
 
@@ -42,7 +52,16 @@
           <Icon icon="ph:plus" class="h-4 w-4" />
         </button>
       </div>
-      <div v-if="!rail" class="sb-chips" role="tablist" :aria-label="t('nav.yourLibrary')">
+      <div
+        v-if="!rail"
+        ref="chipRow"
+        class="sb-chips"
+        :class="{ 'has-more': chipsMore }"
+        role="tablist"
+        :aria-label="t('nav.yourLibrary')"
+        @wheel="onChipWheel"
+        @scroll.passive="measureChips"
+      >
         <button
           v-if="filter"
           class="sb-chip sb-chip-clear"
@@ -93,7 +112,7 @@
     <VirtualList
       class="sb-list"
       :items="rows"
-      :item-height="rail ? 52 : 56"
+      :item-height="rail ? 52 : dense ? 40 : 56"
       :item-key="(r) => r.key"
     >
       <template #default="{ item: r }">
@@ -143,7 +162,7 @@
           <span v-if="!rail" class="sb-row-text">
             <span class="sb-row-title">{{ r.title }}</span>
             <span class="sb-row-sub">
-              <Icon v-if="r.badge" :icon="r.badge" class="sb-pin" />
+              <Icon v-if="r.badge" :icon="r.badge" class="sb-pin" :class="r.badgeTone" />
               {{ r.sub }}
             </span>
           </span>
@@ -240,9 +259,33 @@ function onSortMenu(e) {
       { header: t('nav.sortBy') },
       { label: t('nav.sortRecent'), checked: sort.value === 'recent', action: () => setSort('recent') },
       { label: t('nav.sortAlpha'), checked: sort.value === 'alpha', action: () => setSort('alpha') },
+      { divider: true },
+      { header: t('nav.viewAs') },
+      { label: t('nav.viewList'), checked: !dense.value, action: () => setDense(false) },
+      { label: t('nav.viewCompact'), checked: dense.value, action: () => setDense(true) },
     ],
     { anchor: true }
   )
+}
+
+// Compact: one line a row and a small picture, to see more of a big library.
+const DENSE_KEY = 'dn.libDense'
+const dense = ref(
+  (() => {
+    try {
+      return localStorage.getItem(DENSE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })()
+)
+function setDense(on) {
+  dense.value = !!on
+  try {
+    localStorage.setItem(DENSE_KEY, on ? '1' : '0')
+  } catch {
+    // this session only
+  }
 }
 
 const query = ref('')
@@ -288,8 +331,131 @@ function artistRow(a) {
     get fallback() {
       return a.cover ? API.coverFileURL(a.cover, a.cover_v) : ''
     },
+    // Saved songs are on this computer: the same mark a downloaded album has.
+    badge: 'ph:arrow-circle-down-fill',
     menu: (e) => onArtistMenu(e, a),
   }
+}
+
+function playlistRow(p) {
+  return {
+    key: 'pl:' + p.id,
+    kind: 'playlist',
+    id: p.id,
+    playlist: p,
+    to: { name: 'Playlist', params: { id: p.id } },
+    title: p.name,
+    sub: `${t('playlists.playlist')} · ${t('playlists.songsCount', { count: p.count })}`,
+    covers: p.covers,
+    menu: (e) => onPlaylistMenu(e, p),
+  }
+}
+
+function ytRow(p) {
+  return {
+    key: 'yt:' + p.browse_id,
+    kind: 'yt',
+    to: { name: 'ExplorePlaylist', params: { id: p.browse_id } },
+    title: p.name,
+    sub: t('explore.playlist') + (p.author ? ` · ${p.author}` : ''),
+    cover: p.cover_url,
+    badge: 'ph:youtube-logo-fill',
+    badgeTone: 'is-yt',
+    menu: (e) => onYtMenu(e, p),
+  }
+}
+
+function followedRow(a) {
+  return {
+    key: 'fa:' + a.browse_id,
+    kind: 'followed',
+    to: { name: 'ExploreArtist', params: { id: a.browse_id } },
+    title: a.name,
+    sub: `${t('explore.artist')} · ${t('account.followingArtist')}`,
+    cover: a.cover_url,
+    round: true,
+    badge: 'ph:youtube-logo-fill',
+    badgeTone: 'is-yt',
+    menu: (e) => onFollowedMenu(e, a),
+  }
+}
+
+function albumRow(a) {
+  return {
+    key: `al:${a.artist}|${a.name}`,
+    kind: 'album',
+    to: albumRoute(a),
+    title: a.name,
+    sub: `${t('albums.label')} · ${a.artist}`,
+    cover: a.cover ? API.coverFileURL(a.cover, a.cover_v) : '',
+    badge: 'ph:arrow-circle-down-fill',
+    menu: (e) => onAlbumMenu(e, a),
+  }
+}
+
+// ----- pinned ------------------------------------------------------------------
+// Anything in the library can be pinned to the top from its menu, the way a
+// music app keeps what you reach for most within reach. Kept by key, and
+// found again wherever it is in the library, not only among the rows shown.
+const PINS_KEY = 'dn.libPins'
+const pinned = ref(
+  (() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(PINS_KEY) || '[]')
+      return Array.isArray(v) ? v.filter((k) => typeof k === 'string').slice(0, 40) : []
+    } catch {
+      return []
+    }
+  })()
+)
+function isPinned(key) {
+  return pinned.value.includes(key)
+}
+function togglePin(key) {
+  pinned.value = isPinned(key) ? pinned.value.filter((k) => k !== key) : [key, ...pinned.value].slice(0, 40)
+  try {
+    localStorage.setItem(PINS_KEY, JSON.stringify(pinned.value))
+  } catch {
+    // pinned for this run only
+  }
+}
+function pinItem(key) {
+  return {
+    label: isPinned(key) ? t('nav.unpin') : t('nav.pin'),
+    icon: isPinned(key) ? 'ph:push-pin-slash' : 'ph:push-pin',
+    action: () => togglePin(key),
+  }
+}
+// The row a pinned key stands for, from the whole library.
+function rowForPin(key) {
+  const [kind, ...rest] = key.split(':')
+  const id = rest.join(':')
+  if (kind === 'pl') {
+    const pl = playlists.list.value.find((x) => String(x.id) === id)
+    return pl && playlistRow(pl)
+  }
+  if (kind === 'yt') {
+    const pl = ytPlaylists.value.find((x) => x.browse_id === id)
+    return pl && ytRow(pl)
+  }
+  if (kind === 'ar') {
+    const a = savedArtists.value.find((x) => x.name === id)
+    return a && artistRow(a)
+  }
+  if (kind === 'fa') {
+    const a = followedArtists.value.find((x) => x.browse_id === id)
+    return a && followedRow(a)
+  }
+  if (kind === 'al') {
+    const a = lib.albums.value.find((x) => `${x.artist}|${x.name}` === id)
+    return a && albumRow(a)
+  }
+  return null
+}
+const PIN_KINDS = {
+  playlists: ['playlist', 'yt'],
+  artists: ['artist', 'followed'],
+  albums: ['album'],
 }
 
 // The row for the page on screen, worked out for the rows drawn only: the
@@ -343,35 +509,12 @@ const rows = computed(() => {
 
   if (f !== 'artists' && f !== 'albums') {
     for (const pin of pins.value) {
-      if (f === 'playlists' && (pin.id === 'artists' || pin.id === 'albums' || pin.id === 'stats')) continue
       if (!match(pin.label)) continue
       out.push({ key: 'pin:' + pin.id, kind: 'pin', to: pin.to, title: pin.label, sub: pin.sub,
         icon: pin.icon, tile: pin.tile, badge: pin.pinned ? 'ph:push-pin-fill' : '' })
     }
-    let mine = playlists.recent.value
-      .filter((p) => match(p.name))
-      .map((p) => ({
-        key: 'pl:' + p.id,
-        kind: 'playlist',
-        id: p.id,
-        playlist: p,
-        to: { name: 'Playlist', params: { id: p.id } },
-        title: p.name,
-        sub: `${t('playlists.playlist')} · ${t('playlists.songsCount', { count: p.count })}`,
-        covers: p.covers,
-        menu: (e) => onPlaylistMenu(e, p),
-      }))
-    let yt = ytPlaylists.value
-      .filter((p) => match(p.name))
-      .map((p) => ({
-        key: 'yt:' + p.browse_id,
-        kind: 'yt',
-        to: { name: 'ExplorePlaylist', params: { id: p.browse_id } },
-        title: p.name,
-        sub: t('explore.playlist') + (p.author ? ` · ${p.author}` : ''),
-        cover: p.cover_url,
-        badge: 'ph:youtube-logo-fill',
-      }))
+    let mine = playlists.recent.value.filter((p) => match(p.name)).map(playlistRow)
+    let yt = ytPlaylists.value.filter((p) => match(p.name)).map(ytRow)
     if (sort.value === 'alpha') {
       mine = sortedBy(mine, (r) => r.title)
       yt = sortedBy(yt, (r) => r.title)
@@ -384,19 +527,7 @@ const rows = computed(() => {
 
   if (f !== 'playlists' && f !== 'albums') {
     const everyone = f === 'artists' || q
-    const followed = followedArtists.value
-      .filter((a) => match(a.name))
-      .map((a) => ({
-        key: 'fa:' + a.browse_id,
-        kind: 'followed',
-        to: { name: 'ExploreArtist', params: { id: a.browse_id } },
-        title: a.name,
-        sub: `${t('explore.artist')} · ${t('account.followingArtist')}`,
-        cover: a.cover_url,
-        round: true,
-        badge: 'ph:youtube-logo-fill',
-        menu: (e) => onFollowedMenu(e, a),
-      }))
+    const followed = followedArtists.value.filter((a) => match(a.name)).map(followedRow)
     const alpha = sort.value === 'alpha'
     const source = everyone ? (alpha ? artistsByName.value : artistsByCount.value) : topArtists.value
     const saved = (q ? source.filter((a) => match(a.name)) : source).map(artistRow)
@@ -423,19 +554,21 @@ const rows = computed(() => {
   if (f === 'albums' || (q && !f)) {
     const found = q ? albumsByRecent.value.filter((a) => match(a.name) || match(a.artist)) : albumsByRecent.value
     const ordered = sort.value === 'alpha' ? sortedBy(found, (a) => a.name, (a) => a.artist) : found
-    out = out.concat(
-      ordered.map((a) => ({
-        key: `al:${a.artist}|${a.name}`,
-        kind: 'album',
-        to: albumRoute(a),
-        title: a.name,
-        sub: `${t('albums.label')} · ${a.artist}`,
-        cover: a.cover ? API.coverFileURL(a.cover, a.cover_v) : '',
-        menu: (e) => onAlbumMenu(e, a),
-      }))
-    )
+    out = out.concat(ordered.map(albumRow))
   }
-  return out
+
+  // What was pinned, right under the collections, and only once.
+  if (!pinned.value.length) return out
+  const allowed = f ? PIN_KINDS[f] : null
+  const top = pinned.value
+    .map(rowForPin)
+    .filter((r) => r && (!allowed || allowed.includes(r.kind)) && match(r.title))
+    .map((r) => ({ ...r, badge: 'ph:push-pin-fill', badgeTone: '' }))
+  if (!top.length) return out
+  const keys = new Set(top.map((r) => r.key))
+  const fixed = out.filter((r) => r.kind === 'pin')
+  const rest = out.filter((r) => r.kind !== 'pin' && !keys.has(r.key))
+  return fixed.concat(top, rest)
 })
 
 const albumsByRecent = computed(() =>
@@ -448,6 +581,7 @@ function onAlbumMenu(e, a) {
     { label: t('actions.play'), icon: 'ph:play', action: () => playRows(rows(), 0, { toggle: false }) },
     { label: t('actions.shuffle'), icon: 'ph:shuffle', action: () => shuffleRows(rows()) },
     { divider: true },
+    pinItem(`al:${a.artist}|${a.name}`),
     { label: t('albums.open'), icon: 'ph:vinyl-record', action: () => router.push(albumRoute(a)) },
     {
       label: t('actions.goToArtist'),
@@ -468,6 +602,7 @@ function onArtistMenu(e, a) {
     { label: t('actions.play'), icon: 'ph:play', action: () => playRows(artistRows(a.name), 0) },
     { label: t('actions.shuffle'), icon: 'ph:shuffle', action: () => shuffleRows(artistRows(a.name)) },
     { divider: true },
+    pinItem('ar:' + a.name),
     {
       label: t('actions.openArtist'),
       icon: 'ph:user',
@@ -485,6 +620,20 @@ const filters = [
   { id: 'artists', label: 'nav.filterArtists' },
   { id: 'albums', label: 'nav.filterAlbums' },
 ]
+// The chip row, when it is wider than the sidebar: a wheel turned over it
+// slides it sideways, and the fade shows while more is out of view.
+const chipRow = ref(null)
+const chipsMore = ref(false)
+function measureChips() {
+  const el = chipRow.value
+  chipsMore.value = !!el && el.scrollLeft + el.clientWidth < el.scrollWidth - 2
+}
+function onChipWheel(e) {
+  const el = chipRow.value
+  if (!el || el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+  e.preventDefault()
+  el.scrollLeft += e.deltaY
+}
 function readFilter() {
   try {
     const v = localStorage.getItem(FILTER_KEY) || ''
@@ -494,6 +643,12 @@ function readFilter() {
   }
 }
 const filter = ref(readFilter())
+// The chosen chip alone, or all of them: the fade follows.
+watch(
+  () => [filter.value, rail.value],
+  () => nextTick(measureChips),
+  { immediate: true }
+)
 function setFilter(v) {
   filter.value = v
   try {
@@ -535,33 +690,6 @@ const pins = computed(() => {
       tile: 'tile-liked',
       pinned: true,
     },
-    {
-      id: 'artists',
-      to: { name: 'Artists' },
-      label: t('nav.artists'),
-      sub: t('nav.artistCount', { count: lib.artists.value.length }),
-      icon: 'ph:users-three-fill',
-      tile: 'tile-artists',
-      pinned: true,
-    },
-    lib.albums.value.length > 0 && {
-      id: 'albums',
-      to: { name: 'Albums' },
-      label: t('albums.title'),
-      sub: t('nav.albumCount', { count: lib.albums.value.length }),
-      icon: 'ph:vinyl-record-fill',
-      tile: 'tile-albums',
-      pinned: true,
-    },
-    {
-      id: 'stats',
-      to: { name: 'Stats' },
-      label: t('stats.nav'),
-      sub: t('stats.navSub'),
-      icon: 'ph:chart-bar-fill',
-      tile: 'tile-stats',
-      pinned: true,
-    },
   ].filter(Boolean)
 })
 
@@ -601,13 +729,26 @@ function onPlaylistMenu(e, p) {
     { label: t('actions.play'), icon: 'ph:play', action: async () => playRows(await playlistRows(p), 0) },
     { label: t('actions.shuffle'), icon: 'ph:shuffle', action: async () => shuffleRows(await playlistRows(p)) },
     { divider: true },
+    pinItem('pl:' + p.id),
     { label: t('playlists.rename'), icon: 'ph:pencil-simple', action: () => playlists.renamePlaylist(p.id) },
     { label: t('playlists.delete'), icon: 'ph:trash', danger: true, action: () => playlists.deletePlaylist(p.id) },
   ])
 }
 
+function onYtMenu(e, p) {
+  openContextMenu(e, [
+    {
+      label: t('playlists.open'),
+      icon: 'ph:playlist',
+      action: () => router.push({ name: 'ExplorePlaylist', params: { id: p.browse_id } }),
+    },
+    pinItem('yt:' + p.browse_id),
+  ])
+}
+
 function onFollowedMenu(e, a) {
   openContextMenu(e, [
+    pinItem('fa:' + a.browse_id),
     {
       label: t('actions.openArtist'),
       icon: 'ph:user',
@@ -814,12 +955,27 @@ const SideLink = {
   background: rgb(var(--c-tint) / 0.1);
   transform: scale(1.04);
 }
+/* More chips than room (longer names, a narrow sidebar): the row slides
+   sideways, by wheel, drag or the arrow keys, and fades at the edge it goes
+   on past, so a chip half out of view reads as "more this way", not as cut
+   off. */
 .sb-chips {
   display: flex;
   gap: 8px;
   padding: 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.sb-chips::-webkit-scrollbar {
+  display: none;
+}
+.sb-chips.has-more {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
 }
 .sb-chip {
+  flex: none;
   height: 30px;
   padding: 0 12px;
   border-radius: 999px;
@@ -937,6 +1093,39 @@ const SideLink = {
   height: 12px;
   flex-shrink: 0;
   color: rgb(var(--c-accent));
+}
+/* Where an item lives, in that service's colour. */
+.sb-pin.is-yt {
+  color: #ff3b52;
+}
+/* Compact: a line a row, a small picture, the kind beside the name. */
+.sidebar.is-dense .sb-row {
+  min-height: 40px;
+  gap: 10px;
+  padding: 4px 8px;
+}
+.sidebar.is-dense .sb-art,
+.sidebar.is-dense .sb-tile {
+  width: 28px;
+  height: 28px;
+}
+.sidebar.is-dense .sb-tile :deep(svg) {
+  width: 15px;
+  height: 15px;
+}
+.sidebar.is-dense .sb-row-text {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+.sidebar.is-dense .sb-row-title {
+  flex: 0 1 auto;
+  font-size: 13.5px;
+}
+.sidebar.is-dense .sb-row-sub {
+  flex: 0 1000 auto;
+  min-width: 0;
+  font-size: 12px;
 }
 .sb-badge {
   flex-shrink: 0;

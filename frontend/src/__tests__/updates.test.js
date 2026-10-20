@@ -152,13 +152,36 @@ describe('after a restart', () => {
     expect(shown[0].opts.tone).toBe('error')
   })
 
-  it('announces the new version once and acknowledges it', async () => {
+  it('announces a fix release once, in a line, and acknowledges it', async () => {
     api.updateStatus.mockResolvedValue({
-      data: { just_updated: { version: '4.7.0', notes: '- Faster' } },
+      data: { just_updated: { version: '4.7.1', notes: '- Faster' } },
     })
     await vi.advanceTimersByTimeAsync(2600)
     expect(toasts.some((x) => x.msg.startsWith('update.updatedToast'))).toBe(true)
+    expect((await import('../model/updates.js')).whatsNew.value).toBe(null)
     expect(api.acknowledgeUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('welcomes a release with something new in it: What’s new opens as a celebration', async () => {
+    api.updateStatus.mockResolvedValue({
+      data: { just_updated: { version: '4.8.0', notes: '- New: Special days' } },
+    })
+    await vi.advanceTimersByTimeAsync(2600)
+    expect((await import('../model/updates.js')).whatsNew.value).toEqual({ version: '4.8.0', notes: '- New: Special days', celebrate: true })
+    expect(toasts.some((x) => x.msg.startsWith('update.updatedToast'))).toBe(false)
+    expect(api.acknowledgeUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('with special days turned off, even a big release is told in a line', async () => {
+    const { setSeasonal } = await import('/src/model/occasions')
+    setSeasonal(false)
+    api.updateStatus.mockResolvedValue({
+      data: { just_updated: { version: '4.8.0', notes: '- New: Special days' } },
+    })
+    await vi.advanceTimersByTimeAsync(2600)
+    expect((await import('../model/updates.js')).whatsNew.value).toBe(null)
+    expect(toasts.some((x) => x.msg.startsWith('update.updatedToast'))).toBe(true)
+    setSeasonal(true)
   })
 
   it('says nothing when there is nothing to say', async () => {
