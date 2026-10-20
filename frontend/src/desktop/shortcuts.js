@@ -125,10 +125,10 @@ function onKeyDown(e) {
     ui.toggleSidebar()
   } else if (ctrl && !e.shiftKey && key === 'l') {
     e.preventDefault()
-    ui.setPanel('lyrics')
+    ui.showPane('lyrics', router.currentRoute.value.name === 'NowPlaying')
   } else if (ctrl && !e.shiftKey && key === 'q') {
     e.preventDefault()
-    ui.setPanel('queue')
+    ui.showPane('queue', router.currentRoute.value.name === 'NowPlaying')
   } else if (ctrl && !e.shiftKey && key === 'e') {
     e.preventDefault()
     if (router.currentRoute.value.name === 'NowPlaying') router.back()

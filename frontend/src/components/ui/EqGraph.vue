@@ -145,8 +145,22 @@ function draw(now = performance.now()) {
     }
   }
 
-  // The curve the filters make.
+  // The curve the filters make, with what it lifts and cuts filled in.
   const curve = props.on ? player.eqCurve(freqs) : new Float32Array(POINTS)
+  if (props.on) {
+    const zero = yOf(0)
+    const fill = g.createLinearGradient(0, PAD_TOP, 0, h - PAD_BOTTOM)
+    fill.addColorStop(0, colour('--c-accent', 0.3))
+    fill.addColorStop(0.5, colour('--c-accent', 0.06))
+    fill.addColorStop(1, colour('--c-accent', 0.3))
+    g.beginPath()
+    g.moveTo(xOf(freqs[0]), zero)
+    freqs.forEach((f, i) => g.lineTo(xOf(f), yOf(curve[i] || 0)))
+    g.lineTo(xOf(freqs[POINTS - 1]), zero)
+    g.closePath()
+    g.fillStyle = fill
+    g.fill()
+  }
   g.beginPath()
   freqs.forEach((f, i) => {
     const x = xOf(f)
@@ -313,7 +327,10 @@ onBeforeUnmount(() => {
   cursor: ns-resize;
 }
 .eqg.is-off {
-  opacity: 0.75;
+  opacity: 0.5;
+}
+.eqg.is-off:hover {
+  opacity: 0.7;
 }
 .eqg-canvas {
   position: absolute;

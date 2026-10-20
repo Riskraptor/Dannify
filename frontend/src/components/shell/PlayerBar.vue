@@ -41,22 +41,10 @@
         >
           <Icon :icon="liked ? 'ph:heart-fill' : 'ph:heart'" class="h-[18px] w-[18px]" />
         </button>
-        <button
-          v-if="!ui.isCompact.value"
-          class="icon-btn is-round press shrink-0 pb-save"
-          :class="{ 'is-active': inLibrary }"
-          :title="inLibrary ? t('player.inLibrary') : t('player.saveToLibrary')"
-          :aria-label="inLibrary ? t('player.inLibrary') : t('player.saveToLibrary')"
-          :disabled="inLibrary"
-          @click="saveCurrent"
-        >
-          <!-- A download arrow, filled once saved. A green tick beside the
-               heart read as a second "liked", not as "on this PC". -->
-          <Icon
-            :icon="inLibrary ? 'ph:arrow-circle-down-fill' : 'ph:arrow-circle-down'"
-            class="h-[18px] w-[18px]"
-          />
-        </button>
+        <!-- A download arrow, filled once saved, a ring while it saves. A
+             green tick beside the heart read as a second "liked", not as
+             "on this PC". -->
+        <SaveSongButton v-if="!ui.isCompact.value" :row="row" class="shrink-0 pb-save" />
       </template>
       <div v-else class="pb-idle">
         <span class="pb-idle-art"><Icon icon="ph:music-notes" class="h-5 w-5" /></span>
@@ -176,25 +164,25 @@
       </button>
       <button
         class="icon-btn is-round"
-        :class="{ 'is-active-dot': ui.panel.value === 'lyrics' && !onNowPlaying && cur }"
+        :class="{ 'is-active-dot': shows('lyrics') }"
         :disabled="!cur"
         :title="`${t('lyrics.title')} (Ctrl+L)`"
         :aria-label="t('lyrics.title')"
-        :aria-pressed="ui.panel.value === 'lyrics' && !onNowPlaying && !!cur"
+        :aria-pressed="shows('lyrics')"
         aria-keyshortcuts="Control+L"
-        @click="ui.setPanel('lyrics')"
+        @click="ui.showPane('lyrics', onNowPlaying)"
       >
         <Icon icon="ph:microphone-stage" class="h-[18px] w-[18px]" />
       </button>
       <button
         class="icon-btn is-round"
-        :class="{ 'is-active-dot': ui.panel.value === 'queue' && !onNowPlaying && cur }"
+        :class="{ 'is-active-dot': shows('queue') }"
         :disabled="!cur && !player.playlist.value.length"
         :title="`${t('player.queue')} (Ctrl+Q)`"
         :aria-label="t('player.queue')"
-        :aria-pressed="ui.panel.value === 'queue' && !onNowPlaying && !!cur"
+        :aria-pressed="shows('queue')"
         aria-keyshortcuts="Control+Q"
-        @click="ui.setPanel('queue')"
+        @click="ui.showPane('queue', onNowPlaying)"
       >
         <Icon icon="ph:queue" class="h-[18px] w-[18px]" />
       </button>
@@ -232,7 +220,7 @@
       </div>
       <button
         v-if="desktop.isDesktop"
-        class="icon-btn is-round pb-extra"
+        class="icon-btn is-round pb-extra pb-mini"
         :title="`${t('player.miniPlayer')} (Ctrl+Shift+M)`"
         :aria-label="t('player.miniPlayer')"
         aria-keyshortcuts="Control+Shift+M"
@@ -262,15 +250,15 @@ import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { usePlayer, formatTime } from '/src/model/player'
 import { useUi } from '/src/model/ui'
-import { useLibraryIndex } from '/src/model/libraryIndex'
 import { useAccount } from '/src/model/account'
-import { queueRow, trackMenu, isRowDownloaded, downloadRows, songVideoId } from '/src/model/tracks'
+import { queueRow, trackMenu, songVideoId } from '/src/model/tracks'
 import { openContextMenu, openMenuAt, lastMenuPoint } from '/src/model/contextMenu'
 import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
 import CoverImage from '../ui/CoverImage.vue'
 import ArtistLinks from '../ui/ArtistLinks.vue'
 import RangeSlider from '../ui/RangeSlider.vue'
+import SaveSongButton from '/src/components/ui/SaveSongButton.vue'
 // The sound panel and its equaliser are fetched when first opened, and
 // quietly a little after start, so that first opening is still instant.
 const loadSoundPanel = () => import('./SoundPanel.vue')
@@ -282,7 +270,6 @@ const route = useRoute()
 const player = usePlayer()
 const ui = useUi()
 const account = useAccount()
-const libIndex = useLibraryIndex()
 
 const cur = computed(() => player.currentTrack.value)
 
@@ -343,10 +330,15 @@ function onSleepMenu(e) {
   openContextMenu(e, sleepItems(), { anchor: true })
 }
 // Narrow windows: what does not fit beside the volume, one click away.
+// More: everything about the song playing (like it, add it to a playlist,
+// its radio, artist and album, its link), then what the player itself can
+// do. It held three things and read as where things were hidden.
 function onMoreMenu(e) {
   openContextMenu(
     e,
     [
+      ...(row.value ? trackMenu([row.value], { queue: true, playing: true }) : []),
+      { divider: true },
       {
         label: player.sleepMode.value === 'off' ? t('player.sleep') : sleepTitle.value,
         icon: player.sleepMode.value === 'off' ? 'ph:moon' : 'ph:moon-fill',
@@ -354,14 +346,25 @@ function onMoreMenu(e) {
         action: () => setTimeout(() => openMenuAt(lastMenuPoint(), sleepItems())),
       },
       {
-        label: t('panel.aboutButton'),
+        label: t('sound.title'),
+        icon: 'ph:sliders-horizontal',
+        action: () => setTimeout(() => (soundOpen.value = true)),
+      },
+      {
+        label: t('player.aboutSong'),
         icon: 'ph:vinyl-record',
         disabled: !cur.value,
-        action: () => ui.setPanel('about'),
+        action: () => {
+          // Now Playing has no room for it: the side panel, beside the page
+          // that was there before.
+          if (onNowPlaying.value) router.back()
+          ui.openPanel('about')
+        },
       },
       desktop.isDesktop && {
         label: t('player.miniPlayer'),
         icon: 'ph:picture-in-picture',
+        shortcut: 'Ctrl+Shift+M',
         action: () => desktop.setMini(true),
       },
     ],
@@ -372,14 +375,14 @@ const row = computed(() =>
   cur.value ? queueRow(cur.value, player.currentIndex.value) : null
 )
 const onNowPlaying = computed(() => route.name === 'NowPlaying')
+// Lit for what is on screen: the side panel's tab, or on Now Playing its own.
+function shows(name) {
+  if (!cur.value) return false
+  return onNowPlaying.value ? ui.npTab.value === name : ui.panel.value === name
+}
 const videoId = computed(() => (row.value ? songVideoId(row.value) : ''))
 const liked = computed(() => account.isLiked(videoId.value))
 
-const inLibrary = computed(() => {
-  // Touch the reactive index so this recomputes after downloads finish.
-  void libIndex.byVideoId.value
-  return !!row.value && isRowDownloaded(row.value)
-})
 
 const repeatTitle = computed(() =>
   player.repeatMode.value === 'one'
@@ -402,9 +405,6 @@ function openNowPlaying() {
 function toggleNowPlaying() {
   if (onNowPlaying.value) router.back()
   else openNowPlaying()
-}
-function saveCurrent() {
-  if (row.value) downloadRows([row.value])
 }
 function onTrackMenu(e) {
   if (!row.value) return
@@ -575,12 +575,18 @@ function onTrackMenu(e) {
   flex: 1;
 }
 
-/* About and the mini player sit behind More at every width: ten icons in a
-   row, most of them unlabelled, was more than anyone could tell apart. The
-   sleep timer stays out while it runs, because its countdown is live. */
-.pb-extra:not(.pb-sleep),
+/* About sits behind More at every width: ten icons in a row, most of them
+   unlabelled, was more than anyone could tell apart. The mini player is out
+   where there is room for it (it is a way of using Dannify, not a detail),
+   and the sleep timer while it runs, because its countdown is live. */
+.pb-extra:not(.pb-sleep):not(.pb-mini),
 .pb-sleep:not(.is-on) {
   display: none;
+}
+@media (max-width: 1180px) {
+  .pb-mini {
+    display: none;
+  }
 }
 
 /* Medium windows: tighten the right side; a running sleep timer goes behind

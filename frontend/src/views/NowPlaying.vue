@@ -25,10 +25,10 @@
       <p class="np-top-label">{{ t('player.nowPlaying') }}</p>
       <div class="ml-auto flex items-center gap-2">
         <div class="seg np-seg">
-          <button class="seg-item" :class="{ 'is-active': tab === 'lyrics' }" @click="tab = 'lyrics'">
+          <button class="seg-item" :class="{ 'is-active': tab === 'lyrics' }" @click="ui.npTab.value = 'lyrics'">
             <Icon icon="ph:microphone-stage" class="h-4 w-4" /> {{ t('lyrics.title') }}
           </button>
-          <button class="seg-item" :class="{ 'is-active': tab === 'queue' }" @click="tab = 'queue'">
+          <button class="seg-item" :class="{ 'is-active': tab === 'queue' }" @click="ui.npTab.value = 'queue'">
             <Icon icon="ph:queue" class="h-4 w-4" /> {{ t('player.queue') }}
           </button>
         </div>
@@ -70,16 +70,7 @@
               <a class="link" @click="goToAlbum(row)">{{ row.album }}</a>
             </p>
           </div>
-          <button
-            class="icon-btn is-round np-btn h-10 w-10"
-            :class="{ 'is-active': inLibrary }"
-            :disabled="inLibrary"
-            :title="inLibrary ? t('player.inLibrary') : t('player.saveToLibrary')"
-            :aria-label="inLibrary ? t('player.inLibrary') : t('player.saveToLibrary')"
-            @click="downloadRows([row])"
-          >
-            <Icon :icon="inLibrary ? 'ph:arrow-circle-down-fill' : 'ph:arrow-circle-down'" class="h-6 w-6" />
-          </button>
+          <SaveSongButton :row="row" class="np-btn h-10 w-10" icon-class="h-6 w-6" />
           <button class="icon-btn is-round np-btn h-10 w-10" :title="t('actions.more')" :aria-label="t('actions.more')" @click="onMore">
             <Icon icon="ph:dots-three-bold" class="h-6 w-6" />
           </button>
@@ -105,8 +96,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { usePlayer } from '/src/model/player'
-import { useLibraryIndex } from '/src/model/libraryIndex'
-import { queueRow, trackMenu, isRowDownloaded, downloadRows, goToAlbum } from '/src/model/tracks'
+import { queueRow, trackMenu, goToAlbum } from '/src/model/tracks'
 import { openContextMenu } from '/src/model/contextMenu'
 import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
@@ -116,20 +106,18 @@ import EmptyState from '/src/components/ui/EmptyState.vue'
 import LyricsView from '/src/components/lyrics/LyricsView.vue'
 import LyricsToolbar from '/src/components/lyrics/LyricsToolbar.vue'
 import QueueList from '/src/components/shell/QueueList.vue'
+import SaveSongButton from '/src/components/ui/SaveSongButton.vue'
+import { useUi } from '/src/model/ui'
 
 const { t } = useI18n()
 const router = useRouter()
 const player = usePlayer()
-const libIndex = useLibraryIndex()
 const win = desktop.state
 
-const tab = ref('lyrics')
+const ui = useUi()
+const tab = computed(() => ui.npTab.value)
 const cur = computed(() => player.currentTrack.value)
 const row = computed(() => (cur.value ? queueRow(cur.value, player.currentIndex.value) : null))
-const inLibrary = computed(() => {
-  void libIndex.byVideoId.value
-  return !!row.value && isRowDownloaded(row.value)
-})
 
 function close() {
   if (window.history.state && window.history.state.back) router.back()
@@ -137,10 +125,10 @@ function close() {
 }
 
 function onMenu(e) {
-  if (row.value) openContextMenu(e, trackMenu([row.value], { queue: true }))
+  if (row.value) openContextMenu(e, trackMenu([row.value], { queue: true, playing: true }))
 }
 function onMore(e) {
-  if (row.value) openContextMenu(e, trackMenu([row.value], { queue: true }), { anchor: true })
+  if (row.value) openContextMenu(e, trackMenu([row.value], { queue: true, playing: true }), { anchor: true })
 }
 </script>
 
