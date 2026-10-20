@@ -14,30 +14,21 @@
     />
 
     <header class="sp-head">
-      <div class="seg">
+      <!-- Tabs the way a desktop app draws them: the labels side by side,
+           a bar under the one that is open. Arrows move between them. -->
+      <div class="sp-tabs" role="tablist" :aria-label="t('panel.tabs')" @keydown="onTabKey">
         <button
-          class="seg-item"
-          :class="{ 'is-active': tab === 'lyrics' }"
-          @click="ui.openPanel('lyrics')"
+          v-for="tb in TABS"
+          :key="tb.id"
+          class="sp-tab"
+          role="tab"
+          :aria-selected="tab === tb.id"
+          :tabindex="tab === tb.id ? 0 : -1"
+          :class="{ 'is-active': tab === tb.id }"
+          @click="ui.openPanel(tb.id)"
         >
-          <Icon icon="ph:microphone-stage" class="h-4 w-4" />
-          {{ t('lyrics.title') }}
-        </button>
-        <button
-          class="seg-item"
-          :class="{ 'is-active': tab === 'queue' }"
-          @click="ui.openPanel('queue')"
-        >
-          <Icon icon="ph:queue" class="h-4 w-4" />
-          {{ t('player.queue') }}
-        </button>
-        <button
-          class="seg-item"
-          :class="{ 'is-active': tab === 'about' }"
-          @click="ui.openPanel('about')"
-        >
-          <Icon icon="ph:vinyl-record" class="h-4 w-4" />
-          {{ t('panel.about') }}
+          <Icon :icon="tab === tb.id ? tb.activeIcon : tb.icon" class="h-4 w-4 shrink-0" />
+          <span class="sp-tab-label">{{ t(tb.label) }}</span>
         </button>
       </div>
       <button
@@ -105,6 +96,23 @@ const player = usePlayer()
 const account = useAccount()
 
 const tab = computed(() => ui.panel.value || 'lyrics')
+const TABS = [
+  { id: 'lyrics', label: 'lyrics.title', icon: 'ph:microphone-stage', activeIcon: 'ph:microphone-stage-fill' },
+  { id: 'queue', label: 'player.queue', icon: 'ph:queue', activeIcon: 'ph:queue-fill' },
+  { id: 'about', label: 'panel.about', icon: 'ph:vinyl-record', activeIcon: 'ph:vinyl-record-fill' },
+]
+// Left and right move along the tabs and open the one reached, the way a
+// tab bar works anywhere else.
+function onTabKey(e) {
+  const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key]
+  if (!step) return
+  e.preventDefault()
+  const at = TABS.findIndex((tb) => tb.id === tab.value)
+  const next = TABS[(at + step + TABS.length) % TABS.length]
+  ui.openPanel(next.id)
+  const el = e.currentTarget.querySelectorAll('.sp-tab')[TABS.indexOf(next)]
+  if (el) el.focus()
+}
 const cur = computed(() => player.currentTrack.value)
 const row = computed(() => (cur.value ? queueRow(cur.value, player.currentIndex.value) : null))
 const videoId = computed(() => (row.value ? songVideoId(row.value) : ''))
@@ -132,6 +140,64 @@ function startResize(e) {
 </script>
 
 <style scoped>
+.sp-tabs {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.sp-tab {
+  position: relative;
+  display: inline-flex;
+  flex: 1 1 0;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--c-fg) / var(--fg-55));
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+.sp-tab:hover {
+  color: rgb(var(--c-fg) / 0.9);
+  background: rgb(var(--c-tint) / 0.05);
+}
+.sp-tab.is-active {
+  color: rgb(var(--c-fg));
+}
+/* The bar under the open tab, grown from its middle. */
+.sp-tab::after {
+  content: '';
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: -3px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgb(var(--c-accent));
+  transform: scaleX(0);
+  transition: transform 0.2s var(--ease-out);
+}
+.sp-tab.is-active::after {
+  transform: scaleX(1);
+}
+.sp-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Too narrow for words: the marks alone, each one still named. */
+@container lyricsbar (max-width: 300px) {
+  .sp-tab-label {
+    display: none;
+  }
+}
 .spanel {
   position: relative;
   display: flex;
@@ -186,16 +252,17 @@ function startResize(e) {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 10px 6px 12px;
+  padding: 8px 8px 6px 10px;
+  border-bottom: 1px solid rgb(var(--c-tint) / 0.07);
 }
 .sp-now {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 4px 12px 0;
+  margin: 10px 12px 0;
   padding: 8px;
-  border-radius: 8px;
-  background: rgb(var(--c-tint) / 0.05);
+  border-radius: 10px;
+  background: rgb(var(--c-tint) / 0.045);
 }
 .sp-now-art {
   position: relative;
