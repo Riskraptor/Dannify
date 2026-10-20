@@ -90,7 +90,7 @@ install -m 644 "$ROOT/packaging/linux/README-UBUNTU.md" "$STAGE/usr/share/doc/da
   echo
   echo "Files: *"
   echo "Copyright: Daniel Mwendwa"
-  echo "License: MIT"
+  echo "License: Dannify"
   sed 's/^$/./; s/^/ /' "$ROOT/LICENSE"
   echo
   echo "Files: opt/dannify/jsruntime/dnfjs"
