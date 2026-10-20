@@ -191,3 +191,76 @@ def test_the_region_is_kept_where_the_splash_reads_it(monkeypatch):
     assert kept == {'region': 'KE'}
     api.app_set_region('not a country')
     assert kept == {'region': 'KE'}
+
+
+# The words the window sends, in its own language, for the next start.
+_SW = {
+    'lang': 'sw',
+    'starting': 'Muziki wako unaanza…',
+    'national': 'Heri ya {name}!',
+    'titles': {'christmas': 'Krismasi Njema', 'newyear': 'Heri ya Mwaka Mpya {year}'},
+}
+
+
+def test_the_window_s_words_are_kept_only_as_short_plain_texts():
+    assert occasions.clean_words(None) == {}
+    assert occasions.clean_words('Krismasi') == {}
+    clean = occasions.clean_words({
+        **_SW,
+        'lang': 'not a language',
+        'starting': 'Muziki\nwako   unaanza…',
+        'titles': {'christmas': 'x' * 500, 'made_up_day': 'Hello', 'easter': 42},
+        'script': '<script>',
+    })
+    assert 'lang' not in clean and 'script' not in clean
+    assert clean['starting'] == 'Muziki wako unaanza…'
+    assert clean['titles'] == {'christmas': 'x' * 80}
+
+
+def test_the_splash_greets_in_the_window_s_language():
+    hint, _, _ = occasions.splash_extras(_day('2026-12-24'), seed=1, region='KE', words=_SW)
+    assert hint == 'Krismasi Njema · Muziki wako unaanza…'
+    hint, _, _ = occasions.splash_extras(_day('2027-01-01'), seed=1, region='KE', words=_SW)
+    assert hint.startswith('Heri ya Mwaka Mpya 2027')
+    # A country's own day, under its name in that language.
+    hint, _, _ = occasions.splash_extras(_day('2026-12-12'), seed=1, region='KE', words=_SW)
+    assert hint.startswith('Heri ya Siku ya Jamhuri!')
+    # A day the window sent no words for: English, rather than nothing.
+    hint, _, _ = occasions.splash_extras(_day('2026-02-14'), seed=1, region='KE', words=_SW)
+    assert hint.startswith('Happy Valentine’s Day · Muziki')
+
+
+def test_the_splash_s_words_cannot_write_into_the_page():
+    words = {'starting': '<img src=x onerror=alert(1)>', 'titles': {'christmas': '<b>Hi</b>'}}
+    hint, _, _ = occasions.splash_extras(_day('2026-12-24'), seed=1, region='KE', words=words)
+    assert '<' not in hint and '&lt;b&gt;' in hint
+    assert '<img' not in occasions.starting_words(words)
+
+
+def test_an_ordinary_day_s_splash_speaks_the_window_s_language(monkeypatch):
+    monkeypatch.setattr(occasions, 'today', lambda now=None, region='': None)
+    prefs = {'region': 'KE', 'splash': _SW}
+    monkeypatch.setattr(core, 'read_prefs', lambda: prefs)
+    if places is not None:
+        monkeypatch.setattr(places, '_read_prefs', lambda: prefs)
+    for page in _splashes():
+        assert 'Muziki wako unaanza…' in page and 'Starting your music' not in page
+    monkeypatch.setattr(core, 'read_prefs', lambda: {})
+    assert 'Starting your music…' in core.splash_html('dark')
+
+
+@pytest.mark.skipif(os.name != 'nt', reason="the Windows shell's own call")
+def test_the_splash_words_are_kept_where_the_splash_reads_them(monkeypatch):
+    from dannify.shell.windows import actions
+
+    kept, writes = {}, []
+    monkeypatch.setattr(actions, '_read_prefs', lambda: dict(kept))
+    monkeypatch.setattr(actions, '_write_prefs', lambda patch: (writes.append(patch), kept.update(patch)))
+    api = object.__new__(actions.ActionsMixin)
+    api.app_set_splash_words(_SW)
+    assert kept['splash'] == occasions.clean_words(_SW)
+    # The same words again: nothing written.
+    api.app_set_splash_words(_SW)
+    assert len(writes) == 1
+    api.app_set_splash_words('nonsense')
+    assert len(writes) == 1
