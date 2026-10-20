@@ -454,6 +454,9 @@ function spotifyDisconnect() {
 function spotifySetApp(clientId) {
   return API.post('/api/spotify/app', { client_id: clientId })
 }
+function spotifyRefresh() {
+  return API.post('/api/spotify/refresh')
+}
 function spotifyPlaylists() {
   return API.get('/api/spotify/playlists')
 }
@@ -551,6 +554,7 @@ export default {
   spotifyConnect,
   spotifyDisconnect,
   spotifySetApp,
+  spotifyRefresh,
   spotifyPlaylists,
   spotifyPlaylist,
   spotifyLiked,
