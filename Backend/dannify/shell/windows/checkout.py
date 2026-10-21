@@ -21,8 +21,10 @@ _ALLOWED = re.compile(
     r'^https://www\.paypal\.com/(ncp/payment/[A-Z0-9][A-Z0-9-]{5,40}|paypalme/[A-Za-z0-9_-]{2,40})/?$'
 )
 # Where PayPal sends someone once they have paid (the return address the
-# payment link was made with): seeing it means the payment went through.
-RETURN_PREFIX = 'https://github.com/Riskraptor/Dannify'
+# payment link was made with): seeing it means the payment went through. The
+# thank-you page (docs/thanks on GitHub Pages), and the project's page the
+# first links were made with.
+RETURN_PREFIXES = ('https://riskraptor.github.io/Dannify/thanks', 'https://github.com/Riskraptor/Dannify')
 _STORAGE = _DATA_DIR / 'Checkout'
 
 
@@ -132,7 +134,7 @@ class _CheckoutWindow:
                         uri = str(a2.Uri)
                     except Exception:
                         return
-                    if uri.startswith(RETURN_PREFIX):
+                    if uri.startswith(RETURN_PREFIXES):
                         a2.Cancel = True
                         self.paid = True
                         form.Close()

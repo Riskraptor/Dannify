@@ -34,8 +34,11 @@ def test_only_paypal_checkouts_open_in_the_window():
 
 
 def test_paying_is_seen_by_the_thank_you_address():
-    ns = _load('RETURN_PREFIX')
-    assert ns['RETURN_PREFIX'] == 'https://github.com/Riskraptor/Dannify'
+    prefixes = _load('RETURN_PREFIXES')['RETURN_PREFIXES']
+    assert 'https://riskraptor.github.io/Dannify/thanks/'.startswith(prefixes)
+    assert 'https://github.com/Riskraptor/Dannify'.startswith(prefixes)
+    assert not 'https://www.paypal.com/ncp/payment/PLB-LCYXAHFS4UA3'.startswith(prefixes)
+    assert not 'https://riskraptor.github.io/Dannify/'.startswith(prefixes)
 
 
 def test_the_window_always_fits_the_screen():

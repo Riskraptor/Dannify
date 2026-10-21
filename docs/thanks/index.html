@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thank you · Dannify</title>
+  <meta name="description" content="Thank you for supporting Dannify, the free music app with no ads.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="dannify.svg" type="image/svg+xml">
+  <style>
+    :root {
+      --bg: #12081d;
+      --ink: #ffffff;
+      --soft: rgba(255, 255, 255, 0.78);
+      --card: rgba(255, 255, 255, 0.08);
+      --line: rgba(255, 255, 255, 0.16);
+      --accent: #1ed760;
+      --heart: #ff4d7d;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px 16px;
+      overflow-x: hidden;
+      color: var(--ink);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background:
+        radial-gradient(60% 50% at 15% 10%, rgba(255, 77, 125, 0.35), transparent 70%),
+        radial-gradient(55% 45% at 90% 90%, rgba(255, 140, 60, 0.28), transparent 70%),
+        linear-gradient(140deg, #2b0d4a, #6b1d6e 45%, #a3195b 80%, #c4452d);
+      background-color: var(--bg);
+    }
+    main {
+      position: relative;
+      width: min(560px, 100%);
+      padding: 40px 32px 32px;
+      border-radius: 28px;
+      text-align: center;
+      background: var(--card);
+      box-shadow: inset 0 0 0 1px var(--line), 0 30px 80px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(14px);
+      animation: rise 0.7s cubic-bezier(0.2, 0.9, 0.2, 1.1) both;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .brand img { width: 34px; height: 34px; }
+    .heart {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 112px;
+      height: 112px;
+      margin: 28px auto 18px;
+      border-radius: 999px;
+      background: radial-gradient(circle at 35% 30%, #ff8fab, var(--heart) 60%, #c81d4f);
+      box-shadow: 0 18px 50px rgba(255, 77, 125, 0.55);
+      animation: beat 1.6s ease-in-out 0.6s 4;
+    }
+    .heart svg { width: 56px; height: 56px; fill: #fff; }
+    .spark {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      margin: -7px 0 0 -7px;
+      opacity: 0;
+      color: #ffd1dc;
+      animation: burst 1.4s ease-out forwards;
+      animation-delay: calc(0.5s + var(--i) * 0.04s);
+    }
+    .spark svg { width: 100%; height: 100%; fill: currentColor; }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(34px, 8vw, 48px);
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+    }
+    p { margin: 0 auto; max-width: 42ch; line-height: 1.55; color: var(--soft); }
+    .lead { font-size: 17px; color: var(--ink); }
+    .small { margin-top: 14px; font-size: 14px; }
+    .back {
+      margin-top: 22px;
+      padding: 12px 16px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.22);
+      font-size: 14px;
+      color: var(--ink);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 24px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 20px;
+      border: 0;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      color: #0b2a17;
+      background: var(--accent);
+      box-shadow: 0 10px 24px rgba(30, 215, 96, 0.3);
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+    .btn.ghost {
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.12);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
+    .btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+    .btn svg { width: 18px; height: 18px; fill: currentColor; }
+    footer { margin-top: 26px; font-size: 13px; color: var(--soft); }
+    footer a { color: var(--ink); }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: #fff;
+      color: #2b0d4a;
+      font-weight: 700;
+      font-size: 14px;
+      transform: translate(-50%, 80px);
+      transition: transform 0.25s ease;
+    }
+    .toast.on { transform: translate(-50%, 0); }
+    @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(0.98); } }
+    @keyframes beat {
+      0%, 60%, 100% { transform: scale(1); }
+      70% { transform: scale(1.1); }
+      80% { transform: scale(0.97); }
+      90% { transform: scale(1.06); }
+    }
+    @keyframes burst {
+      0% { opacity: 0; transform: translate(0, 0) scale(0.4); }
+      20% { opacity: 1; }
+      100% { opacity: 0; transform: translate(var(--x), var(--y)) scale(1) rotate(var(--r)); }
+    }
+    @media (max-width: 480px) {
+      main { padding: 32px 20px 24px; border-radius: 22px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      main, .heart, .spark { animation: none; }
+      .spark { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="brand" href="https://github.com/Riskraptor/Dannify">
+      <img src="dannify.svg" alt="" width="34" height="34">
+      Dannify
+    </a>
+    <div class="heart" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-10-9.3C.3 8.4 2.2 4.5 5.9 4.1c2.1-.2 3.7.9 4.6 2.3.3.4.7.4 1 0 .9-1.4 2.5-2.5 4.6-2.3 3.7.4 5.6 4.3 3.9 7.6C19.5 16.4 12 21 12 21z"/></svg>
+    </div>
+    <h1 data-t="title">Thank you!</h1>
+    <p class="lead" data-t="lead">Your support keeps Dannify free, with no ads, for everyone.</p>
+    <p class="small" data-t="personal">Dannify is made by one person in Kenya, and every bit of help truly means a lot.</p>
+    <p class="small" data-t="receipt">PayPal has emailed you a receipt.</p>
+    <p class="back" data-t="back">You can close this page and go back to your music.</p>
+    <div class="actions">
+      <a class="btn" href="https://github.com/Riskraptor/Dannify/releases/latest">
+        <svg viewBox="0 0 24 24"><path d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 0 1 1.4-1.4l3.3 3.3V4a1 1 0 0 1 1-1zM5 19h14a1 1 0 1 1 0 2H5a1 1 0 1 1 0-2z"/></svg>
+        <span data-t="get">Get Dannify</span>
+      </a>
+      <button class="btn ghost" type="button" id="share">
+        <svg viewBox="0 0 24 24"><path d="M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 15 7l-6.7 3.4a3 3 0 1 0 0 3.2L15 17a3 3 0 1 0 3-1z"/></svg>
+        <span data-t="share">Tell a friend</span>
+      </button>
+      <a class="btn ghost" href="https://github.com/Riskraptor/Dannify">
+        <svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 5.9 6.6 1-4.8 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.5 9.4l6.6-1z"/></svg>
+        <span data-t="star">Star on GitHub</span>
+      </a>
+    </div>
+    <footer>Dannify · <a href="https://github.com/Riskraptor/Dannify">github.com/Riskraptor/Dannify</a></footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // In the visitor's own language, where Dannify speaks it.
+    var WORDS = {
+      en: {
+        title: 'Thank you!',
+        lead: 'Your support keeps Dannify free, with no ads, for everyone.',
+        personal: 'Dannify is made by one person in Kenya, and every bit of help truly means a lot.',
+        receipt: 'PayPal has emailed you a receipt.',
+        back: 'You can close this page and go back to your music.',
+        get: 'Get Dannify',
+        share: 'Tell a friend',
+        star: 'Star on GitHub',
+        copied: 'Link copied. Thank you for sharing!',
+        shareText: 'Dannify: a free music app with no ads.'
+      },
+      fr: {
+        title: 'Merci !',
+        lead: 'Votre soutien garde Dannify gratuit et sans publicité, pour tout le monde.',
+        personal: "Dannify est fait par une seule personne au Kenya, et chaque aide compte vraiment.",
+        receipt: 'PayPal vous a envoyé un reçu par e-mail.',
+        back: 'Vous pouvez fermer cette page et retourner à votre musique.',
+        get: 'Obtenir Dannify',
+        share: 'En parler à un ami',
+        star: 'Une étoile sur GitHub',
+        copied: 'Lien copié. Merci de partager !',
+        shareText: "Dannify : une appli de musique gratuite, sans publicité."
+      },
+      es: {
+        title: '¡Gracias!',
+        lead: 'Tu apoyo mantiene Dannify gratis y sin anuncios, para todos.',
+        personal: 'Dannify lo hace una sola persona en Kenia, y cada ayuda significa muchísimo.',
+        receipt: 'PayPal te ha enviado un recibo por correo.',
+        back: 'Puedes cerrar esta página y volver a tu música.',
+        get: 'Consigue Dannify',
+        share: 'Cuéntaselo a un amigo',
+        star: 'Una estrella en GitHub',
+        copied: 'Enlace copiado. ¡Gracias por compartir!',
+        shareText: 'Dannify: una app de música gratis y sin anuncios.'
+      },
+      pt: {
+        title: 'Obrigado!',
+        lead: 'Seu apoio mantém o Dannify grátis e sem anúncios, para todos.',
+        personal: 'O Dannify é feito por uma só pessoa no Quênia, e cada ajuda significa muito.',
+        receipt: 'O PayPal enviou um recibo para o seu e-mail.',
+        back: 'Você pode fechar esta página e voltar para a sua música.',
+        get: 'Baixe o Dannify',
+        share: 'Conte a um amigo',
+        star: 'Uma estrela no GitHub',
+        copied: 'Link copiado. Obrigado por compartilhar!',
+        shareText: 'Dannify: um app de música grátis e sem anúncios.'
+      },
+      de: {
+        title: 'Danke!',
+        lead: 'Ihre Unterstützung hält Dannify kostenlos und werbefrei, für alle.',
+        personal: 'Dannify wird von einer einzigen Person in Kenia gemacht, und jede Hilfe bedeutet sehr viel.',
+        receipt: 'PayPal hat Ihnen eine Quittung per E-Mail geschickt.',
+        back: 'Sie können diese Seite schließen und zu Ihrer Musik zurückkehren.',
+        get: 'Dannify holen',
+        share: 'Einem Freund erzählen',
+        star: 'Ein Stern auf GitHub',
+        copied: 'Link kopiert. Danke fürs Teilen!',
+        shareText: 'Dannify: eine kostenlose Musik-App ohne Werbung.'
+      },
+      sw: {
+        title: 'Asante sana!',
+        lead: 'Msaada wako unaifanya Dannify iwe bure, bila matangazo, kwa kila mtu.',
+        personal: 'Dannify inatengenezwa na mtu mmoja nchini Kenya, na kila msaada una maana kubwa sana.',
+        receipt: 'PayPal imekutumia risiti kwa barua pepe.',
+        back: 'Unaweza kufunga ukurasa huu na kurudi kwenye muziki wako.',
+        get: 'Pata Dannify',
+        share: 'Mwambie rafiki',
+        star: 'Nyota kwenye GitHub',
+        copied: 'Kiungo kimenakiliwa. Asante kwa kushiriki!',
+        shareText: 'Dannify: programu ya muziki ya bure bila matangazo.'
+      }
+    };
+    var SITE = 'https://github.com/Riskraptor/Dannify';
+    var code = 'en';
+    var wanted = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
+    for (var i = 0; i < wanted.length; i++) {
+      var c = String(wanted[i] || '').toLowerCase().split(/[-_]/)[0];
+      if (WORDS[c]) { code = c; break; }
+    }
+    var words = WORDS[code];
+    document.documentElement.lang = code;
+    document.title = words.title.replace(/[!¡]/g, '').trim() + ' · Dannify';
+    var nodes = document.querySelectorAll('[data-t]');
+    for (var n = 0; n < nodes.length; n++) {
+      var key = nodes[n].getAttribute('data-t');
+      if (words[key]) nodes[n].textContent = words[key];
+    }
+
+    // A small burst of hearts around the big one.
+    var heart = document.querySelector('.heart');
+    var shape = '<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-10-9.3C.3 8.4 2.2 4.5 5.9 4.1c2.1-.2 3.7.9 4.6 2.3.3.4.7.4 1 0 .9-1.4 2.5-2.5 4.6-2.3 3.7.4 5.6 4.3 3.9 7.6C19.5 16.4 12 21 12 21z"/></svg>';
+    for (var k = 0; k < 16; k++) {
+      var s = document.createElement('span');
+      var a = (k / 16) * Math.PI * 2;
+      var d = 80 + Math.random() * 60;
+      s.className = 'spark';
+      s.innerHTML = shape;
+      s.style.setProperty('--i', k);
+      s.style.setProperty('--x', Math.round(Math.cos(a) * d) + 'px');
+      s.style.setProperty('--y', Math.round(Math.sin(a) * d) + 'px');
+      s.style.setProperty('--r', Math.round(Math.random() * 90 - 45) + 'deg');
+      s.style.color = ['#ffd1dc', '#ff8fab', '#ffffff', '#fda4af'][k % 4];
+      heart.appendChild(s);
+    }
+
+    // Tell a friend: the system's own sharing where there is one, else the link copied.
+    var toast = document.getElementById('toast');
+    function say(text) {
+      toast.textContent = text;
+      toast.classList.add('on');
+      setTimeout(function () { toast.classList.remove('on'); }, 2600);
+    }
+    document.getElementById('share').addEventListener('click', function () {
+      if (navigator.share) {
+        navigator.share({ title: 'Dannify', text: words.shareText, url: SITE }).catch(function () {});
+      } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(SITE).then(function () { say(words.copied); }, function () { window.prompt('', SITE); });
+      } else {
+        window.prompt('', SITE);
+      }
+    });
+  </script>
+</body>
+</html>
