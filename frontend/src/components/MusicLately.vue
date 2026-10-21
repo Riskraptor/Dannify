@@ -55,6 +55,7 @@ import API from '/src/model/api'
 import { coverURL } from '/src/model/playlists'
 import { listensEpoch } from '/src/model/listens'
 import { PERIODS, momentIcon, momentText } from '/src/model/moments'
+import { away } from '/src/model/power'
 import { useI18n } from '/src/i18n'
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import CountUp from '/src/components/ui/CountUp.vue'
@@ -99,10 +100,12 @@ function start() {
   stop()
   if (still()) return
   timer = setInterval(() => {
+    // Nobody looking: nothing to change.
+    if (away()) return
     // One tile at a time, round the row, so they never all change at once.
     const p = PERIODS[beat++ % PERIODS.length]
     if (p !== held.value && glance.value[p].insights.filter((m) => m.kind !== 'minutes').length > 1) turn[p] += 1
-  }, 1800)
+  }, 2600)
 }
 function stop() {
   clearInterval(timer)
@@ -266,9 +269,13 @@ function dateText(iso) {
   aspect-ratio: 1;
   border-radius: 999px;
   background: radial-gradient(circle, rgb(255 255 255 / 0.35), transparent 65%);
-  animation: lately-float 7s ease-in-out infinite alternate;
-  animation-delay: calc(var(--n) * -1.6s);
+  transition: transform 0.6s ease;
   pointer-events: none;
+}
+/* Its light moves only while the pointer is on it: a page left open costs
+   nothing to look at. */
+.lately-tile:hover .lately-glow {
+  animation: lately-float 3.5s ease-in-out infinite alternate;
 }
 .lately-top {
   display: flex;

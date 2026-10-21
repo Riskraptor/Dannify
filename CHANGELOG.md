@@ -6,87 +6,29 @@ page](https://github.com/Riskraptor/Dannify/releases).
 
 ## 4.14.0
 
-Your Soundtrack for today, this week, this month and the year, a kinder
-update, a Settings worth opening, and an app that feels like one.
+Your Soundtrack for every day, week, month and year, a kinder update, and a
+Settings worth opening.
 
-- **Your music lately.** Home opens with four tiles: today, this week, this
-  month and this year, each in its own colour, with the minutes you
-  listened, the shape of your listening and its best moments taking turns.
-  Your biggest music day ever, days in a row, every day of the week so far,
-  an artist climbing to number one or coming straight into your top five, a
-  song back after months away, the artists new to you, a song on repeat:
-  Dannify finds what is worth saying and says the best first. Each tile
-  opens its own story, and the stories have tabs to move between them.
-- **Hello, by name.** Signed in to YouTube, Home and Your Soundtrack greet
-  you by your first name, the letters rising into place.
-- **Your year in music is now Your Soundtrack, and everything in it plays.**
-  Up to fourteen pages, each in its own colour: the minutes you listened
-  against last year; your top artist and their share of your listening;
-  your song of the year, when you first played it and the most times in a
-  day; your top albums; the year month by month; the hours and weekdays you
-  listen most; your longest streak and the song you could not stop
-  repeating; what you discovered; and the kind of listener you are. Today,
-  this week and this month have stories of their own: each compared with the
-  one before, told part by part (a day's morning to night, a week day by
-  day, a month week by week), with a page of its moments. Every
-  song, artist and album in it plays or opens at a click, and with the
-  music following the story, each page plays its own song. Click the bars
-  at the top to jump to any page, swipe, scroll or use Home and End, and
-  come back from a page it opened to find it where you left it. It ends on
-  a card to play or save as a playlist.
-- **Updating, kindly.** Restarting into a new version used to make the
-  window vanish mid-song and come back paused. Now the music fades, a
-  screen with a turning record says sorry and that it will only be a
-  moment, and Dannify comes back playing the same song at the same second,
-  with a cheerful hello.
-- **The lyrics version you pick stays picked.** Choose another version and
-  it is the one you get every time the song plays, found again even when
-  the list of versions changes. Saved songs can switch versions too, while
-  you are online, and the one you pick is kept beside the song.
-- **Your YouTube Music listening comes in by itself.** There is no button
-  to press. Opening Your stats, History or Your Soundtrack brings in what
-  you played elsewhere.
-- **Settings, redesigned.** Grouped and roomier, with every pane in its
-  own colour, your account at the top and your version at the foot. Long
-  pages are split: Sound (loudness, equalizer, balance, output) and Special
-  days have pages of their own. Panes slide in, the arrow keys move
-  between them, and a search marks the words it found. Language is in
-  General.
-- **Support Dannify.** A page of its own, with PayPal first: give in
-  PayPal's own secure checkout without leaving Dannify, and be thanked when
-  it goes through. In Kenya, M-PESA Till 8496746 is right there too, and
-  Ko-fi works everywhere. Plus the ways to help that cost nothing, like
-  telling a friend.
-- **Tell the developer.** Report a problem or share an idea from inside the
-  app, and it reaches the developer's inbox, with the app's details if you
-  want them to go. Sending is a slide of a music note, so nothing goes by
-  accident, and a quick check (hCaptcha, invisible for most people) keeps
-  robots out.
-- **Special days, brought to life.** Every day's weather has depth now:
-  far pieces small and faint, near ones large and soft, parting as you move
-  the mouse, with gusts of wind for what falls. Lamps, lanterns and stars
-  glow, a star shoots across on Eid, and New Year's fireworks climb on a
-  trail and burst in rings of sparks. Settings shows the next day as a card
-  in its own colours, its region right at the top, and setting up Dannify
-  asks where you are.
-- **An app, not a page.** The browser's own keys and habits are gone:
-  Ctrl+P printing, the caret browsing prompt, the link address in the
-  corner, middle-click autoscroll, links opening second windows, pictures
-  dragging off as ghosts.
-- **Lighter.** Dannify installs about 4 MB lighter: of yt-dlp's
-  extractors for 1,800 sites, only YouTube's are shipped, which is all it
-  ever used.
+- **Your music lately.** Today, this week, this month and this year on Home,
+  each with its minutes and its best moments, and each opening its own
+  story.
+- **Your Soundtrack.** Your year in music, renamed and alive, now with
+  stories for today, this week and this month too. Everything in it plays
+  at a click.
+- **Hello, by name.** Signed in to YouTube, Dannify greets you by your first
+  name.
+- **Updating, kindly.** Dannify comes back from an update playing right
+  where you were.
+- **Lyrics that stay picked.** The version you choose is the one you get
+  every time.
+- **Settings, redesigned.** Grouped and roomier, with pages of their own for
+  Sound, Special days and Support.
+- **Support Dannify, and tell the developer.** Give with PayPal without
+  leaving the app, and report a problem or share an idea from inside it.
+- **Lighter and smoother.** A smaller download, special days with more life,
+  less work for older laptops, and windows that fit small screens.
 
-Fixed:
-
-- Picking the first lyrics version was not kept, and a picked version
-  could change to another when the list was reordered.
-- The "Keep playing when I close the window" switch could show off while it
-  was on, if Settings was the first page opened.
-- A link to a Settings pane (the sound panel's "More settings") did nothing
-  if it named the pane the last such link had opened.
-- The welcome after an update could open scrolled to its foot, with its
-  title cut off.
+Plus many smaller improvements and fixes.
 
 ## 4.13.0
 

@@ -4,7 +4,7 @@
        system asks for less motion it is all there, holding still. -->
   <div
     ref="root"
-    class="ptl"
+    class="ptl decor"
     :class="[`is-${look.shape}`, `go-${look.motion}`, { 'is-contained': contain, 'is-still': still, 'is-glowing': glowing }]"
     :style="{ '--fall': fall }"
     aria-hidden="true"
@@ -32,6 +32,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { prefersStill } from '/src/model/occasions'
+import { modest } from '/src/model/power'
 
 const props = defineProps({
   // { shape, motion, palette }, as model/occasions.js gives it.
@@ -44,6 +45,8 @@ const props = defineProps({
 })
 
 const still = prefersStill()
+// A modest computer gets half the pieces: the day still shows, more lightly.
+const amount = modest ? Math.ceil(props.count / 2) : props.count
 const rnd = (a, b) => a + Math.random() * (b - a)
 // White and near-white pieces vanish on a light page: they go a pale blue
 // there (see is-pale).
@@ -143,7 +146,7 @@ const layers = computed(() => {
   let id = 0
   return DEPTHS.map((depth, i) => {
     // The near layer takes what is left, so the count is always the count.
-    const n = i === DEPTHS.length - 1 ? props.count - id : Math.round(props.count * depth.share)
+    const n = i === DEPTHS.length - 1 ? amount - id : Math.round(amount * depth.share)
     const pieces = Array.from({ length: Math.max(0, n) }, () => piece(id++, depth))
     return { depth: depth.depth, pieces }
   })
@@ -182,7 +185,7 @@ function onPointer(e) {
   })
 }
 onMounted(() => {
-  if (!still && props.look.motion !== 'burst') window.addEventListener('pointermove', onPointer, { passive: true })
+  if (!still && !modest && props.look.motion !== 'burst') window.addEventListener('pointermove', onPointer, { passive: true })
 })
 onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onPointer)
@@ -192,7 +195,7 @@ onBeforeUnmount(() => {
 // Fireworks: bursts here and there, one after another.
 const bursts = computed(() => {
   const palette = props.look.palette && props.look.palette.length ? props.look.palette : ['#ffd166']
-  const n = Math.max(3, Math.round(props.count / 10))
+  const n = Math.max(3, Math.round(amount / 10))
   return Array.from({ length: n }, (_, id) => {
     const colour = palette[id % palette.length]
     const inner = palette[(id + 1) % palette.length]

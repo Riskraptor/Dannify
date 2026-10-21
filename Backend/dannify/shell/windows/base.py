@@ -47,6 +47,7 @@ from typing import Optional
 
 from .win32 import (
     _WIN,
+    _window_scale,
     ole32,
     shell32,
 )
@@ -520,6 +521,59 @@ def _app_icon():
             logger_print('app icon unavailable:', exc)
             _APP_ICON = SystemIcons.Application
     return _APP_ICON
+
+
+def _dialog_bounds(area, size, minimum, margin):  # noqa: ANN001, ANN201
+    """Where a window of the app's own goes, and its smallest size.
+
+    *size* cut down to the screen's free *area* (left, top, width, height)
+    less *margin* all round, and centred in it, so the title bar is always on
+    the screen. Returns ``((x, y, width, height), (min_width, min_height))``.
+    """
+
+    left, top, width, height = area
+    w = max(1, min(int(size[0]), width - 2 * margin))
+    h = max(1, min(int(size[1]), height - 2 * margin))
+    x = left + max(0, (width - w) // 2)
+    y = top + max(0, (height - h) // 2)
+    return (x, y, w, h), (min(int(minimum[0]), w), min(int(minimum[1]), h))
+
+
+def _fit_dialog(form, client: tuple[int, int], minimum: tuple[int, int]) -> None:  # noqa: ANN001
+    """Size the sign-in or checkout window to the screen it opens on.
+
+    *client* and *minimum* are at 100 per cent and grow with the screen's
+    scale; the window never comes out taller or wider than the screen. A
+    fixed size in pixels was small on a high-resolution screen and ran off
+    the foot of a 1366 x 768 laptop, its title bar out of reach.
+    """
+
+    from System.Drawing import Rectangle, Size
+    from System.Windows.Forms import Cursor, FormStartPosition, Screen
+
+    try:
+        # The window's own: making its handle here puts it on the screen it
+        # opens on, at that screen's scale (DeviceDpi is still 96 this early).
+        scale = max(1.0, _window_scale(int(form.Handle.ToInt64())))
+    except Exception:
+        scale = 1.0
+    try:
+        # Where the person just clicked: the app's own screen.
+        work = Screen.FromPoint(Cursor.Position).WorkingArea
+    except Exception:
+        work = Screen.PrimaryScreen.WorkingArea
+    form.ClientSize = Size(int(client[0] * scale), int(client[1] * scale))
+    chrome_w = form.Width - form.ClientSize.Width
+    chrome_h = form.Height - form.ClientSize.Height
+    (x, y, w, h), (min_w, min_h) = _dialog_bounds(
+        (work.X, work.Y, work.Width, work.Height),
+        (form.Width, form.Height),
+        (int(minimum[0] * scale) + chrome_w, int(minimum[1] * scale) + chrome_h),
+        int(16 * scale),
+    )
+    form.StartPosition = FormStartPosition.Manual
+    form.MinimumSize = Size(min_w, min_h)
+    form.Bounds = Rectangle(x, y, w, h)
 
 
 class _State:

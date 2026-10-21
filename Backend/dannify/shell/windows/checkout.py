@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import threading
 
-from .base import _DATA_DIR, _THEME_BG, _app_icon, logger_print
+from .base import _DATA_DIR, _THEME_BG, _app_icon, _fit_dialog, logger_print
 
 # Only PayPal's own checkout pages open here: a URL from the page is checked
 # before anything is shown.
@@ -88,8 +88,8 @@ class _CheckoutWindow:
     # --- everything below runs on the checkout window's own thread ----------
     def _pump(self) -> None:
         try:
-            from System.Drawing import ColorTranslator, Size
-            from System.Windows.Forms import Application, DockStyle, Form, FormStartPosition
+            from System.Drawing import ColorTranslator
+            from System.Windows.Forms import Application, DockStyle, Form
 
             from Microsoft.Web.WebView2.WinForms import CoreWebView2CreationProperties, WebView2
         except Exception as exc:
@@ -100,9 +100,7 @@ class _CheckoutWindow:
         try:
             form = Form()
             form.Text = self._title
-            form.ClientSize = Size(540, 780)
-            form.MinimumSize = Size(440, 600)
-            form.StartPosition = FormStartPosition.CenterScreen
+            _fit_dialog(form, (540, 780), (420, 520))
             form.BackColor = ColorTranslator.FromHtml(_THEME_BG.get(self._theme, _THEME_BG['dark']))
             try:
                 form.Icon = _app_icon()

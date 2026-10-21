@@ -1,9 +1,9 @@
 <template>
   <div class="recap" :class="`is-${period}`" tabindex="-1" :style="{ '--hue': `${hue}deg` }" @wheel.passive="onWheel">
     <div class="recap-bg" aria-hidden="true" />
-    <div class="recap-glow" aria-hidden="true" />
+    <div class="recap-glow decor" aria-hidden="true" />
     <!-- The year's own covers, drifting behind the story. -->
-    <div v-if="mosaic.length" class="recap-mosaic" aria-hidden="true">
+    <div v-if="mosaic.length" class="recap-mosaic decor" aria-hidden="true">
       <span v-for="(c, i) in mosaic" :key="i" class="recap-tile" :style="{ '--i': i, backgroundImage: `url('${c}')` }" />
     </div>
 
@@ -679,15 +679,31 @@ const duration = computed(() => slide.value.ms || STEP_MS)
 const timed = computed(() => Number.isFinite(duration.value))
 const progress = computed(() => (timed.value ? Math.min(1, elapsed.value / duration.value) : 0))
 
+function ticking() {
+  return !paused.value && timed.value && state.value === 'ready'
+}
 function tick(now) {
+  raf = 0
+  if (!ticking()) {
+    lastTick = 0
+    return
+  }
   const dt = lastTick ? Math.min(100, now - lastTick) : 0
   lastTick = now
-  if (!paused.value && !holding && timed.value && state.value === 'ready') {
+  if (!holding) {
     elapsed.value += dt
     if (elapsed.value >= duration.value) go(1)
   }
-  raf = requestAnimationFrame(tick)
+  if (!raf) raf = requestAnimationFrame(tick)
 }
+// Started again whenever a page starts timing: a new page, play after pause.
+function wake() {
+  if (!raf && ticking()) {
+    lastTick = 0
+    raf = requestAnimationFrame(tick)
+  }
+}
+watch([paused, timed, state, () => slide.value.id], wake)
 
 // Press and hold pauses; a quick tap steps (the left third back, the rest on);
 // a swipe goes the way it was swiped. What can be pressed is left to itself.
@@ -709,10 +725,19 @@ function release(e) {
   go(e.clientX - box.left < box.width / 3 ? -1 : 1)
 }
 
-// A wheel or a touchpad turns the pages, one per gesture.
+// A wheel or a touchpad turns the pages, one per gesture; on a page taller
+// than the window it scrolls the page first, and turns it at the end.
 let wheeled = 0
 function onWheel(e) {
   const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+  const page = e.target && e.target.closest ? e.target.closest('.recap-slide') : null
+  if (page && d === e.deltaY && page.scrollHeight > page.clientHeight + 2) {
+    const atEnd = d > 0 ? page.scrollTop + page.clientHeight >= page.scrollHeight - 2 : page.scrollTop <= 0
+    if (!atEnd) {
+      wheeled = performance.now()
+      return
+    }
+  }
   if (Math.abs(d) < 24 || state.value !== 'ready') return
   const now = performance.now()
   if (now - wheeled < 600) return
@@ -746,11 +771,12 @@ function onKey(e) {
 }
 onMounted(() => {
   window.addEventListener('keydown', onKey, true)
-  raf = requestAnimationFrame(tick)
+  wake()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey, true)
   cancelAnimationFrame(raf)
+  raf = 0
   if (!closing) remember()
 })
 
@@ -958,6 +984,7 @@ function hourShort(h) {
   position: relative;
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 100%;
   overflow: hidden;
   color: #fff;
@@ -973,10 +1000,8 @@ function hourShort(h) {
   position: absolute;
   inset: -40%;
   background: linear-gradient(130deg, #2b0d4a, #6b1d6e 40%, #c2185b 75%, #ff6f3c);
-  will-change: transform;
   filter: hue-rotate(var(--hue));
   transition: filter 1.1s ease;
-  animation: recap-shift 18s ease-in-out infinite alternate;
   pointer-events: none;
 }
 .recap-glow {
@@ -995,10 +1020,10 @@ function hourShort(h) {
   grid-template-columns: repeat(4, 1fr);
   gap: 18px;
   padding: 6%;
-  opacity: 0.07;
+  opacity: 0.08;
   transform: rotate(-8deg) scale(1.25);
   pointer-events: none;
-  mix-blend-mode: luminosity;
+  filter: grayscale(1);
 }
 .recap-tile {
   aspect-ratio: 1;
@@ -1007,14 +1032,6 @@ function hourShort(h) {
   background-position: center;
   animation: recap-drift 16s ease-in-out infinite alternate;
   animation-delay: calc(var(--i) * -2s);
-}
-@keyframes recap-shift {
-  from {
-    transform: translate3d(-12%, -8%, 0);
-  }
-  to {
-    transform: translate3d(12%, 8%, 0);
-  }
 }
 @keyframes recap-float {
   from {
@@ -1262,9 +1279,25 @@ function hourShort(h) {
   padding: 24px clamp(20px, 6vw, 72px);
   text-align: center;
 }
+.recap-center {
+  min-height: 0;
+}
+/* A page taller than the window scrolls within itself, the bars, the tabs
+   and the arrows staying where they are; "safe" keeps its top reachable. */
 .recap-slide {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  justify-content: safe center;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.35) transparent;
   cursor: pointer;
   user-select: none;
+}
+/* Whole, never squeezed: a card that does not fit is scrolled to, not cut. */
+.recap-slide > * {
+  flex-shrink: 0;
 }
 .recap-eyebrow {
   font-size: 0.8rem;
@@ -1965,6 +1998,101 @@ button.recap-month-tile:hover,
 .slide-prev-enter-from {
   opacity: 0;
   transform: translateX(-28px);
+}
+/* A short window (a 768-pixel laptop screen, or a window made small): every
+   page a size smaller, so most fit without scrolling. */
+@media (max-height: 820px) {
+  .recap-top {
+    padding-top: 10px;
+  }
+  .recap-periods {
+    margin-top: 8px;
+  }
+  .recap-period {
+    height: 26px;
+    padding: 0 12px;
+    font-size: 0.78rem;
+  }
+  .recap-center,
+  .recap-slide {
+    gap: 8px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+  .recap-hey {
+    font-size: clamp(1.1rem, 4vh, 2rem);
+  }
+  .recap-huge {
+    font-size: clamp(2.8rem, 15vh, 9rem);
+  }
+  .recap-huge.is-words {
+    font-size: clamp(2.2rem, 11vh, 6.5rem);
+  }
+  .recap-big {
+    font-size: clamp(1.5rem, 6.5vh, 3.6rem);
+  }
+  .recap-lead {
+    font-size: clamp(0.95rem, 2.8vh, 1.5rem);
+  }
+  .recap-cover {
+    width: clamp(110px, 28vh, 240px);
+  }
+  .recap-portrait {
+    width: clamp(100px, 25vh, 220px);
+  }
+  .recap-clock {
+    width: clamp(170px, 36vh, 340px);
+  }
+  .recap-persona-mark {
+    width: 84px;
+    height: 84px;
+    border-radius: 26px;
+  }
+  .recap-moments {
+    gap: 7px;
+  }
+  .recap-moment {
+    padding: 9px 14px 9px 10px;
+    border-radius: 14px;
+  }
+  .recap-moment-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+  .recap-moment-text {
+    font-size: 0.95rem;
+  }
+  .recap-fact {
+    padding: 14px 12px;
+  }
+  .recap-fact-value {
+    font-size: 1.3rem;
+  }
+  .recap-nav {
+    padding-bottom: 10px;
+  }
+  .recap-nav .recap-btn {
+    width: 32px;
+    height: 32px;
+  }
+}
+@media (max-height: 620px) {
+  .recap-ctas {
+    margin-top: 4px;
+  }
+  .recap-cta {
+    height: 38px;
+    padding: 0 18px;
+  }
+  .recap-card-body {
+    gap: 12px;
+    padding: 14px 18px 16px;
+  }
+  .recap-card-pic {
+    width: 72px;
+    height: 72px;
+  }
 }
 @media (max-width: 700px) {
   .recap-months-grid {

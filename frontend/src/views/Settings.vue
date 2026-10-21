@@ -640,7 +640,7 @@ watch(
 }
 .setx-ver.is-new .setx-ver-dot {
   background: rgb(var(--c-accent));
-  animation: setx-ping 1.8s ease-out infinite;
+  animation: setx-ping 1.8s ease-out 5;
 }
 @keyframes setx-ping {
   0% {

@@ -20,12 +20,12 @@ def _load(*names: str) -> dict:
 
 def test_only_paypal_checkouts_open_in_the_window():
     allowed = _load('_ALLOWED', 'allowed')['allowed']
-    assert allowed('https://www.paypal.com/ncp/payment/PLB-6P7SEVNLQBY9')
+    assert allowed('https://www.paypal.com/ncp/payment/PLB-BPX9BPVQNRG8')
     assert allowed('https://www.paypal.com/paypalme/dkavangi')
     for url in (
-        'http://www.paypal.com/ncp/payment/PLB-6P7SEVNLQBY9',
-        'https://www.paypal.com.evil.example/ncp/payment/PLB-6P7SEVNLQBY9',
-        'https://evil.example/?https://www.paypal.com/ncp/payment/PLB-6P7SEVNLQBY9',
+        'http://www.paypal.com/ncp/payment/PLB-BPX9BPVQNRG8',
+        'https://www.paypal.com.evil.example/ncp/payment/PLB-BPX9BPVQNRG8',
+        'https://evil.example/?https://www.paypal.com/ncp/payment/PLB-BPX9BPVQNRG8',
         'https://www.paypal.com/signin',
         'javascript:alert(1)',
         '',
@@ -36,3 +36,21 @@ def test_only_paypal_checkouts_open_in_the_window():
 def test_paying_is_seen_by_the_thank_you_address():
     ns = _load('RETURN_PREFIX')
     assert ns['RETURN_PREFIX'] == 'https://github.com/Riskraptor/Dannify'
+
+
+def test_the_window_always_fits_the_screen():
+    bounds = _load('_dialog_bounds')['_dialog_bounds']
+    # A big screen: the size asked for, in the middle.
+    (x, y, w, h), smallest = bounds((0, 0, 1920, 1040), (556, 819), (436, 559), 16)
+    assert (w, h) == (556, 819) and x == (1920 - 556) // 2 and y == (1040 - 819) // 2
+    assert smallest == (436, 559)
+    # A 1366 x 768 laptop: cut to the free area, the title bar on screen.
+    (x, y, w, h), smallest = bounds((0, 0, 1366, 728), (556, 819), (436, 559), 16)
+    assert h == 728 - 32 and y == 16 and y + h <= 728
+    assert smallest[1] <= h
+    # A second screen to the left of the first, coordinates negative.
+    (x, y, w, h), _ = bounds((-1280, 0, 1280, 984), (556, 819), (436, 559), 16)
+    assert -1280 <= x and x + w <= 0
+    # Smaller than the smallest size: the smallest gives way.
+    (_, _, w, h), smallest = bounds((0, 0, 400, 500), (556, 819), (436, 559), 16)
+    assert smallest == (w, h) == (368, 468)
