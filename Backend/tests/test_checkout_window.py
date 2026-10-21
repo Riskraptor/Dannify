@@ -20,12 +20,12 @@ def _load(*names: str) -> dict:
 
 def test_only_paypal_checkouts_open_in_the_window():
     allowed = _load('_ALLOWED', 'allowed')['allowed']
-    assert allowed('https://www.paypal.com/ncp/payment/PLB-BPX9BPVQNRG8')
+    assert allowed('https://www.paypal.com/ncp/payment/PLB-LCYXAHFS4UA3')
     assert allowed('https://www.paypal.com/paypalme/dkavangi')
     for url in (
-        'http://www.paypal.com/ncp/payment/PLB-BPX9BPVQNRG8',
-        'https://www.paypal.com.evil.example/ncp/payment/PLB-BPX9BPVQNRG8',
-        'https://evil.example/?https://www.paypal.com/ncp/payment/PLB-BPX9BPVQNRG8',
+        'http://www.paypal.com/ncp/payment/PLB-LCYXAHFS4UA3',
+        'https://www.paypal.com.evil.example/ncp/payment/PLB-LCYXAHFS4UA3',
+        'https://evil.example/?https://www.paypal.com/ncp/payment/PLB-LCYXAHFS4UA3',
         'https://www.paypal.com/signin',
         'javascript:alert(1)',
         '',

@@ -38,7 +38,7 @@ _DEFAULTS: dict[str, Any] = {
     'mpesa': {'kind': 'till', 'number': '8496746'},
     # A paypal.me name, or a PayPal payment link
     # (https://www.paypal.com/ncp/payment/...).
-    'paypal': 'https://www.paypal.com/ncp/payment/PLB-BPX9BPVQNRG8',
+    'paypal': 'https://www.paypal.com/ncp/payment/PLB-LCYXAHFS4UA3',
 }
 
 _config: dict[str, Any] = dict(_DEFAULTS)

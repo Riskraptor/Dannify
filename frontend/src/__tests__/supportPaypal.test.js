@@ -9,7 +9,7 @@ vi.mock('/src/model/api', () => ({ default: { getSupportConfig: vi.fn(() => Prom
 vi.mock('/src/model/toast', () => ({ toast: (msg, opts) => toasts.push({ msg, opts }) }))
 vi.mock('/src/i18n', () => ({ t: (key) => key }))
 
-const LINK = 'https://www.paypal.com/ncp/payment/PLB-BPX9BPVQNRG8'
+const LINK = 'https://www.paypal.com/ncp/payment/PLB-LCYXAHFS4UA3'
 
 let support
 beforeEach(async () => {
