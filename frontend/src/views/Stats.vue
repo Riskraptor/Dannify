@@ -28,17 +28,15 @@
         <button class="btn btn-pill h-7 text-xs" @click="listens.setKeeping(true)">{{ t('stats.turnOn') }}</button>
       </div>
 
-      <!-- YouTube Music's history counts here too (model/ytmSync.js). -->
-      <div v-if="listens.keeping.value && account.signedIn.value && ytmSyncOn" class="stats-source">
+      <!-- YouTube Music's history counts here too, brought in by itself as
+           the page opens (model/ytmSync.js): nothing to press. -->
+      <div v-if="listens.keeping.value && account.signedIn.value && ytmSyncOn" class="stats-source is-quiet">
         <Icon icon="ph:youtube-logo-fill" class="stats-source-mark h-4 w-4 shrink-0" />
-        <p class="min-w-0 flex-1">
-          {{ t('stats.withYouTube') }}<template v-if="ytmStatus.last"> · {{ t('stats.synced', { when: syncedAgo(ytmStatus.last, clock) }) }}</template>
-        </p>
-        <button class="btn btn-pill h-7 text-xs" :disabled="ytmSyncing" @click="syncFromYouTube">
-          <span v-if="ytmSyncing" class="spinner h-3.5 w-3.5" />
-          <Icon v-else icon="ph:arrows-clockwise" class="h-3.5 w-3.5" />
-          {{ t('stats.syncNow') }}
-        </button>
+        <p class="min-w-0 flex-1">{{ t('stats.withYouTube') }}</p>
+        <span v-if="ytmSyncing" class="stats-source-busy" :title="t('stats.bringingIn')">
+          <span class="spinner h-3.5 w-3.5" />
+          {{ t('stats.bringingIn') }}
+        </span>
       </div>
       <div v-else-if="listens.keeping.value && !account.signedIn.value" class="stats-source">
         <Icon icon="ph:youtube-logo-fill" class="stats-source-mark h-4 w-4 shrink-0" />
@@ -228,8 +226,8 @@
 
 <script setup>
 import { useAccount } from '/src/model/account'
-import { syncFromYouTube, syncedAgo, ytmStatus, ytmSyncOn, ytmSyncing } from '/src/model/ytmSync'
-import { ref, shallowRef, computed, watch, onActivated, onBeforeUnmount, onDeactivated } from 'vue'
+import { syncSoon, ytmSyncOn, ytmSyncing } from '/src/model/ytmSync'
+import { ref, shallowRef, computed, watch, onActivated, onDeactivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useListens } from '/src/model/listens'
@@ -263,9 +261,6 @@ import MediaCard from '/src/components/MediaCard.vue'
 const { t, locale } = useI18n()
 // YouTube Music's history, counted here too, and when it was brought in.
 const account = useAccount()
-const clock = ref(Date.now())
-const ticking = setInterval(() => (clock.value = Date.now()), 30000)
-onBeforeUnmount(() => clearInterval(ticking))
 const router = useRouter()
 const ui = useUi()
 const lib = useLibrary()
@@ -326,6 +321,8 @@ async function load() {
   }
 }
 watch(days, load, { immediate: true })
+// What was played on YouTube Music meanwhile comes in as the page opens.
+syncSoon()
 
 // A song that ends while the page is open is counted on it there and then;
 // one that ends while it is away, when it comes back.
@@ -335,6 +332,7 @@ watch(listens.listensEpoch, () => {
 })
 onActivated(() => {
   active = true
+  syncSoon()
   if (seenEpoch !== listens.listensEpoch.value) load()
 })
 onDeactivated(() => {
@@ -455,6 +453,17 @@ function openAlbum(a) {
 </script>
 
 <style scoped>
+.stats-source.is-quiet {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.stats-source-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgb(var(--c-fg) / var(--fg-55));
+}
 .stats-source {
   display: flex;
   align-items: center;

@@ -173,6 +173,31 @@ def _is_ytdlp(name):
     return name == 'yt_dlp' or name.startswith('yt_dlp.')
 
 
+# yt-dlp knows some 1,800 sites, and Dannify only ever asks it about YouTube
+# (playing, a channel's uploads) and a direct media address (saving from a
+# resolved stream: the generic extractor). Its extractors are lazy, each
+# site's module imported only when a link from that site is opened, so the
+# rest are left out: about 4 MB less to install, and to download in every
+# update that brings a new yt-dlp. What is kept is what playing, a channel
+# and saving were seen to load, and the YouTube package whole.
+_YTDLP_EXTRACTORS_KEPT = {
+    'extractors', 'lazy_extractors', 'common', 'commonprotocols', 'commonmistakes',
+    'generic', 'adobepass', 'afreecatv', 'openload', 'youtube',
+}
+
+
+def _unused_extractor(name):
+    parts = name.split('.')
+    return len(parts) > 2 and parts[:2] == ['yt_dlp', 'extractor'] and parts[2] not in _YTDLP_EXTRACTORS_KEPT
+
+
+# Without the lazy index every site's module is imported up front: a bundle
+# without them would not start. Better the build fails than that ships.
+assert any(e[0] == 'yt_dlp.extractor.lazy_extractors' for e in a.pure), 'yt-dlp has no lazy extractors'
+_before = len(a.pure)
+a.pure = [e for e in a.pure if not _unused_extractor(e[0])]
+print(f'yt-dlp: {_before - len(a.pure)} unused extractor modules left out')
+
 a.pure, _app_pyz = split_out(a.pure, _is_app, 'app.pyz')
 a.pure, _ytdlp_pyz = split_out(a.pure, _is_ytdlp, 'ytdlp.pyz')
 a.datas += [('app.pyz', _app_pyz, 'DATA'), ('ytdlp.pyz', _ytdlp_pyz, 'DATA')]

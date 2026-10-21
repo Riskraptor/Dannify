@@ -153,10 +153,34 @@
   color: rgb(var(--c-fg) / var(--fg-55));
 }
 .settings .group-title {
-  margin: 0 0 8px 4px;
-  font-size: 13px;
-  font-weight: 700;
-  color: rgb(var(--c-fg) / var(--fg-60));
+  margin: 0 0 9px 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgb(var(--c-fg) / var(--fg-50));
+}
+/* A search gathers rows from every pane: each group says whose it is, in
+   that pane's colour. */
+.is-searching .set-pane > section > .group-title::before {
+  content: var(--pane-name) '  ›  ';
+  color: rgb(var(--tone, var(--c-accent)));
+}
+/* A section named like its pane needs no title under the pane's own header;
+   a search, gathering rows from every pane, shows it again. */
+.setx:not(.is-searching) .set-pane > section.is-pane-named > .group-title {
+  display: none;
+}
+.is-searching .set-pane > section.is-pane-named > .group-title {
+  color: rgb(var(--tone, var(--c-accent)));
+}
+.is-searching .set-pane > section.is-pane-named > .group-title::before {
+  content: none;
+}
+/* The words a search found, marked in the rows (see markHits). */
+::highlight(settings-hit) {
+  background-color: rgb(var(--c-accent) / 0.34);
+  color: rgb(var(--c-fg));
 }
 /* The palette row always stacks: seven swatches never sit sensibly beside a
    label in a pane this narrow. */
@@ -362,7 +386,6 @@
 }
 .settings .row > .row-icon {
   align-self: flex-start;
-  margin-top: 2px;
 }
 [data-mode='light'] .settings .row {
   background: rgb(var(--c-raised));
@@ -373,11 +396,22 @@
 .settings .row.is-disabled {
   opacity: 0.55;
 }
+/* Each row's mark on a small square of its pane's colour, so a pane reads
+   as one thing and a search's rows say where they live. */
 .settings .row-icon {
-  width: 20px;
-  height: 20px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
-  color: rgb(var(--c-fg) / 0.75);
+  border-radius: 10px;
+}
+.settings svg.row-icon {
+  padding: 8px;
+  color: color-mix(in srgb, rgb(var(--tone, var(--c-accent))) 78%, rgb(var(--c-fg)));
+  background: rgb(var(--tone, var(--c-accent)) / 0.15);
+}
+[data-mode='light'] .settings svg.row-icon {
+  color: color-mix(in srgb, rgb(var(--tone, var(--c-accent))) 82%, #000);
+  background: rgb(var(--tone, var(--c-accent)) / 0.13);
 }
 .settings .row-text {
   flex: 1 1 240px;
@@ -432,8 +466,8 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   overflow: hidden;
   color: #fff;

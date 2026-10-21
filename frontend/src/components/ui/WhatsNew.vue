@@ -69,7 +69,7 @@ const ICONS = [
   [/special days|christmas|festive|new year/i, 'ph:confetti'],
   [/^your library|library, tidier|\bpin\b/i, 'ph:books'],
   [/made for you|\bmix(es)?\b/i, 'ph:music-notes-plus'],
-  [/year in music|recap/i, 'ph:confetti'],
+  [/soundtrack|year in music|recap/i, 'ph:confetti'],
   [/now playing/i, 'ph:play-circle'],
   [/keeps? going|autoplay|never stops/i, 'ph:infinity'],
   [/album/i, 'ph:vinyl-record'],

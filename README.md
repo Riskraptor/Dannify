@@ -18,9 +18,9 @@ outside the app can reach.
 
 | | |
 | --- | --- |
-| ![Made for you: mixes on Home that keep up with your listening](docs/screenshots/made-for-you.png) | ![Your year in music, told as a story](docs/screenshots/year-in-music.png) |
+| ![Your music lately and Made for you: today, this week, this month and this year at a glance, and mixes that keep up with your listening](docs/screenshots/made-for-you.png) | ![Your Soundtrack: your year in music, told as a story you can play](docs/screenshots/year-in-music.png) |
 | ![Now Playing, with synced lyrics](docs/screenshots/now-playing.png) | ![Your stats: time listened, streaks and a chart of every day](docs/screenshots/stats.png) |
-| ![Settings: categories down the side, every account in one place](docs/screenshots/settings.png) | ![The welcome after a big update](docs/screenshots/welcome.png) |
+| ![Settings: each pane in its own colour, with your account and version down the side](docs/screenshots/settings.png) | ![The welcome after a big update](docs/screenshots/welcome.png) |
 | ![A special day: Diwali, with its lamps and its music](docs/screenshots/special-day.png) | ![Lyrics timing: click the line you hear and the words line up](docs/screenshots/lyrics-timing.png) |
 | ![Albums in your library](docs/screenshots/albums.png) | ![An album, its songs in album order](docs/screenshots/album.png) |
 | ![An artist page](docs/screenshots/artist.png) | ![Search](docs/screenshots/search.png) |
@@ -47,17 +47,29 @@ listen at and your top songs, artists and albums. It stays on your computer;
 connect ListenBrainz in Settings, Accounts and your listens go to your profile
 there too. Signed in with Google, what you play on YouTube Music elsewhere
 (your phone, the web, a speaker) counts here as well, so a copy installed
-today starts with all your listening and keeps up by itself.
+today starts with all your listening. It comes in by itself whenever you
+open Your stats, History or Your Soundtrack, with nothing to press.
 
 From that history Home makes you mixes that keep themselves up to date: On
-Repeat, Top This Month, Forgotten Favourites and Recently Added. Your year in
-music tells the story of the year: minutes, top artist, top songs, the time
-of day you listen most and the artists you discovered.
+Repeat, Top This Month, Forgotten Favourites and Recently Added. Your
+Soundtrack tells the story of your year in music in up to fourteen pages:
+your minutes against last year, your top artist and song and albums, your
+year month by month, the hours and weekdays you listen most, your longest
+streak, the song you could not stop repeating, what you discovered and the
+kind of listener you are. Everything in it plays at a click, the music can
+follow the story page by page, and it ends on a card you can play or save
+as a playlist, or share as a picture. Today, this week and this month (and
+the ones just gone) get stories of their own,
+and Home's Your music lately shows all four at a glance: the minutes, the
+shape of your listening, and the moments worth telling, like your biggest
+music day ever, days in a row, an artist climbing to number one or a song
+back after months away. Signed in to YouTube, it all says hello by name.
 
 Lyrics scroll in a side panel and follow the song, lighting up word by word
 as each line is sung. If they run early or late, click the line you are
 hearing and they line up; if there are several versions, pick the one that
-fits best. If a track has none, there is an editor for writing them (a chorus
+fits best, for a saved song too, and it is kept beside the song. If a track
+has none, there is an editor for writing them (a chorus
 typed once and repeated) and tapping the timing in, and what you write goes
 out to everyone else playing that song.
 
@@ -76,20 +88,23 @@ ones you play most and they stay at the top.
 It celebrates the special days of your year, wherever you are: the New Year,
 Lunar New Year, Ramadan and Eid, Holi, Easter, Vesak, Diwali, Hanukkah,
 Christmas and many more on your country's own dates, and your country's own
-days in its flag's colours. Each has its own look (snow, fireworks, lanterns,
-lights, petals, confetti) in the app, on the startup screen and in the
-installer, a greeting, and music for the day on Home. It works it all out
-offline, from this computer's time zone and region, which Settings,
-Appearance shows and lets you change, with the year's special days listed.
+days in its flag's colours. Each has its own look (snow drifting in depth,
+fireworks that climb and burst, glowing lanterns and lamps, shooting stars,
+petals, confetti) in the app, on the startup screen and in the installer, a
+greeting, and music for the day on Home. It works it all out offline, from
+this computer's time zone and region. Setting Dannify up asks where you
+are, and Settings, Special days lets you change it, with the next special
+day shown in its own colours and the rest of the year after it.
 Nothing moves when the system asks for reduced motion. There is a welcome
 after each big update too.
 
 It speaks English, Français, Español, Português, Deutsch and Kiswahili. It
 starts in your computer's language and follows it, or pick one in Settings,
-Appearance.
+General.
 
 It picks up where you left off. Close it and the queue and the track you were
-on come back next launch, paused at the second you stopped.
+on come back next launch, paused at the second you stopped. Restart it into
+an update and the song plays on from the same second.
 
 Closing the window keeps the music going. It drops to the tray instead of
 quitting.
@@ -133,16 +148,18 @@ a config fix, not a rebuild.
 Dannify is made by one person and gets better with the help of the people who
 use it:
 
-- **Something went wrong?** [Open an issue](https://github.com/Riskraptor/Dannify/issues/new/choose)
-  and say what happened.
-- **An idea?** Open an issue, or talk about it in
-  [Discussions](https://github.com/Riskraptor/Dannify/discussions).
+- **Something went wrong, or an idea?** Tell the developer straight from
+  the app: Settings, About, Report a problem, or Settings, Support Dannify,
+  Share an idea. You can also
+  [open an issue](https://github.com/Riskraptor/Dannify/issues/new/choose) or talk
+  about it in [Discussions](https://github.com/Riskraptor/Dannify/discussions).
 - **Your language?** Dannify speaks six; help it speak yours, or put a word
   right.
 - **Lyrics missing or out of time?** Add or improve them right in the lyrics
   panel; everyone who plays the song gets them.
-- **Enjoying it?** Star the repository, tell a friend, or
-  [buy me a coffee](https://ko-fi.com/dkavangi).
+- **Enjoying it?** Star the repository, tell a friend, or support Dannify
+  from Settings, Support Dannify (PayPal right inside the app, Ko-fi, or
+  M-Pesa in Kenya), or [buy me a coffee](https://ko-fi.com/dkavangi).
 
 How to do each is in [CONTRIBUTING.md](CONTRIBUTING.md).
 

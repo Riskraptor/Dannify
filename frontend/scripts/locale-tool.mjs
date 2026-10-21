@@ -17,7 +17,10 @@ const LOCALES = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'i18n
 
 async function load(code) {
   const mod = await import(pathToFileURL(join(LOCALES, `${code}.js`)).href)
-  return mod.default
+  if (code !== 'en') return mod.default
+  // English is in two files (see en-more.js): read whole.
+  const more = await import(pathToFileURL(join(LOCALES, 'en-more.js')).href)
+  return { ...mod.default, ...more.default }
 }
 
 function flatten(obj, prefix = '', out = {}) {

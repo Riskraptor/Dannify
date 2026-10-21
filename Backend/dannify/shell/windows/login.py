@@ -11,6 +11,7 @@ from .base import (
     _SIGNED_IN_HOSTS,
     _THEME_BG,
     _app_icon,
+    _fit_dialog,
     logger_print,
 )
 
@@ -83,14 +84,13 @@ class _LoginWindow:
     # --- everything below runs on the login window's own thread ------------
     def _pump(self) -> None:
         try:
-            from System.Drawing import ColorTranslator, Size
+            from System.Drawing import ColorTranslator
             from System.Threading.Tasks import TaskScheduler
             import System.Windows.Forms as WinForms
             from System.Windows.Forms import (
                 Application,
                 DockStyle,
                 Form,
-                FormStartPosition,
             )
 
             from Microsoft.Web.WebView2.WinForms import (
@@ -107,9 +107,7 @@ class _LoginWindow:
 
             form = Form()
             form.Text = 'Sign in with Google'
-            form.ClientSize = Size(520, 720)
-            form.MinimumSize = Size(420, 560)
-            form.StartPosition = FormStartPosition.CenterScreen
+            _fit_dialog(form, (520, 720), (400, 520))
             form.BackColor = ColorTranslator.FromHtml(_THEME_BG[self._theme])
             try:
                 form.Icon = _app_icon()

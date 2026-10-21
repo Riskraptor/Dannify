@@ -15,3 +15,6 @@
 
 # Shell scripts run inside Linux containers.
 *.sh text eol=lf
+
+# Signed byte for byte (config/README.md): never converted.
+config/support-live.json -text

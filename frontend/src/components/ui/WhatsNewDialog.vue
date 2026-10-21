@@ -82,7 +82,10 @@ watch(
     }
     giveBack = rememberFocus()
     await nextTick()
-    ;(okBtn.value || box.value)?.focus()
+    // Focus the button without scrolling to it: a long list of what is new
+    // opened scrolled to its foot, its top and title cut off.
+    ;(okBtn.value || box.value)?.focus({ preventScroll: true })
+    if (box.value) box.value.scrollTop = 0
   },
   // Loaded the first time it is shown (App.vue), so already showing then.
   { immediate: true }
@@ -165,14 +168,25 @@ watch(
   top: 14px;
   right: 14px;
 }
+/* The button stays in reach at the foot while a long list scrolls under it. */
 .wnd-actions {
+  position: sticky;
+  bottom: -20px;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
-  margin-top: 18px;
+  margin: 6px -24px -20px;
+  padding: 14px 24px 20px;
+  background: linear-gradient(to bottom, rgb(var(--c-elev) / 0), rgb(var(--c-elev)) 45%);
 }
 @media (width <= 560px) {
   .wnd {
     padding: 20px 16px 16px;
+  }
+  .wnd-actions {
+    bottom: -16px;
+    margin: 6px -16px -16px;
+    padding: 14px 16px 16px;
   }
 }
 </style>

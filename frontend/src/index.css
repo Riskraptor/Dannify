@@ -961,3 +961,10 @@
 .soft-leave-to {
   opacity: 0;
 }
+
+/* While Dannify is not the window in front, what only decorates (a special
+   day's weather, the story's moving light) holds still: model/power.js. */
+html[data-away] .decor,
+html[data-away] .decor * {
+  animation-play-state: paused !important;
+}

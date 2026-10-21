@@ -107,7 +107,7 @@ function onClick(e) {
   background: rgb(var(--c-accent));
   animation:
     upd-in 0.35s var(--ease-out),
-    upd-breathe 2.6s ease-in-out 0.4s infinite;
+    upd-breathe 2.6s ease-in-out 0.4s 6;
 }
 .upd-ready:hover {
   filter: brightness(1.08);

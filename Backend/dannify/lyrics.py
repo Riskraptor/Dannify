@@ -782,11 +782,8 @@ def fetch_structured(
 _versions_cache: "_OrderedDict[str, list[Lyrics]]" = _OrderedDict()
 
 
-def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return all synced versions as ``[{synced:[...], plain, has}, ...]``.
-
-    Cached in memory so the multi-query lrclib sweep is paid once per song.
-    """
+def _versions_of(song: dict[str, Any]) -> list[Lyrics]:
+    """Every synced version of *song*, best first; one lookup per song."""
 
     key = _cache_key(song)
     named = bool(_base_key(song).strip('|'))
@@ -800,7 +797,50 @@ def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
                 _versions_cache.move_to_end(key)
                 while len(_versions_cache) > 512:
                     _versions_cache.popitem(last=False)
+    return cached
 
+
+def version_text(song: dict[str, Any], index: int) -> Optional[str]:
+    """Version *index*'s own LRC text, to keep beside a saved song."""
+
+    versions = [v for v in _versions_of(song) if parse_lrc(v.synced)]
+    if 0 <= index < len(versions):
+        return versions[index].synced
+    return None
+
+
+def same_words(a: Optional[str], b: Optional[str]) -> bool:
+    """Whether two LRC texts are the same lyrics, timed the same way."""
+
+    def norm(text: Optional[str]) -> list[tuple[float, str]]:
+        return [(round(l['time'], 1), _norm(l['text'])) for l in parse_lrc(text)]
+
+    na, nb = norm(a), norm(b)
+    return bool(na) and na == nb
+
+
+def fingerprint(lines: Any) -> str:
+    """A short mark of one version's words and timing, so a choice can be
+    found again wherever that version lands in the list next time (the list
+    is re-ranked, and lrclib gains uploads). Takes parsed lines or LRC text."""
+
+    import hashlib  # noqa: PLC0415
+
+    if isinstance(lines, str) or lines is None:
+        lines = parse_lrc(lines)
+    body = '\n'.join(f"{round(float(l['time']), 1)}|{_norm(l['text'])}" for l in lines)
+    if not body:
+        return ''
+    return hashlib.sha1(body.encode('utf-8')).hexdigest()[:16]
+
+
+def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return all synced versions as ``[{synced:[...], plain, has}, ...]``.
+
+    Cached in memory so the multi-query lrclib sweep is paid once per song.
+    """
+
+    cached = _versions_of(song)
     out: list[dict[str, Any]] = []
     for ver in cached:
         lines = parse_lrc(ver.synced)
@@ -809,5 +849,8 @@ def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
         plain = ver.plain or (
             '\n'.join(l['text'] for l in lines if l['text']) or None
         )
-        out.append({'synced': lines, 'plain': plain, 'has': True, 'about': ver.about or {}})
+        out.append({
+            'synced': lines, 'plain': plain, 'has': True, 'about': ver.about or {},
+            'pick': fingerprint(lines),
+        })
     return out

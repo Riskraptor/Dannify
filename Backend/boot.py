@@ -25,6 +25,11 @@ for _archive in ('ytdlp.pyz', 'app.pyz'):
     if os.path.isfile(_path):
         sys.path.insert(0, _path)
 
+# The shipped yt-dlp holds only the extractors the app uses (dannify.spec),
+# found through its lazy index; this variable would make it import every
+# site's module at once, and those are not there.
+os.environ.pop('YTDLP_NO_LAZY_EXTRACTORS', None)
+
 import desktop  # noqa: E402
 
 desktop.entry()

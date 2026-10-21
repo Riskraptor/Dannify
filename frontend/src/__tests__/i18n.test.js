@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import en from '../i18n/locales/en.js'
+import enCore from '../i18n/locales/en.js'
+import enMore from '../i18n/locales/en-more.js'
 import fr from '../i18n/locales/fr.js'
 import es from '../i18n/locales/es.js'
 import pt from '../i18n/locales/pt.js'
 import de from '../i18n/locales/de.js'
 import sw from '../i18n/locales/sw.js'
+
+// English is in two files (i18n/locales/en-more.js): whole here.
+const en = { ...enCore, ...enMore }
 
 /**
  * Recursively collect every dotted key path in an i18n object.

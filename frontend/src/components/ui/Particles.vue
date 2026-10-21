@@ -3,25 +3,36 @@
        alone: each piece is moved or faded, never repainted. For someone whose
        system asks for less motion it is all there, holding still. -->
   <div
-    class="ptl"
-    :class="[`is-${look.shape}`, `go-${look.motion}`, { 'is-contained': contain, 'is-still': still }]"
+    ref="root"
+    class="ptl decor"
+    :class="[`is-${look.shape}`, `go-${look.motion}`, { 'is-contained': contain, 'is-still': still, 'is-glowing': glowing }]"
     :style="{ '--fall': fall }"
     aria-hidden="true"
   >
     <template v-if="look.motion === 'burst'">
+      <!-- Each firework: a rocket climbing on its trail, a flash, then two
+           rings of streaking sparks that droop as they fade. -->
       <span v-for="b in bursts" :key="b.id" class="ptl-burst" :style="b.style">
-        <i v-for="s in b.sparks" :key="s.id" class="ptl-spark" :style="s.style" />
+        <i class="ptl-rocket" />
+        <i class="ptl-flash" />
+        <i v-for="s in b.sparks" :key="s.id" class="ptl-spark" :class="{ 'is-inner': s.inner }" :style="s.style" />
       </span>
     </template>
     <template v-else>
-      <i v-for="p in pieces" :key="p.id" class="ptl-p" :class="{ 'is-pale': p.pale }" :style="p.style" />
+      <!-- Three depths: far pieces small, slow and faint, near ones large and
+           quick, each layer drawn a little apart as the pointer moves. -->
+      <div v-for="layer in layers" :key="layer.depth" class="ptl-layer" :class="`is-${layer.depth}`">
+        <i v-for="p in layer.pieces" :key="p.id" class="ptl-p" :class="{ 'is-pale': p.pale }" :style="p.style"><b class="ptl-shape" /></i>
+      </div>
+      <i v-for="s in shooting" :key="'s' + s.id" class="ptl-shoot" :style="s.style" />
     </template>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { prefersStill } from '/src/model/occasions'
+import { modest } from '/src/model/power'
 
 const props = defineProps({
   // { shape, motion, palette }, as model/occasions.js gives it.
@@ -34,6 +45,8 @@ const props = defineProps({
 })
 
 const still = prefersStill()
+// A modest computer gets half the pieces: the day still shows, more lightly.
+const amount = modest ? Math.ceil(props.count / 2) : props.count
 const rnd = (a, b) => a + Math.random() * (b - a)
 // White and near-white pieces vanish on a light page: they go a pale blue
 // there (see is-pale).
@@ -95,54 +108,124 @@ const SECONDS = {
   drift: [5, 9],
 }
 const SPINS = new Set(['ribbon', 'leaf', 'petal', 'flower'])
+// What gives off light, and glows: lamps, lanterns, flames, stars, the moon.
+const GLOWS = new Set(['lantern', 'flame', 'star', 'crescent', 'lotus'])
+// How far away: a share of the pieces at each depth, and how each looks there.
+const DEPTHS = [
+  { depth: 'far', share: 0.45, size: 0.6, speed: 1.5, alpha: 0.55 },
+  { depth: 'mid', share: 0.35, size: 1, speed: 1, alpha: 0.85 },
+  { depth: 'near', share: 0.2, size: 1.45, speed: 0.78, alpha: 1 },
+]
+const glowing = computed(() => GLOWS.has(props.look.shape))
 
-const pieces = computed(() => {
+function piece(id, depth) {
   const { shape, motion } = props.look
   const palette = props.look.palette && props.look.palette.length ? props.look.palette : ['#ffffff']
   const [s0, s1] = SIZES[shape] || [8, 14]
   const [d0, d1] = SECONDS[motion] || SECONDS.fall
-  return Array.from({ length: props.count }, (_, id) => {
-    const colour = palette[id % palette.length]
-    const style = {
-      '--x': `${rnd(0, 100).toFixed(1)}%`,
-      '--y': `${rnd(2, 92).toFixed(1)}%`,
-      '--drift': `${rnd(-40, 40).toFixed(0)}px`,
-      '--d': `${rnd(d0, d1).toFixed(1)}s`,
-      // The side-to-side, the glint, the beat of a wing: a period of its own.
-      '--sd': `${rnd(2.2, 4.5).toFixed(1)}s`,
-      '--delay': `${(-rnd(0, 14)).toFixed(1)}s`,
-      '--o': (shape === 'dot' ? rnd(0.45, 0.9) : shape === 'puff' ? rnd(0.18, 0.32) : rnd(0.75, 1)).toFixed(2),
-      '--s': `${rnd(s0, s1).toFixed(1)}px`,
-      '--r0': `${rnd(-30, 30).toFixed(0)}deg`,
-      '--r': `${rnd(-40, 40) + (SPINS.has(shape) ? rnd(300, 720) : 0)}deg`,
-      '--c': colour,
-    }
-    return { id, style, pale: pale(colour) }
+  const colour = palette[id % palette.length]
+  const base = shape === 'dot' ? rnd(0.5, 0.95) : shape === 'puff' ? rnd(0.18, 0.32) : rnd(0.8, 1)
+  const style = {
+    '--x': `${rnd(0, 100).toFixed(1)}%`,
+    '--y': `${rnd(2, 92).toFixed(1)}%`,
+    '--drift': `${(rnd(-40, 40) * depth.size).toFixed(0)}px`,
+    '--d': `${(rnd(d0, d1) * depth.speed).toFixed(1)}s`,
+    // The side-to-side, the glint, the beat of a wing: a period of its own.
+    '--sd': `${rnd(2.2, 4.5).toFixed(1)}s`,
+    '--delay': `${(-rnd(0, 14)).toFixed(1)}s`,
+    '--o': (base * depth.alpha).toFixed(2),
+    '--s': `${(rnd(s0, s1) * depth.size).toFixed(1)}px`,
+    '--r0': `${rnd(-30, 30).toFixed(0)}deg`,
+    '--r': `${rnd(-40, 40) + (SPINS.has(shape) ? rnd(300, 720) : 0)}deg`,
+    '--c': colour,
+  }
+  return { id, style, pale: pale(colour) }
+}
+
+const layers = computed(() => {
+  let id = 0
+  return DEPTHS.map((depth, i) => {
+    // The near layer takes what is left, so the count is always the count.
+    const n = i === DEPTHS.length - 1 ? amount - id : Math.round(amount * depth.share)
+    const pieces = Array.from({ length: Math.max(0, n) }, () => piece(id++, depth))
+    return { depth: depth.depth, pieces }
   })
+})
+
+// Now and then a star shoots across, on the nights of stars and the moon.
+const shooting = computed(() => {
+  if (props.look.shape !== 'star' && props.look.shape !== 'crescent') return []
+  return Array.from({ length: 2 }, (_, id) => {
+    const period = rnd(9, 15)
+    return {
+      id,
+      style: {
+        '--x': `${rnd(5, 60).toFixed(1)}%`,
+        '--y': `${rnd(4, 40).toFixed(1)}%`,
+        '--d': `${period.toFixed(1)}s`,
+        '--delay': `${(-rnd(0, period)).toFixed(1)}s`,
+      },
+    }
+  })
+})
+
+// The pointer moves, and the layers part a little: the near one most.
+const root = ref(null)
+let frame = 0
+let pointer = null
+function onPointer(e) {
+  pointer = e
+  if (frame) return
+  frame = requestAnimationFrame(() => {
+    frame = 0
+    const el = root.value
+    if (!el || !pointer) return
+    el.style.setProperty('--mx', ((pointer.clientX / window.innerWidth - 0.5) * 2).toFixed(3))
+    el.style.setProperty('--my', ((pointer.clientY / window.innerHeight - 0.5) * 2).toFixed(3))
+  })
+}
+onMounted(() => {
+  if (!still && !modest && props.look.motion !== 'burst') window.addEventListener('pointermove', onPointer, { passive: true })
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('pointermove', onPointer)
+  cancelAnimationFrame(frame)
 })
 
 // Fireworks: bursts here and there, one after another.
 const bursts = computed(() => {
   const palette = props.look.palette && props.look.palette.length ? props.look.palette : ['#ffd166']
-  const n = Math.max(3, Math.round(props.count / 10))
+  const n = Math.max(3, Math.round(amount / 10))
   return Array.from({ length: n }, (_, id) => {
     const colour = palette[id % palette.length]
-    const reach = rnd(40, 90)
-    const period = rnd(2.4, 3.8)
+    const inner = palette[(id + 1) % palette.length]
+    const reach = rnd(45, 95)
+    const period = rnd(3, 4.6)
+    const outer = Math.round(rnd(14, 20))
     return {
       id,
       style: {
         '--x': `${rnd(8, 92).toFixed(1)}%`,
-        '--y': `${rnd(8, 62).toFixed(1)}%`,
+        '--y': `${rnd(8, 55).toFixed(1)}%`,
         '--d': `${period.toFixed(2)}s`,
         '--delay': `${(-rnd(0, period)).toFixed(2)}s`,
         '--reach': `${reach.toFixed(0)}px`,
+        '--rise': `${rnd(140, 260).toFixed(0)}px`,
         '--c': colour,
+        '--c2': inner,
       },
-      sparks: Array.from({ length: 14 }, (_, k) => ({
-        id: k,
-        style: { '--a': `${(k * 360) / 14 + rnd(-6, 6)}deg` },
-      })),
+      sparks: [
+        ...Array.from({ length: outer }, (_, k) => ({
+          id: k,
+          inner: false,
+          style: { '--a': `${(k * 360) / outer + rnd(-5, 5)}deg`, '--k': rnd(0.85, 1.1).toFixed(2) },
+        })),
+        ...Array.from({ length: 8 }, (_, k) => ({
+          id: 100 + k,
+          inner: true,
+          style: { '--a': `${(k * 360) / 8 + 22.5}deg`, '--k': '0.48' },
+        })),
+      ],
     }
   })
 })
@@ -161,47 +244,102 @@ const bursts = computed(() => {
 }
 
 /* --- A piece ------------------------------------------------------------- */
+/* A depth: moved as one, a little, as the pointer moves (and by the wind). */
+.ptl-layer {
+  position: absolute;
+  inset: -24px;
+  translate: calc(var(--mx, 0) * var(--px)) calc(var(--my, 0) * var(--px));
+  transition: translate 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ptl-layer.is-far {
+  --px: 5px;
+  --gust: 10px;
+}
+.ptl-layer.is-mid {
+  --px: 12px;
+  --gust: 22px;
+}
+.ptl-layer.is-near {
+  --px: 24px;
+  --gust: 38px;
+}
+/* What falls is pushed by the wind now and then, the near more than the far. */
+.go-fall .ptl-layer,
+.go-sway .ptl-layer,
+.go-flutter .ptl-layer,
+.go-shimmer .ptl-layer {
+  animation: ptl-wind 17s ease-in-out infinite;
+}
+@keyframes ptl-wind {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  30% {
+    transform: translateX(var(--gust));
+  }
+  45% {
+    transform: translateX(calc(var(--gust) * 0.4));
+  }
+  70% {
+    transform: translateX(calc(var(--gust) * -0.5));
+  }
+}
 .ptl-p {
   position: absolute;
   top: -24px;
   left: var(--x);
   width: var(--s);
   height: var(--s);
-  background: var(--c);
   opacity: var(--o);
   will-change: transform, opacity;
   animation: var(--d) linear var(--delay) infinite;
 }
-[data-mode='light'] .ptl-p.is-pale {
+.ptl-shape {
+  position: absolute;
+  inset: 0;
+  background: var(--c);
+}
+[data-mode='light'] .ptl-p.is-pale .ptl-shape {
   background: rgb(150 180 215);
 }
-.is-dot .ptl-p {
+/* Light given off: a soft halo in the piece's own colour. */
+.is-glowing .ptl-p {
+  filter: drop-shadow(0 0 calc(var(--s) * 0.35) var(--c));
+}
+/* Snow close by is out of focus. */
+.is-dot .is-near .ptl-shape {
+  filter: blur(1.2px);
+}
+.is-dot .ptl-shape {
   border-radius: 50%;
 }
 .is-ribbon .ptl-p {
   width: 7px;
   height: 11px;
+}
+.is-ribbon .ptl-shape {
   border-radius: 2px;
 }
-.is-puff .ptl-p {
+.is-puff .ptl-shape {
   border-radius: 50%;
   background: radial-gradient(closest-side, var(--c), transparent);
 }
 /* Shapes: the colour, cut out by an outline. */
-.is-heart .ptl-p,
-.is-star .ptl-p,
-.is-note .ptl-p,
-.is-leaf .ptl-p,
-.is-petal .ptl-p,
-.is-clover .ptl-p,
-.is-lantern .ptl-p,
-.is-flame .ptl-p,
-.is-crescent .ptl-p,
-.is-egg .ptl-p,
-.is-drop .ptl-p,
-.is-bat .ptl-p,
-.is-lotus .ptl-p,
-.is-flower .ptl-p {
+.is-heart .ptl-shape,
+.is-star .ptl-shape,
+.is-note .ptl-shape,
+.is-leaf .ptl-shape,
+.is-petal .ptl-shape,
+.is-clover .ptl-shape,
+.is-lantern .ptl-shape,
+.is-flame .ptl-shape,
+.is-crescent .ptl-shape,
+.is-egg .ptl-shape,
+.is-drop .ptl-shape,
+.is-bat .ptl-shape,
+.is-lotus .ptl-shape,
+.is-flower .ptl-shape {
   -webkit-mask: var(--shape) center / contain no-repeat;
   mask: var(--shape) center / contain no-repeat;
 }
@@ -421,10 +559,13 @@ const bursts = computed(() => {
 .is-dot.go-fall .ptl-p {
   animation-name: ptl-snow;
 }
+/* Up, swaying: a lantern on the air, a heart let go. */
 .go-rise .ptl-p {
   top: auto;
   bottom: -28px;
-  animation-name: ptl-rise;
+  animation:
+    ptl-up var(--d) linear var(--delay) infinite,
+    ptl-side var(--sd) ease-in-out var(--delay) infinite alternate;
 }
 .go-twinkle .ptl-p,
 .go-drift .ptl-p {
@@ -489,6 +630,35 @@ const bursts = computed(() => {
   }
 }
 
+/* --- A star shooting across ------------------------------------------------ */
+.ptl-shoot {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: 140px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.9));
+  box-shadow: 0 0 8px rgb(255 255 255 / 0.6);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: ptl-shoot var(--d) ease-in var(--delay) infinite;
+}
+@keyframes ptl-shoot {
+  0%,
+  86% {
+    transform: rotate(24deg) translateX(0) scaleX(0.3);
+    opacity: 0;
+  }
+  89% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(24deg) translateX(360px) scaleX(1);
+    opacity: 0;
+  }
+}
+
 /* --- Fireworks ------------------------------------------------------------- */
 .ptl-burst {
   position: absolute;
@@ -497,33 +667,101 @@ const bursts = computed(() => {
   width: 0;
   height: 0;
 }
-.ptl-spark {
+/* The rocket climbing to where it bursts, its trail behind it. */
+.ptl-rocket {
   position: absolute;
-  left: -2px;
-  top: -2px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--c);
+  left: -1.5px;
+  top: 0;
+  width: 3px;
+  height: 26px;
+  border-radius: 3px;
+  background: linear-gradient(to bottom, #fff, var(--c) 40%, transparent);
   box-shadow: 0 0 6px var(--c);
+  opacity: 0;
   will-change: transform, opacity;
-  animation: ptl-burst var(--d) cubic-bezier(0.15, 0.7, 0.3, 1) var(--delay) infinite;
+  animation: ptl-rocket var(--d) cubic-bezier(0.3, 0.6, 0.4, 1) var(--delay) infinite;
 }
-@keyframes ptl-burst {
+@keyframes ptl-rocket {
   0% {
-    transform: rotate(var(--a)) translateX(0) scale(0.6);
+    transform: translateY(var(--rise));
     opacity: 0;
   }
-  8% {
+  3% {
     opacity: 1;
   }
-  55% {
-    transform: rotate(var(--a)) translateX(var(--reach)) scale(1);
+  20% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  22%,
+  100% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+}
+/* The flash as it opens. */
+.ptl-flash {
+  position: absolute;
+  left: -40px;
+  top: -40px;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 0.9), var(--c) 35%, transparent);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: ptl-flash var(--d) ease-out var(--delay) infinite;
+}
+@keyframes ptl-flash {
+  0%,
+  20% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  23% {
+    transform: scale(0.8);
     opacity: 0.9;
   }
-  80%,
+  34%,
   100% {
-    transform: rotate(var(--a)) translate(var(--reach), 18px) scale(0.4);
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+/* Sparks are streaks along their way out, so they read as moving fast. */
+.ptl-spark {
+  position: absolute;
+  left: -5px;
+  top: -1px;
+  width: 10px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--c));
+  box-shadow: 0 0 6px var(--c);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: ptl-burst var(--d) cubic-bezier(0.12, 0.75, 0.3, 1) var(--delay) infinite;
+}
+.ptl-spark.is-inner {
+  background: linear-gradient(90deg, transparent, var(--c2));
+  box-shadow: 0 0 6px var(--c2);
+}
+@keyframes ptl-burst {
+  0%,
+  21% {
+    transform: rotate(var(--a)) translateX(0) scale(0.5);
+    opacity: 0;
+  }
+  24% {
+    opacity: 1;
+  }
+  62% {
+    transform: rotate(var(--a)) translateX(calc(var(--reach) * var(--k))) scale(1);
+    opacity: 0.95;
+  }
+  92%,
+  100% {
+    transform: rotate(var(--a)) translate(calc(var(--reach) * var(--k) * 1.08), 22px) scale(0.3);
     opacity: 0;
   }
 }
@@ -544,7 +782,16 @@ const bursts = computed(() => {
 }
 .is-still .ptl-spark {
   animation: none;
-  transform: rotate(var(--a)) translateX(calc(var(--reach) * 0.55));
+  transform: rotate(var(--a)) translateX(calc(var(--reach) * var(--k) * 0.55));
   opacity: 0.85;
+}
+.is-still .ptl-layer {
+  animation: none;
+  translate: none;
+}
+.is-still .ptl-rocket,
+.is-still .ptl-flash,
+.is-still .ptl-shoot {
+  display: none;
 }
 </style>

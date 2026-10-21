@@ -199,6 +199,9 @@ const clearStagedUpdate = () => call('app_clear_staged_update')
 // The sign-in itself happens in a real Google window opened by the shell;
 // this only starts it and waits for the result.
 const accountSignIn = () => call('account_sign_in')
+// PayPal's checkout in a window of the app's own; resolves when it closes,
+// with {opened, paid}. undefined where there is no such window.
+const checkout = (url, title) => call('app_checkout', url, title)
 const accountClearSession = () => call('account_clear_session')
 
 // --- Shell integration ------------------------------------------------------
@@ -377,6 +380,7 @@ export const desktop = {
   stageUpdate,
   clearStagedUpdate,
   accountSignIn,
+  checkout,
   accountClearSession,
   revealInFolder,
   openLibraryFolder,

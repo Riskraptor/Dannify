@@ -228,6 +228,38 @@ function openTextFieldMenu(e, field) {
   ])
 }
 
+// What a browser does with the mouse and a page, and an app does not: a
+// middle click that turns into the autoscroll compass, a Ctrl-, Shift- or
+// middle-click on a link that opens a second window, a link or a picture
+// dragged off as a ghost, Ctrl+A that selects every word on the screen.
+function guardLikeAnApp() {
+  window.addEventListener('mousedown', (e) => {
+    if (e.button === 1) e.preventDefault()
+  })
+  window.addEventListener(
+    'click',
+    (e) => {
+      // Only the second window is stopped: the click still reaches what is
+      // under it, so Ctrl and Shift still pick rows in a list.
+      if (e.defaultPrevented || !(e.ctrlKey || e.shiftKey || e.metaKey)) return
+      if (e.target.closest && e.target.closest('a[href]')) e.preventDefault()
+    },
+    true
+  )
+  window.addEventListener('auxclick', (e) => {
+    const link = e.button === 1 && e.target.closest && e.target.closest('a[href]')
+    if (link) e.preventDefault()
+  })
+  window.addEventListener('dragstart', (e) => {
+    const el = e.target
+    if (el && el.closest && el.closest('a, img') && !el.closest('[draggable="true"]')) e.preventDefault()
+  })
+  window.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'a') return
+    if (!isTyping(e.target) && !(e.target.closest && e.target.closest('[contenteditable="true"]'))) e.preventDefault()
+  })
+}
+
 let installed = false
 export function installShortcuts() {
   if (installed) return
@@ -237,6 +269,7 @@ export function installShortcuts() {
   // Files dropped from Explorer would otherwise navigate the webview away.
   window.addEventListener('dragover', (e) => e.preventDefault())
   window.addEventListener('drop', (e) => e.preventDefault())
+  if (desktop.isDesktop) guardLikeAnApp()
   if (desktop.isDesktop) {
     const z = currentZoom()
     if (z !== 1) desktop.whenReady().then(() => desktop.setZoom(z))

@@ -27,6 +27,7 @@ from .base import (
 )
 from .win32 import DWMWA_USE_IMMERSIVE_DARK_MODE, _WIN, dwmapi, kernel32, user32
 from .login import _LoginWindow
+from .checkout import _CheckoutWindow, allowed as _checkout_allowed
 from .places import _library_path
 
 
@@ -183,6 +184,23 @@ class ActionsMixin:
         except Exception as exc:
             logger_print('sign-in rejected:', exc)
             return {'signed_in': False, 'error': str(exc)}
+
+    # --- Supporting Dannify -------------------------------------------------
+    def app_checkout(self, url: str, title: str = '') -> dict:
+        """PayPal's checkout for supporting Dannify, in a window of the app's
+        own (see checkout.py). Blocks this bridge worker until it closes, and
+        says whether the person paid."""
+        if not _WIN or not _checkout_allowed(url):
+            return {'opened': False, 'paid': False, 'error': 'not a checkout'}
+        if self._checkout is not None:
+            self._checkout.focus()
+            return {'opened': True, 'paid': False, 'error': 'already open'}
+        window = _CheckoutWindow(self._theme, str(url), str(title or '')[:80])
+        self._checkout = window
+        try:
+            return window.run()
+        finally:
+            self._checkout = None
 
     def account_clear_session(self) -> bool:
         """Forget the Google session so the next sign-in starts clean."""

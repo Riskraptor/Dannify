@@ -193,10 +193,17 @@ function getLyricVersions(params) {
   return API.get('/api/lyrics/versions', { params })
 }
 
-function saveLyricsOffset(title, artist, offset, version) {
+// A saved song's chosen version, written beside it, so it is the one shown
+// offline and after a restart. `hints` are what the player knows of the song.
+function keepLyricVersion(file, version, hints = {}) {
+  return API.post('/api/lyrics/keep', { file, version, ...hints })
+}
+
+function saveLyricsOffset(title, artist, offset, version, pick) {
   const body = { title, artist }
   if (offset !== undefined && offset !== null) body.offset = offset
   if (version !== undefined && version !== null) body.version = version
+  if (pick !== undefined && pick !== null) body.pick = pick
   return API.post('/api/lyrics/offset', body)
 }
 
@@ -243,6 +250,15 @@ function getReportStatus() {
 function sendReport(payload) {
   return API.post('/api/support/report/send', payload, { timeout: 90000 })
 }
+function holdReport(email) {
+  return API.post('/api/support/report/hold', { email })
+}
+function heldReports() {
+  return API.get('/api/support/report/held')
+}
+function reportDone(id) {
+  return API.post('/api/support/report/done', { id })
+}
 
 // Playlists made in the app (kept on this PC).
 function getPlaylists() {
@@ -277,6 +293,20 @@ function getMixes() {
 }
 function getRecap(year = 0) {
   return API.get('/api/listens/recap', { params: { year } })
+}
+// Today, this week, this month or a year, or one before (ago: yesterday, last
+// week, last month), told as a story (Backend listens.story). Weeks start on
+// weekStart, Monday 0 to Sunday 6.
+function getStory(period = 'year', year = 0, ago = 0, weekStart = 0) {
+  return API.get('/api/listens/story', { params: { period, year, ago, week_start: weekStart } })
+}
+// All four at a glance, for Home's "Your music lately".
+function getGlance(weekStart = 0) {
+  return API.get('/api/listens/glance', { params: { week_start: weekStart } })
+}
+// A picture the window drew (Your Soundtrack's card), saved in Pictures.
+function saveShareImage(name, data) {
+  return API.post('/api/share/image', { name, data })
 }
 function getListenHistory(limit = 100, before = 0) {
   return API.get('/api/listens/history', { params: { limit, before } })
@@ -543,6 +573,7 @@ export default {
   getLyrics,
   getLyricVersions,
   saveLyricsOffset,
+  keepLyricVersion,
   publishLyrics,
   getLibrary,
   searchLibrary,
@@ -553,6 +584,9 @@ export default {
   reportClientError,
   getReportStatus,
   sendReport,
+  holdReport,
+  heldReports,
+  reportDone,
   getPlaylists,
   getPlaylist,
   createPlaylist,
@@ -564,6 +598,9 @@ export default {
   getListenHistory,
   getMixes,
   getRecap,
+  getStory,
+  getGlance,
+  saveShareImage,
   forgetListen,
   clearListens,
   getArtistLinks,

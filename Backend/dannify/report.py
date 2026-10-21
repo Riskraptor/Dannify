@@ -9,8 +9,18 @@ goes when the connection is back.
 What never goes: anything that signs in. Cookie, token and password values are
 blanked in the logs as they are packed, and settings are listed without them.
 
-Reporting opens when ``REPORT_ENDPOINT`` names the server that takes them.
-Until then the window shows the option as coming soon, and nothing is sent.
+Reporting opens when there is somewhere for reports to go: the developer's
+email, by way of Web3Forms (``WEB3FORMS_KEY``, the form's public access key;
+the address itself is never in the app), or a server of its own
+(``REPORT_ENDPOINT``). Until then the window shows the option as coming soon,
+and nothing is sent.
+
+By email, the diagnostics are written into the message (a free form has no
+attachments): what ``about.txt`` says, the window's errors, and the newest end
+of the log, all scrubbed like the zip. A free Web3Forms form takes
+submissions from a browser only, so the app puts the email together here and
+its window sends it (``prepare``); one that cannot go yet waits in the outbox
+(``hold``) and the window sends it later.
 
 The server's side, for whoever writes it: an HTTPS ``POST`` of
 ``multipart/form-data`` with the fields ``id``, ``version``, ``category``,
@@ -37,8 +47,20 @@ from loguru import logger
 
 # Where reports go. Empty: not open yet (see the module notes).
 REPORT_ENDPOINT = ''
+# The Web3Forms form that emails reports to the developer. Public by design:
+# it names the form, not the inbox, and a form only ever emails its owner.
+WEB3FORMS_KEY = 'cb3ea72a-da7d-49fb-bece-bc4e85a3f98f'
+WEB3FORMS_URL = 'https://api.web3forms.com/submit'
+# The form asks for hCaptcha (its Block Spam setting): each report carries a
+# solved check, and this is the site key Web3Forms gives free forms for it.
+HCAPTCHA_SITEKEY = '50b2fe65-b00b-4b9e-ad62-3ba471098be2'
 
-CATEGORIES = ('playback', 'downloads', 'lyrics', 'looks', 'crash', 'other')
+CATEGORIES = ('playback', 'downloads', 'lyrics', 'looks', 'crash', 'idea', 'other')
+# At most this many reports a day from one copy: a stuck button, or someone
+# leaning on it, must not fill the developer's inbox.
+DAILY_LIMIT = 5
+# By email, how much of the diagnostics goes in the message.
+EMAIL_DIAGNOSTICS_MAX = 60_000
 DESCRIPTION_MIN = 10
 DESCRIPTION_MAX = 5000
 CONTACT_MAX = 200
@@ -87,8 +109,30 @@ def endpoint() -> str:
     return REPORT_ENDPOINT
 
 
+def web3forms_key() -> str:
+    """The Web3Forms access key reports are emailed with, or ''.
+
+    A development run may set ``DANNIFY_WEB3FORMS_KEY``; a shipped copy uses
+    the one built in, so no setting can send anyone's report elsewhere.
+    """
+
+    override = os.getenv('DANNIFY_WEB3FORMS_KEY', '').strip()
+    if override and not getattr(sys, 'frozen', False):
+        return override
+    return WEB3FORMS_KEY
+
+
 def enabled() -> bool:
-    return bool(endpoint())
+    return bool(endpoint() or web3forms_key())
+
+
+def mode() -> str:
+    """'server' when reports go to a server of their own, 'email' when the
+    window emails them, '' while reporting is closed."""
+
+    if endpoint():
+        return 'server'
+    return 'email' if web3forms_key() else ''
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +256,113 @@ def clean_fields(description: Any, category: Any, contact: Any) -> dict[str, str
 
 
 class NotOpen(RuntimeError):
-    """Reporting has no server yet."""
+    """Reporting has nowhere to go yet."""
+
+
+class TooMany(RuntimeError):
+    """This copy has sent its reports for today."""
+
+
+def email_text(report: dict[str, Any]) -> str:
+    """The report as the developer reads it in their inbox."""
+
+    lines = [
+        str(report.get('description') or '').strip(),
+        '',
+        '---',
+        f"Report {report.get('id', '')} · Dannify {report.get('version', '')} · {report.get('category', '')}",
+        f"Reply to: {report.get('contact') or 'not given'}",
+    ]
+    zipped = report.get('diagnostics')
+    if zipped:
+        lines += ['', '=== Diagnostics ===', '']
+        lines.append(_diagnostics_text(zipped, EMAIL_DIAGNOSTICS_MAX))
+    return '\n'.join(lines)
+
+
+def _diagnostics_text(zipped: bytes, limit: int) -> str:
+    """What the diagnostics zip says, as text: everything about the app and
+    its window errors, then the newest end of the logs, in *limit* characters."""
+
+    parts: list[str] = []
+    logs: list[tuple[str, str]] = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(zipped)) as z:
+            for name in z.namelist():
+                text = z.read(name).decode('utf-8', errors='replace')
+                if name.startswith('logs/'):
+                    logs.append((name, text))
+                else:
+                    parts.append(f'--- {name} ---\n{text.strip()}')
+    except zipfile.BadZipFile:
+        return '(diagnostics could not be read)'
+    head = '\n\n'.join(parts)[:limit]
+    room = limit - len(head)
+    # The newest log last in the zip; its end matters most, so what is let go
+    # to fit is always the oldest end, never the last lines.
+    tail_parts: list[str] = []
+    for name, text in reversed(logs):
+        title = f'--- {name} (newest end) ---\n'
+        fits = room - len(title) - 2  # and the blank line before it
+        if fits <= 200:
+            break
+        text = text.strip()
+        piece = text[-fits:]
+        if len(piece) < len(text):
+            piece = piece[piece.find('\n') + 1:]
+        tail_parts.insert(0, title + piece)
+        room -= len(title) + len(piece) + 2
+    return '\n\n'.join([head, *tail_parts])
+
+
+def email_body(report: dict[str, Any], key: str) -> dict[str, Any]:
+    """What Web3Forms is sent for one report."""
+
+    body = {
+        'access_key': key,
+        'subject': f"Dannify {report.get('version', '')}: {report.get('category', 'other')} ({report.get('id', '')})",
+        'from_name': 'Dannify',
+        'message': email_text(report),
+        'report_id': str(report.get('id') or ''),
+        'version': str(report.get('version') or ''),
+        'category': str(report.get('category') or ''),
+        'botcheck': False,
+    }
+    if report.get('contact'):
+        body['email'] = str(report['contact'])  # the inbox's Reply goes to them
+    return body
+
+
+def post_email(report: dict[str, Any], key: str, timeout: float = 30.0) -> None:
+    """Email one report through Web3Forms. Raises when it did not arrive."""
+
+    import requests
+
+    body = email_body(report, key)
+    response = requests.post(
+        WEB3FORMS_URL,
+        json=body,
+        timeout=timeout,
+        headers={'Accept': 'application/json', 'User-Agent': f"Dannify/{report.get('version', '')}"},
+    )
+    try:
+        answer = response.json()
+    except ValueError:
+        answer = {}
+    if not (200 <= response.status_code < 300 and answer.get('success')):
+        raise RuntimeError(f"Web3Forms answered {response.status_code}: {str(answer.get('message', ''))[:200]}")
+
+
+def deliver(report: dict[str, Any]) -> None:
+    """Send one report wherever reports go: its own server, else by email."""
+
+    url = endpoint()
+    if url:
+        return post(report, url)
+    key = web3forms_key()
+    if key:
+        return post_email(report, key)
+    raise NotOpen('reporting is not open yet')
 
 
 def post(report: dict[str, Any], url: str, timeout: float = 30.0) -> None:
@@ -262,13 +412,15 @@ def _drop(meta: Path) -> None:
 
 def pending(data_dir: Path) -> int:
     box = _outbox(data_dir)
-    return len(list(box.glob('*.json'))) if box.is_dir() else 0
+    if not box.is_dir():
+        return 0
+    emails = _held(data_dir)
+    return len(list(box.glob('*.json'))) + (len(list(emails.glob('*.json'))) if emails.is_dir() else 0)
 
 
 def flush(data_dir: Path) -> tuple[int, int]:
     """Send what is waiting. Returns (sent, still waiting)."""
 
-    url = endpoint()
     box = _outbox(data_dir)
     if not box.is_dir():
         return 0, 0
@@ -282,12 +434,12 @@ def flush(data_dir: Path) -> tuple[int, int]:
         if time.time() - float(fields.get('queued') or 0) > OUTBOX_DAYS * 86400:
             _drop(meta)
             continue
-        if not url:
+        if not enabled():
             continue
         zipped = meta.with_suffix('.zip')
         report = {**fields, 'diagnostics': zipped.read_bytes() if zipped.is_file() else None}
         try:
-            post(report, url)
+            deliver(report)
         except Exception:
             logger.opt(exception=True).debug('waiting report {} still not sent', fields.get('id'))
             break  # the connection is the likely reason; the rest can wait too
@@ -296,14 +448,99 @@ def flush(data_dir: Path) -> tuple[int, int]:
     return sent, pending(data_dir)
 
 
+def _sent_log(data_dir: Path) -> Path:
+    return Path(data_dir) / 'reports' / 'sent.json'
+
+
+def _sent_today(data_dir: Path) -> list[float]:
+    try:
+        times = json.loads(_sent_log(data_dir).read_text(encoding='utf-8'))
+        return [float(t) for t in times if time.time() - float(t) < 86400]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
+def _note_sent(data_dir: Path) -> None:
+    times = _sent_today(data_dir) + [time.time()]
+    path = _sent_log(data_dir)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(times[-DAILY_LIMIT * 2:]), encoding='utf-8')
+    except OSError:
+        pass
+
+
+def prepare(data_dir: Path, report: dict[str, Any]) -> dict[str, Any]:
+    """The email for one report, for the window to send (see the module
+    notes). Counts towards the day's reports like a send."""
+
+    key = web3forms_key()
+    if not key:
+        raise NotOpen('reporting is not open yet')
+    if len(_sent_today(data_dir)) >= DAILY_LIMIT:
+        raise TooMany('enough reports for today')
+    _note_sent(data_dir)
+    return email_body(report, key)
+
+
+def _held(data_dir: Path) -> Path:
+    return _outbox(data_dir) / 'email'
+
+
+def hold(data_dir: Path, email: dict[str, Any]) -> None:
+    """Keep an email the window could not send, for it to send later."""
+
+    rid = re.sub(r'[^A-Z0-9]', '', str(email.get('report_id') or ''))[:16]
+    if not rid or not email.get('message'):
+        return
+    box = _held(data_dir)
+    box.mkdir(parents=True, exist_ok=True)
+    (box / f'{rid}.json').write_text(json.dumps({**email, 'held': time.time()}, ensure_ascii=False), encoding='utf-8')
+    waiting = sorted(box.glob('*.json'), key=lambda p: p.stat().st_mtime)
+    for old in waiting[:-OUTBOX_KEEP]:
+        old.unlink(missing_ok=True)
+
+
+def held(data_dir: Path) -> list[dict[str, Any]]:
+    """The emails waiting for the window to send, oldest first. Each gets
+    the access key the app has now, which may be newer than when it was kept."""
+
+    box = _held(data_dir)
+    out: list[dict[str, Any]] = []
+    key = web3forms_key()
+    for path in sorted(box.glob('*.json'), key=lambda p: p.stat().st_mtime) if box.is_dir() else ():
+        try:
+            email = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            path.unlink(missing_ok=True)
+            continue
+        if time.time() - float(email.pop('held', 0) or 0) > OUTBOX_DAYS * 86400:
+            path.unlink(missing_ok=True)
+            continue
+        if key:
+            email['access_key'] = key
+        out.append(email)
+    return out
+
+
+def done(data_dir: Path, report_id: str) -> None:
+    """The window sent it: it waits no more."""
+
+    rid = re.sub(r'[^A-Z0-9]', '', str(report_id or ''))[:16]
+    if rid:
+        (_held(data_dir) / f'{rid}.json').unlink(missing_ok=True)
+
+
 def send(data_dir: Path, report: dict[str, Any]) -> str:
     """Send a report now, or keep it to send later. Returns 'sent' or 'queued'."""
 
-    url = endpoint()
-    if not url:
+    if not enabled():
         raise NotOpen('reporting is not open yet')
+    if len(_sent_today(data_dir)) >= DAILY_LIMIT:
+        raise TooMany('enough reports for today')
+    _note_sent(data_dir)
     try:
-        post(report, url)
+        deliver(report)
         return 'sent'
     except Exception:
         logger.opt(exception=True).info('report {} could not be sent now; it will go later', report.get('id'))

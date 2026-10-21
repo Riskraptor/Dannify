@@ -314,6 +314,11 @@ async def support_report_status_endpoint() -> dict[str, Any]:
     data = Path(state.data_dir) if state.data_dir else None
     return {
         'enabled': report_mod.enabled(),
+        'mode': report_mod.mode(),
+        # By email, the person shows they are one: hCaptcha, which the form
+        # requires (report.py).
+        'captcha': {'provider': 'hcaptcha', 'sitekey': report_mod.HCAPTCHA_SITEKEY}
+        if report_mod.mode() == 'email' else None,
         'pending': report_mod.pending(data) if data else 0,
         'categories': list(report_mod.CATEGORIES),
     }
@@ -328,6 +333,11 @@ async def support_report_send_endpoint(payload: dict[str, Any] = Body(default={}
         raise HTTPException(status_code=503, detail='Reporting is not open yet')
     if not state.data_dir:
         raise HTTPException(status_code=503, detail='No data folder')
+    # A field no person sees, so no person fills it: what does is a bot, and
+    # is told all went well, and nothing goes anywhere.
+    if str(payload.get('website') or '').strip():
+        logger.info('problem report dropped: the hidden field was filled')
+        return {'id': report_mod.new_id(), 'status': 'sent'}
     try:
         fields = report_mod.clean_fields(
             payload.get('description'), payload.get('category'), payload.get('contact')
@@ -347,12 +357,56 @@ async def support_report_send_endpoint(payload: dict[str, Any] = Body(default={}
             window_errors=list(_window_errors),
             log_file=Path(log_file) if log_file else None,
         )
+    if report_mod.mode() == 'email':
+        # The window sends it: a free form takes submissions from a browser.
+        try:
+            email = await asyncio.to_thread(report_mod.prepare, data, report)
+        except report_mod.NotOpen as exc:
+            raise HTTPException(status_code=503, detail='Reporting is not open yet') from exc
+        except report_mod.TooMany as exc:
+            raise HTTPException(status_code=429, detail='Enough reports for today') from exc
+        logger.info('problem report {} prepared for the window to email', report['id'])
+        return {'id': report['id'], 'status': 'prepared', 'email': email, 'url': report_mod.WEB3FORMS_URL}
     try:
         status = await asyncio.to_thread(report_mod.send, data, report)
     except report_mod.NotOpen as exc:
         raise HTTPException(status_code=503, detail='Reporting is not open yet') from exc
+    except report_mod.TooMany as exc:
+        raise HTTPException(status_code=429, detail='Enough reports for today') from exc
     logger.info('problem report {} {}', report['id'], status)
     return {'id': report['id'], 'status': status}
+
+
+@router.post('/api/support/report/hold')
+async def support_report_hold_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """An email the window could not send now: kept for it to send later."""
+
+    if not state.data_dir:
+        raise HTTPException(status_code=503, detail='No data folder')
+    email = payload.get('email')
+    if not isinstance(email, dict):
+        raise HTTPException(status_code=400, detail='email required')
+    await asyncio.to_thread(report_mod.hold, Path(state.data_dir), email)
+    return {'ok': True}
+
+
+@router.get('/api/support/report/held')
+async def support_report_held_endpoint() -> dict[str, Any]:
+    """The emails waiting for the window to send."""
+
+    if not state.data_dir or report_mod.mode() != 'email':
+        return {'emails': [], 'url': report_mod.WEB3FORMS_URL}
+    emails = await asyncio.to_thread(report_mod.held, Path(state.data_dir))
+    return {'emails': emails, 'url': report_mod.WEB3FORMS_URL}
+
+
+@router.post('/api/support/report/done')
+async def support_report_done_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """The window sent a waiting email."""
+
+    if state.data_dir:
+        await asyncio.to_thread(report_mod.done, Path(state.data_dir), str(payload.get('id') or ''))
+    return {'ok': True}
 
 
 async def flush_reports() -> None:

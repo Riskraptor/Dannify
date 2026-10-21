@@ -61,6 +61,7 @@
   <ContextMenuHost />
   <DialogHost />
   <ToastHost />
+  <RestartScreen v-if="restarting" />
   <!-- Each of these is a file of its own, fetched the first time it is
        wanted and kept from then on (see `wanted` below). -->
   <ShortcutsDialog v-if="wanted.shortcuts" />
@@ -86,6 +87,7 @@ import ResizeHandles from './components/shell/ResizeHandles.vue'
 import ContextMenuHost from './components/ui/ContextMenuHost.vue'
 import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
+import { restarting, welcomeBack } from './model/restart'
 import { startOnboarding, useOnboarding } from './model/onboarding'
 import { loadCalendar, region, shouldGreet, systemRegion, today } from './model/occasions'
 import { startYtmSync } from './model/ytmSync'
@@ -103,6 +105,8 @@ const ReportDialog = defineAsyncComponent(() => import('/src/components/ui/Repor
 const LyricsEditor = defineAsyncComponent(() => import('./components/lyrics/LyricsEditor.vue'))
 const Onboarding = defineAsyncComponent(() => import('./components/Onboarding.vue'))
 const OccasionGreeting = defineAsyncComponent(() => import('./components/ui/OccasionGreeting.vue'))
+// Fetched only when a restart into an update begins.
+const RestartScreen = defineAsyncComponent(() => import('./components/shell/RestartScreen.vue'))
 import { useUi } from './model/ui'
 import { usePlayer } from './model/player'
 import { desktop } from './desktop/bridge'
@@ -251,8 +255,14 @@ onMounted(() => {
   window.addEventListener('dannify:open-lyrics-submit', openSubmit)
   // Bring back the track that was playing when the app was last closed,
   // cued to where it stopped and paused. Done after mount so the player bar
-  // is already on screen when it fills in.
+  // is already on screen when it fills in. After a restart into an update,
+  // the music it interrupted plays on.
   player.restoreSession()
+  welcomeBack()
+  // Problem reports that could not go before (offline) go now, quietly.
+  setTimeout(() => import('./model/problems').then((m) => m.sendHeldReports()), 20000)
+  // Early in a new week or month: its story, said once (model/storyNudge.js).
+  setTimeout(() => import('./model/storyNudge').then((m) => m.nudgeStories()), 15000)
 })
 onUnmounted(() => {
   window.removeEventListener('popstate', onPopState)

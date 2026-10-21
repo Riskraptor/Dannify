@@ -84,8 +84,30 @@
                   </div>
                 </template>
 
-                <!-- Music folder -->
+                <!-- Where: the special days kept there -->
                 <template v-else-if="step === 2">
+                  <span class="ob-badge"><Icon icon="ph:globe-hemisphere-east-fill" class="h-6 w-6" /></span>
+                  <h1 class="ob-title">{{ t('onboarding.regionTitle') }}</h1>
+                  <p class="ob-sub">{{ t('onboarding.regionText') }}</p>
+                  <select class="field-select ob-region" :value="regionChoice" :aria-label="t('settings.region')" @change="setRegion($event.target.value)">
+                    <option value="auto">
+                      {{ detectedName ? t('settings.regionAuto', { country: detectedName }) : t('settings.regionAutoNone') }}
+                    </option>
+                    <option v-for="c in countries" :key="c.code" :value="c.code">{{ c.name }}</option>
+                  </select>
+                  <div v-if="nextDay" class="ob-day" :style="dayPaint">
+                    <span class="ob-day-icon"><Icon :icon="nextDay.icon" class="h-5 w-5" /></span>
+                    <span class="min-w-0">
+                      <span class="ob-day-label">{{ t('onboarding.regionNext') }}</span>
+                      <span class="ob-day-name">{{ dayWords.title }}</span>
+                      <span class="ob-day-date">{{ dayDate }}</span>
+                    </span>
+                  </div>
+                  <p class="ob-note">{{ t('onboarding.folderNote') }}</p>
+                </template>
+
+                <!-- Music folder -->
+                <template v-else-if="step === 3">
                   <span class="ob-badge"><Icon icon="ph:folder-simple-fill" class="h-6 w-6" /></span>
                   <h1 class="ob-title">{{ t('onboarding.folderTitle') }}</h1>
                   <p class="ob-sub">{{ t('onboarding.folderText') }}</p>
@@ -100,7 +122,7 @@
                 </template>
 
                 <!-- Account -->
-                <template v-else-if="step === 3">
+                <template v-else-if="step === 4">
                   <span class="ob-badge"><Icon icon="ph:user-circle-fill" class="h-6 w-6" /></span>
                   <h1 class="ob-title">{{ t('onboarding.accountTitle') }}</h1>
                   <p class="ob-sub">{{ t('onboarding.accountText') }}</p>
@@ -166,8 +188,21 @@ import { useSettingsManager } from '/src/model/settings'
 import { useAccount } from '/src/model/account'
 import { useUi } from '/src/model/ui'
 import { trapTab } from '/src/model/focusTrap'
+import {
+  calendar,
+  countryChoices,
+  countryName,
+  detectedRegion,
+  loadCalendar,
+  region,
+  regionChoice,
+  setRegion,
+  toneList,
+  upcoming,
+  wordsFor,
+} from '/src/model/occasions'
 
-const { t, choice, setLocale, locales, systemLocale } = useI18n()
+const { t, locale, choice, setLocale, locales, systemLocale } = useI18n()
 const systemName = computed(() => locales.find((l) => l.code === systemLocale())?.name || 'English')
 const ob = useOnboarding()
 const theme = useTheme()
@@ -175,7 +210,22 @@ const sm = useSettingsManager()
 const account = useAccount()
 const ui = useUi()
 
-const LAST = 4
+const LAST = 5
+
+// Where: a country of its own, put right here when the computer has it wrong,
+// and the next special day kept there, in its colours.
+loadCalendar()
+const detectedName = computed(() => countryName(detectedRegion.value, locale.value))
+const countries = computed(() => countryChoices(calendar.value, locale.value))
+const nextDay = computed(() => (calendar.value ? upcoming(new Date(), region.value, calendar.value, 1)[0] || null : null))
+const dayWords = computed(() => wordsFor(nextDay.value, t, locale.value))
+const dayDate = computed(() =>
+  nextDay.value ? new Intl.DateTimeFormat(locale.value, { weekday: 'long', day: 'numeric', month: 'long' }).format(nextDay.value.day) : ''
+)
+const dayPaint = computed(() => {
+  const tones = toneList((nextDay.value && nextDay.value.look && nextDay.value.look.palette) || [])
+  return { '--ob-a': tones[0] || 'rgb(var(--c-accent))', '--ob-b': tones[1] || tones[0] || 'rgb(var(--c-accent))' }
+})
 const step = ref(0)
 const forward = ref(true)
 const root = ref(null)
@@ -199,7 +249,7 @@ const folder = computed(() => sm.settings.value.download_dir || '')
 
 // On the sign-in step the green button is Google's; moving on without it is
 // the quieter choice.
-const laterOnly = computed(() => step.value === 3 && !account.signedIn.value)
+const laterOnly = computed(() => step.value === 4 && !account.signedIn.value)
 const primaryLabel = computed(() => {
   if (step.value === LAST) return t('onboarding.start')
   if (laterOnly.value) return t('onboarding.notNow')
@@ -265,6 +315,56 @@ watch(step, async () => {
 </script>
 
 <style scoped>
+.ob-region {
+  width: min(360px, 100%);
+  height: 40px;
+  margin-top: 20px;
+  font-size: 14px;
+}
+.ob-day {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(360px, 100%);
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  color: #fff;
+  text-align: left;
+  background:
+    linear-gradient(180deg, rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.45)),
+    linear-gradient(130deg, var(--ob-a), var(--ob-b));
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.22);
+}
+.ob-day-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.2);
+}
+.ob-day-label,
+.ob-day-name,
+.ob-day-date {
+  display: block;
+}
+.ob-day-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.8);
+}
+.ob-day-name {
+  font-size: 15px;
+  font-weight: 800;
+}
+.ob-day-date {
+  font-size: 12.5px;
+  color: rgb(255 255 255 / 0.85);
+}
 .ob {
   position: fixed;
   /* Below the title bar, which stays usable: the window can still be moved,

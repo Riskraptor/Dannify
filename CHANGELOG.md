@@ -4,6 +4,33 @@ What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
 page](https://github.com/Riskraptor/Dannify/releases).
 
+## 4.14.0
+
+Your Soundtrack for every day, week, month and year, a kinder update, and a
+Settings worth opening.
+
+- **Your music lately.** Today, this week, this month and this year on Home,
+  each with its minutes and its best moments, and each opening its own
+  story.
+- **Your Soundtrack.** Your year in music, renamed and alive, now with
+  stories for today, this week and this month too, and the ones just gone.
+  Everything in it plays at a click, and its card can be shared as a
+  picture.
+- **Hello, by name.** Signed in to YouTube, Dannify greets you by your first
+  name.
+- **Updating, kindly.** Dannify comes back from an update playing right
+  where you were.
+- **Lyrics that stay picked.** The version you choose is the one you get
+  every time.
+- **Settings, redesigned.** Grouped and roomier, with pages of their own for
+  Sound, Special days and Support.
+- **Support Dannify, and tell the developer.** Give with PayPal without
+  leaving the app, and report a problem or share an idea from inside it.
+- **Lighter and smoother.** A smaller download, special days with more life,
+  less work for older laptops, and windows that fit small screens.
+
+Plus many smaller improvements and fixes.
+
 ## 4.13.0
 
 Every special day of your year, your listening from everywhere, your

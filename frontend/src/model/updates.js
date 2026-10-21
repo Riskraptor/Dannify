@@ -6,6 +6,7 @@ import { confirmDialog } from '/src/model/dialog'
 import { hasNotes, readNotes } from '/src/model/releaseNotes'
 import { isBigRelease } from '/src/model/occasions'
 import { t, currentLocale } from '/src/i18n'
+import { restartKindly } from '/src/model/restart'
 
 // In-app updates.
 //
@@ -209,12 +210,12 @@ const INSTALL_MESSAGE = {
 /** Apply the prepared update: restart into it. */
 async function install({ ask = true } = {}) {
   if (!installerPath.value) return false
-  if (updateKind.value === 'staged') return desktop.restart()
+  if (updateKind.value === 'staged') return restartKindly(() => desktop.restart())
   // On Linux the package manager asks for the system password, and a
   // password prompt nobody was told about looks like something else asking.
   // So it is said first there, and on macOS too, where the app reopens.
   const system = installSystem()
-  if (!ask && system === 'windows') return desktop.installUpdate(installerPath.value)
+  if (!ask && system === 'windows') return restartKindly(() => desktop.installUpdate(installerPath.value))
   const ok = await confirmDialog({
     title: t('update.installTitle', { version: info.value.version }),
     message: t(INSTALL_MESSAGE[system] || INSTALL_MESSAGE.windows),
@@ -222,7 +223,7 @@ async function install({ ask = true } = {}) {
     icon: 'ph:download-simple',
   })
   if (!ok) return false
-  const started = await desktop.installUpdate(installerPath.value)
+  const started = await restartKindly(() => desktop.installUpdate(installerPath.value))
   if (!started) toast(t('update.installFailed'), { tone: 'error' })
   return started
 }

@@ -6,7 +6,10 @@
       <Particles :look="festive.look" :count="festive.look.motion === 'burst' ? 40 : 34" contain fall="300px" />
     </div>
     <header class="view-pad relative flex flex-col items-start gap-2 pb-5 pt-7">
-      <h1 class="text-[32px] font-bold tracking-tight">{{ greeting }}</h1>
+      <!-- Signed in to YouTube: hello by name, the name said with a flourish. -->
+      <h1 class="text-[32px] font-bold tracking-tight">
+        {{ greeting }}<template v-if="firstName">, <AnimatedName :text="firstName" class="home-name" /></template>
+      </h1>
       <!-- The day, said: a chip that opens its music. -->
       <button v-if="festive" class="home-day press" :style="{ '--day': festiveTone }" @click="openDayMusic">
         <Icon :icon="festive.icon" class="h-4 w-4" />
@@ -83,10 +86,13 @@
           @open="openCard(it)"
         />
       </Shelf>
-      <!-- Mixes made from the listening and the library (model/mixes.js),
-           and the year so far: there signed out and offline, unlike the feed. -->
+      <!-- Today, this week, this month, this year: each a story to open. -->
+      <MusicLately />
+
+      <!-- Mixes made from the listening and the library (model/mixes.js):
+           there signed out and offline, unlike the feed. -->
       <Shelf
-        v-if="mixes.length || hasYear"
+        v-if="mixes.length"
         :title="t('mixes.shelf')"
         :more-label="t('stats.nav')"
         @more="router.push({ name: 'Stats' })"
@@ -101,16 +107,6 @@
           :tone="MIXES[mix.id].tone"
           @open="router.push({ name: 'Mix', params: { id: mix.id } })"
           @play="playRows(mix.rows, 0)"
-        />
-        <MixCard
-          v-if="hasYear"
-          :title="t('recap.card', { year: thisYear })"
-          :subtitle="t('recap.cardText')"
-          :covers="yearCovers"
-          icon="ph:confetti"
-          tone="mix-year"
-          :playable="false"
-          @open="router.push({ name: 'Recap' })"
         />
       </Shelf>
 
@@ -258,18 +254,21 @@
       <!-- Once in a while, after real use: never a pop-up, and "Not now"
            is believed for two months (model/support.js). -->
       <section v-if="support.due.value" class="give-card">
-        <Icon icon="ph:coffee" class="give-icon" />
+        <Icon icon="ph:hand-heart-fill" class="give-icon" />
         <div class="min-w-0 flex-1">
           <p class="give-title">{{ t('support.nudgeTitle') }}</p>
           <p class="give-text">{{ support.config.message || t('support.nudgeText') }}</p>
+          <p v-if="region === 'KE' && support.config.mpesa && support.config.mpesa.number" class="give-till">
+            <b>M-PESA</b> {{ t('support.mpesaChip', { number: support.config.mpesa.number }) }}
+          </p>
         </div>
         <div class="give-actions">
           <button class="btn-ghost btn-pill h-8 px-3 text-xs" @click="support.notNow()">
             {{ t('support.notNow') }}
           </button>
           <button class="btn-accent btn-pill h-8 px-4 text-xs" @click="support.openSupport()">
-            <Icon icon="ph:heart-fill" class="h-3.5 w-3.5" />
-            {{ t('support.give') }}
+            <Icon icon="ph:hand-heart-fill" class="h-3.5 w-3.5" />
+            {{ t('support.sidebar') }}
           </button>
         </div>
       </section>
@@ -295,16 +294,18 @@ import { warmAll } from '/src/model/prefetch'
 import { onRefresh } from '/src/model/useRefresh'
 import { useI18n } from '/src/i18n'
 import { useSupport } from '/src/model/support'
-import { useListens } from '/src/model/listens'
-import { entryRow } from '/src/model/playlists'
+import { listensEpoch } from '/src/model/listens'
 import { mixCovers, MIXES, useMixes } from '/src/model/mixes'
-import { loadCalendar, today, toneOf, wordsFor } from '/src/model/occasions'
+import { loadCalendar, region, today, toneOf, wordsFor } from '/src/model/occasions'
 // Only on a special day: fetched then.
 const Particles = defineAsyncComponent(() => import('/src/components/ui/Particles.vue'))
 import Shelf from '/src/components/ui/Shelf.vue'
 import SongTile from '/src/components/ui/SongTile.vue'
 import MediaCard from '/src/components/MediaCard.vue'
 import MixCard from '/src/components/MixCard.vue'
+import AnimatedName from '/src/components/ui/AnimatedName.vue'
+// Fetched with the page's first paint out of the way.
+const MusicLately = defineAsyncComponent(() => import('/src/components/MusicLately.vue'))
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -333,24 +334,13 @@ onActivated(() => {
   loadListening()
 })
 
-// Made for you: the mixes (model/mixes.js), and the year so far once there
-// is a year to look back on.
+// Made for you: the mixes (model/mixes.js).
 const { mixes, refresh: refreshMixes } = useMixes()
-const listens = useListens()
-const thisYear = new Date().getFullYear()
-const year = shallowRef(null)
-async function loadListening() {
+function loadListening() {
   refreshMixes()
-  try {
-    // This year so far: from the first of January to today.
-    const days = Math.floor((Date.now() - new Date(thisYear, 0, 1)) / 86400000) + 1
-    year.value = await listens.fetchStats(days, 4)
-  } catch {
-    // The year card just is not there.
-  }
 }
 loadListening()
-watch(listens.listensEpoch, loadListening)
+watch(listensEpoch, loadListening)
 // A special day (model/occasions.js): its weather at the top of the page,
 // its name under the greeting, and its music from YouTube Music.
 loadCalendar()
@@ -378,8 +368,6 @@ function openDayMusic() {
   if (query) router.push({ name: 'Search', params: { query } })
 }
 
-const hasYear = computed(() => !!(year.value && year.value.plays >= 10))
-const yearCovers = computed(() => mixCovers(((year.value && year.value.top_songs) || []).map(entryRow)))
 
 // Home is where most sessions start, so the songs at the top of it get
 // resolved before anyone reaches for the mouse.
@@ -414,6 +402,10 @@ watch(
   }
 )
 
+// The first name of whoever is signed in to YouTube.
+const firstName = computed(() =>
+  account.signedIn.value ? String(account.displayName.value || '').trim().split(/\s+/)[0].slice(0, 24) : ''
+)
 const greeting = computed(() => {
   const h = new Date().getHours()
   if (h < 5) return t('home.goodEvening')
@@ -575,6 +567,26 @@ function submitWelcome() {
 </script>
 
 <style scoped>
+.give-till {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 3px 10px 3px 4px;
+  border-radius: 999px;
+  background: rgb(0 166 81 / 0.14);
+  color: rgb(var(--c-fg));
+  font-size: 12px;
+  font-weight: 700;
+}
+.give-till b {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #00a651;
+  color: #fff;
+  font-style: italic;
+  font-weight: 900;
+}
 .welcome {
   position: relative;
   display: flex;
@@ -721,6 +733,9 @@ function submitWelcome() {
 .home {
   position: relative;
   isolation: isolate;
+}
+.home-name {
+  --an-shine: rgb(var(--c-accent));
 }
 .home-day {
   display: inline-flex;

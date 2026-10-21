@@ -115,6 +115,40 @@ def test_the_year_in_music():
     assert year['first']['title'] == 'Song 2'
 
 
+def test_the_year_in_music_tells_more():
+    play(1, when(2025, 6, 1), artist='Bien', album='Alusa')
+    for d in (3, 4, 5):
+        play(2, when(2026, 3, d, 8))
+        play(3, when(2026, 3, d, 21))
+    play(2, when(2026, 3, 5, 9))
+    play(2, when(2026, 3, 5, 10))  # Song 2 three times on 5 March
+    play(4, when(2026, 8, 9, 21), artist='Tems', album='For Broken Ears')
+
+    year = listens.recap(2026, now=NOW)
+    # When it was listened to: by hour, and by weekday (Monday first).
+    assert len(year['hours']) == 24 and year['hours'][21] == 4 * 180
+    assert len(year['weekdays']) == 7 and sum(year['weekdays']) == year['seconds']
+    # Each month's own favourite.
+    assert year['month_artists'][2]['name'] == 'Sauti Sol'
+    assert year['month_artists'][7]['name'] == 'Tems'
+    assert year['month_artists'][0] is None
+    # The song played most in one day, and the top song's own story.
+    assert year['repeat']['title'] == 'Song 2' and year['repeat']['plays'] == 3
+    assert year['repeat']['date'] == '2026-03-05'
+    assert year['top_songs'][0]['title'] == 'Song 2'
+    assert year['top_song_more'] == {'first': '2026-03-03', 'most_in_a_day': 3}
+    # The year before, to compare.
+    assert year['last_year'] == {'seconds': 180, 'plays': 1}
+
+
+def test_twenty_five_songs_for_the_playlist_five_of_the_rest():
+    for i in range(30):
+        play(i, when(2026, 2, 1 + i % 27, 12), artist=f'Artist {i}')
+    year = listens.recap(2026, now=NOW)
+    assert len(year['top_songs']) == 25
+    assert len(year['top_artists']) == 5 and len(year['top_albums']) <= 5
+
+
 def test_a_year_with_nothing_in_it():
     play(1, when(2025, 6, 1))
     year = listens.recap(2026, now=NOW)

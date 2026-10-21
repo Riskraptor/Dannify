@@ -267,6 +267,8 @@ def build_app() -> FastAPI:
     from dannify import updates as _updates
 
     _support.init(DATABASE_DIR)
+    # Payment details changed since this build, signed (see support.py).
+    _support.start_live_refresh()
     # What saved music is sealed with. Made once, kept for good; the
     # uninstaller leaves it alone (see installer/Core/Engine.cs). Then
     # joined to the music folder, which keeps its own copy, so the two can

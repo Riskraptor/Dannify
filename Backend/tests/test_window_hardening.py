@@ -45,7 +45,7 @@ def test_the_old_cache_is_emptied_once_and_the_rest_kept(tmp_path):
 
 
 def test_the_view_is_locked_to_an_app():
-    ns = _load('_lock_view_settings')
+    ns = _load('_lock_view_settings', _FROZEN=True)
 
     class FakeSettings:
         IsZoomControlEnabled = True
@@ -53,6 +53,9 @@ def test_the_view_is_locked_to_an_app():
         IsPasswordAutosaveEnabled = True
         IsGeneralAutofillEnabled = True
         IsSwipeNavigationEnabled = True
+        AreBrowserAcceleratorKeysEnabled = True
+        IsStatusBarEnabled = True
+        AreDevToolsEnabled = True
 
     class Core:
         Settings = FakeSettings()
@@ -61,7 +64,15 @@ def test_the_view_is_locked_to_an_app():
     ns['_lock_view_settings'](core)
     s = core.Settings
     assert not any((s.IsZoomControlEnabled, s.IsPinchZoomEnabled, s.IsPasswordAutosaveEnabled,
-                    s.IsGeneralAutofillEnabled, s.IsSwipeNavigationEnabled))
+                    s.IsGeneralAutofillEnabled, s.IsSwipeNavigationEnabled,
+                    s.AreBrowserAcceleratorKeysEnabled, s.IsStatusBarEnabled, s.AreDevToolsEnabled))
+
+    # A development run keeps its inspector.
+    ns = _load('_lock_view_settings', _FROZEN=False)
+    core = Core()
+    core.Settings = FakeSettings()
+    ns['_lock_view_settings'](core)
+    assert core.Settings.AreDevToolsEnabled and not core.Settings.AreBrowserAcceleratorKeysEnabled
 
     class Older:  # a runtime without some of these: no error
         Settings = object()

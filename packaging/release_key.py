@@ -11,6 +11,11 @@
     python packaging/release_key.py verify-release <file>...
                                                    check each against PUBLIC_KEY
                                                    in updates.py (no private key)
+    python packaging/release_key.py sign-support [config/support-live.json]
+                                                   sign the payment details the app
+                                                   reads between releases (support.py);
+                                                   their "version" must go up each time
+    python packaging/release_key.py verify-support [config/support-live.json]
 
 The private key is read from the DANNIFY_RELEASE_KEY environment variable
 (64 hex characters) or else from .dannify/release-signing.key in the home
@@ -35,7 +40,8 @@ from dannify import release_assets, signing  # noqa: E402
 
 KEY_FILE = Path.home() / '.dannify' / 'release-signing.key'
 # Windows' two kinds, and every platform kind release_assets names.
-KINDS = ('package', 'installer')
+KINDS = ('package', 'installer', 'support')
+SUPPORT_FILE = Path(__file__).resolve().parent.parent / 'config' / 'support-live.json'
 
 
 def _known_kind(kind: str) -> bool:
@@ -139,6 +145,29 @@ def main(argv: list[str]) -> int:
             bad += not ok
             print(f'  {path.name} ({kind} {version}): {"signature OK" if ok else "BAD SIGNATURE"}')
         return 1 if bad else 0
+    if command in ('sign-support', 'verify-support') and len(argv) <= 2:
+        import json
+
+        path = Path(argv[1]) if len(argv) == 2 else SUPPORT_FILE
+        if not path.is_file():
+            raise SystemExit(f'no such file: {path}')
+        details = json.loads(path.read_text(encoding='utf-8'))
+        version = details.get('version')
+        if not isinstance(version, int) or version < 1:
+            raise SystemExit('the details need a whole-number "version", 1 or more, higher than the last one')
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'Backend'))
+        from dannify import support  # noqa: PLC0415
+
+        if command == 'sign-support':
+            secret = load_secret()
+            if signing.public_key(secret).hex() != _shipped_public_key():
+                raise SystemExit('this key is not the one installed copies trust (PUBLIC_KEY)')
+            out = sign_file('support', str(version), path, secret)
+            print(f'  signed {path.name} (version {version}) -> {out.name}')
+        sig = path.with_name(path.name + signing.SIGNATURE_SUFFIX)
+        found = sig.is_file() and support.accept_live(path.read_bytes(), sig.read_text(encoding='ascii'), _shipped_public_key())
+        print(f'  {path.name}: {"accepted by the app" if found else "NOT ACCEPTED"}')
+        return 0 if found else 1
     if command in ('sign', 'verify') and len(argv) == 4:
         kind, version, path = argv[1], argv[2], Path(argv[3])
         if not path.is_file():

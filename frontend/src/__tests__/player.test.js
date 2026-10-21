@@ -546,6 +546,30 @@ describe('switching lyric versions (item 8)', () => {
       expect.objectContaining({ title: 'Song 1' })
     )
   })
+
+  it('marks the version on screen, and keeps the one picked by its fingerprint', async () => {
+    const best = [{ time: 1, text: 'the best match' }]
+    api.getLyrics = vi.fn(() =>
+      Promise.resolve({ data: { synced: best, version_count: -1, title: 'Song 0', artist: 'Artist' } })
+    )
+    start(1)
+    await flush()
+    api.getLyricVersions = vi.fn(() =>
+      Promise.resolve({
+        data: {
+          version: 0,
+          versions: [
+            { synced: [{ time: 1, text: 'another upload' }], pick: 'aaaa' },
+            { synced: best, pick: 'bbbb' },
+          ],
+        },
+      })
+    )
+    await P.loadLyricVersions()
+    expect(P.lyricVersionIndex.value).toBe(1) // the one showing, not the first
+    await P.chooseLyricVersion(0)
+    expect(api.saveLyricsOffset).toHaveBeenLastCalledWith('Song 0', 'Artist', 0, 0, 'aaaa')
+  })
 })
 
 

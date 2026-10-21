@@ -121,6 +121,51 @@ async def listens_recap_endpoint(year: int = Query(0, ge=0, le=9999)) -> dict[st
     return await asyncio.to_thread(listens_mod.recap, year or datetime.date.today().year)
 
 
+@router.get('/api/listens/story')
+async def listens_story_endpoint(
+    period: str = Query('year', pattern='^(day|week|month|year)$'),
+    year: int = Query(0, ge=0, le=9999),
+    ago: int = Query(0, ge=0, le=60),
+    week_start: int = Query(0, ge=0, le=6),
+) -> dict[str, Any]:
+    """Today, this week, this month or a year, or one before (``ago``), told
+    as a story (see listens.story)."""
+
+    return await asyncio.to_thread(listens_mod.story, period, year or None, None, ago, week_start)
+
+
+@router.post('/api/share/image')
+async def share_image_endpoint(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Save a picture the window drew (Your Soundtrack's card) in the
+    Pictures folder and show it there (see share.py)."""
+
+    import base64
+    import binascii
+
+    from .. import share  # noqa: PLC0415
+
+    try:
+        data = base64.b64decode(str(payload.get('data') or ''), validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail='not a picture') from None
+    try:
+        path = await asyncio.to_thread(share.save_png, str(payload.get('name') or ''), data)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='not a picture') from None
+    except OSError as exc:
+        logger.warning('could not save a picture: {}', exc)
+        raise HTTPException(status_code=500, detail='could not save') from None
+    shown = await asyncio.to_thread(share.reveal, path) if payload.get('reveal', True) else False
+    return {'path': str(path), 'name': path.name, 'shown': shown}
+
+
+@router.get('/api/listens/glance')
+async def listens_glance_endpoint(week_start: int = Query(0, ge=0, le=6)) -> dict[str, Any]:
+    """Today, this week, this month and this year at a glance, for Home."""
+
+    return await asyncio.to_thread(listens_mod.glance, None, week_start)
+
+
 @router.get('/api/listens/history')
 async def listens_history_endpoint(
     limit: int = Query(100, ge=1, le=500), before: int = Query(0, ge=0)
