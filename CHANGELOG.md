@@ -4,6 +4,49 @@ What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
 page](https://github.com/Riskraptor/Dannify/releases).
 
+## 4.14.0
+
+Your year in music, retold; your YouTube Music listening, by itself; and a
+Settings worth opening.
+
+- **Your year in music, told in full.** Up to fourteen pages, each in its own
+  colour: the minutes you listened and how that compares with last year;
+  your top artist and their share of your listening; your top song, when
+  you first played it and the most times you played it in one day; your
+  top albums; your year month by month with each month's artist; the hours
+  and weekdays you listen most; your longest streak and the song you could
+  not stop repeating; what you discovered; and the kind of listener you
+  are. It ends on a card with your top five artists and songs, to play or
+  save as a playlist. Hold to pause, tap to move on.
+- **Your YouTube Music listening comes in by itself.** There is no button
+  to press. Opening Your stats, History or Your year in music brings in
+  what you played elsewhere, quietly, and not again a moment later.
+- **Saved songs can switch lyrics versions too.** While you are online, pick
+  another version of a saved song's lyrics. It is kept beside the song, so
+  it is the one you see offline and after a restart.
+- **Special days, brought to life.** Settings shows the next special day as
+  a card in its own colours, with its own weather falling, a countdown and
+  its music. The rest of the year slides by as tiles. Setting up Dannify
+  now asks where you are and previews your next special day, and the
+  region you pick shows its flag.
+- **Settings, redesigned.** Each pane opens on a header in its own colour,
+  and every setting's icon takes that colour. The column starts with who is
+  signed in and ends with your version and whether an update is waiting.
+  Panes slide in, the arrow keys move between them, and a search marks the
+  words it found and says which pane each result is in. Language has
+  moved to General.
+
+Fixed:
+
+- The "Keep playing when I close the window" switch could show off while it
+  was on, if Settings was the first page opened.
+- A link to a Settings pane (the sound panel's "More settings") did nothing
+  if it named the pane the last such link had opened.
+- Picking the second of two lyrics versions that differ only by a comma
+  marked the first one.
+- The welcome after an update could open scrolled to its foot, with its
+  title cut off. It opens at the top now, with its button always in reach.
+
 ## 4.13.0
 
 Every special day of your year, your listening from everywhere, your
