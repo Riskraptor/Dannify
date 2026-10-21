@@ -6,46 +6,69 @@ page](https://github.com/Riskraptor/Dannify/releases).
 
 ## 4.14.0
 
-Your year in music, retold; your YouTube Music listening, by itself; and a
-Settings worth opening.
+Your Soundtrack, a kinder update, a Settings worth opening, and an app that
+feels like one.
 
-- **Your year in music, told in full.** Up to fourteen pages, each in its own
-  colour: the minutes you listened and how that compares with last year;
-  your top artist and their share of your listening; your top song, when
-  you first played it and the most times you played it in one day; your
-  top albums; your year month by month with each month's artist; the hours
-  and weekdays you listen most; your longest streak and the song you could
-  not stop repeating; what you discovered; and the kind of listener you
-  are. It ends on a card with your top five artists and songs, to play or
-  save as a playlist. Hold to pause, tap to move on.
+- **Your year in music is now Your Soundtrack, and everything in it plays.**
+  Up to fourteen pages, each in its own colour: the minutes you listened
+  against last year; your top artist and their share of your listening;
+  your song of the year, when you first played it and the most times in a
+  day; your top albums; the year month by month; the hours and weekdays you
+  listen most; your longest streak and the song you could not stop
+  repeating; what you discovered; and the kind of listener you are. Every
+  song, artist and album in it plays or opens at a click, and with the
+  music following the story, each page plays its own song. Click the bars
+  at the top to jump to any page, swipe, scroll or use Home and End, and
+  come back from a page it opened to find it where you left it. It ends on
+  a card to play or save as a playlist.
+- **Updating, kindly.** Restarting into a new version used to make the
+  window vanish mid-song and come back paused. Now the music fades, a
+  screen with a turning record says sorry and that it will only be a
+  moment, and Dannify comes back playing the same song at the same second,
+  with a cheerful hello.
+- **The lyrics version you pick stays picked.** Choose another version and
+  it is the one you get every time the song plays, found again even when
+  the list of versions changes. Saved songs can switch versions too, while
+  you are online, and the one you pick is kept beside the song.
 - **Your YouTube Music listening comes in by itself.** There is no button
-  to press. Opening Your stats, History or Your year in music brings in
-  what you played elsewhere, quietly, and not again a moment later.
-- **Saved songs can switch lyrics versions too.** While you are online, pick
-  another version of a saved song's lyrics. It is kept beside the song, so
-  it is the one you see offline and after a restart.
-- **Special days, brought to life.** Settings shows the next special day as
-  a card in its own colours, with its own weather falling, a countdown and
-  its music. The rest of the year slides by as tiles. Setting up Dannify
-  now asks where you are and previews your next special day, and the
-  region you pick shows its flag.
-- **Settings, redesigned.** Each pane opens on a header in its own colour,
-  and every setting's icon takes that colour. The column starts with who is
-  signed in and ends with your version and whether an update is waiting.
-  Panes slide in, the arrow keys move between them, and a search marks the
-  words it found and says which pane each result is in. Language has
-  moved to General.
+  to press. Opening Your stats, History or Your Soundtrack brings in what
+  you played elsewhere.
+- **Settings, redesigned.** Grouped and roomier, with every pane in its
+  own colour, your account at the top and your version at the foot. Long
+  pages are split: Sound (loudness, equalizer, balance, output) and Special
+  days have pages of their own. Panes slide in, the arrow keys move
+  between them, and a search marks the words it found. Language is in
+  General.
+- **Support Dannify.** A page of its own: Ko-fi, M-Pesa and PayPal, and the
+  ways to help that cost nothing, like telling a friend.
+- **Tell the developer.** Report a problem or share an idea from inside the
+  app, and it reaches the developer's inbox, with the app's details if you
+  want them to go. Sending is a slide of a music note, so nothing goes by
+  accident.
+- **Special days, brought to life.** Every day's weather has depth now:
+  far pieces small and faint, near ones large and soft, parting as you move
+  the mouse, with gusts of wind for what falls. Lamps, lanterns and stars
+  glow, a star shoots across on Eid, and New Year's fireworks climb on a
+  trail and burst in rings of sparks. Settings shows the next day as a card
+  in its own colours, and setting up Dannify asks where you are.
+- **An app, not a page.** The browser's own keys and habits are gone:
+  Ctrl+P printing, the caret browsing prompt, the link address in the
+  corner, middle-click autoscroll, links opening second windows, pictures
+  dragging off as ghosts.
+- **Lighter.** Dannify installs about 4 MB lighter: of yt-dlp's
+  extractors for 1,800 sites, only YouTube's are shipped, which is all it
+  ever used.
 
 Fixed:
 
+- Picking the first lyrics version was not kept, and a picked version
+  could change to another when the list was reordered.
 - The "Keep playing when I close the window" switch could show off while it
   was on, if Settings was the first page opened.
 - A link to a Settings pane (the sound panel's "More settings") did nothing
   if it named the pane the last such link had opened.
-- Picking the second of two lyrics versions that differ only by a comma
-  marked the first one.
 - The welcome after an update could open scrolled to its foot, with its
-  title cut off. It opens at the top now, with its button always in reach.
+  title cut off.
 
 ## 4.13.0
 
