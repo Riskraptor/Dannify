@@ -378,6 +378,18 @@ function discardUpdate() {
 }
 
 // --- Online explorer (Spotify-style discovery) ---
+// YouTube Music's history brought into Dannify's (Backend/dannify/ytm_history.py).
+function syncYouTubeHistory() {
+  return API.post('/api/listens/youtube', null, { timeout: 60000 })
+}
+function youTubeHistoryStatus() {
+  return API.get('/api/listens/youtube')
+}
+// The country the computer is set to (Windows, macOS or Linux), for special
+// days (model/occasions.js).
+function region() {
+  return API.get('/api/region')
+}
 function exploreSearch(q, limit = 20) {
   return API.get('/api/explore/search', { params: { q, limit } })
 }
@@ -561,6 +573,9 @@ export default {
   refreshDetails,
   refreshArtists,
   exploreSearch,
+  region,
+  syncYouTubeHistory,
+  youTubeHistoryStatus,
   searchSuggest,
   exploreArtist,
   getMoods,

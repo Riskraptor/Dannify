@@ -212,8 +212,10 @@ const openExternal = (url) => {
   return call('shell_open_external', String(url || ''))
 }
 const setTheme = (theme) => call('app_set_theme', theme)
-// Special days on or off: the splash, drawn before the window is, reads it.
-const setSeasonal = (on) => call('app_set_seasonal', !!on)
+// The country whose special days are kept: the splash, drawn before the
+// window is, reads it.
+const setRegion = (code) => call('app_set_region', String(code || ''))
+const setSplashWords = (words) => call('app_set_splash_words', words)
 const readClipboard = () => call('clipboard_read')
 const setTaskbarProgress = (value, mode = 'normal') =>
   call('taskbar_progress', Number(value) || 0, mode)
@@ -380,7 +382,8 @@ export const desktop = {
   openLibraryFolder,
   openExternal,
   setTheme,
-  setSeasonal,
+  setRegion,
+  setSplashWords,
   readClipboard,
   setTaskbarProgress,
   setPlaybackState,

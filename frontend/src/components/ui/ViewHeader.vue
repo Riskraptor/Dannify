@@ -5,7 +5,7 @@
       <Icon :icon="tile.icon" class="vh-tile-icon" />
     </div>
     <div class="vh-text">
-      <p v-if="eyebrow" class="eyebrow mb-1 truncate">{{ eyebrow }}</p>
+      <p v-if="eyebrow" class="view-kind truncate">{{ eyebrow }}</p>
       <h1 class="vh-title">{{ title }}</h1>
       <p v-if="subtitle || $slots.meta" class="vh-sub">
         <slot name="meta">{{ subtitle }}</slot>
@@ -31,6 +31,14 @@ defineProps({
 </script>
 
 <style scoped>
+/* What the page is, above its name: the same small label an album or a
+   playlist has over its own. */
+.view-kind {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--c-fg) / 0.85);
+}
 .vh {
   display: flex;
   flex-wrap: wrap;

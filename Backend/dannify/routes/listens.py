@@ -6,6 +6,7 @@ import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
+from loguru import logger
 
 from .. import listens as listens_mod
 from .. import scrobble
@@ -40,6 +41,33 @@ async def listen_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[st
 
     body = payload if isinstance(payload, dict) else {}
     return {'recorded': await asyncio.to_thread(_take, body)}
+
+
+@router.get('/api/listens/youtube')
+def listens_youtube_status_endpoint() -> dict[str, Any]:
+    """When YouTube Music's history was last brought in, and how much."""
+
+    from .. import ytm_history  # noqa: PLC0415
+
+    return ytm_history.status()
+
+
+@router.post('/api/listens/youtube')
+async def listens_youtube_sync_endpoint() -> dict[str, Any]:
+    """Bring in what is new in YouTube Music's history (see ytm_history.py).
+
+    401 when not signed in with Google, 503 when YouTube Music cannot be asked.
+    """
+
+    from .. import account, ytm_history  # noqa: PLC0415
+
+    try:
+        return await asyncio.to_thread(ytm_history.sync)
+    except account.NotSignedIn as exc:
+        raise HTTPException(status_code=401, detail='signed out') from exc
+    except Exception as exc:
+        logger.opt(exception=True).info('YouTube Music history could not be read')
+        raise HTTPException(status_code=503, detail='unreachable') from exc
 
 
 @router.get('/api/listenbrainz')

@@ -1,5 +1,5 @@
 <template>
-  <div class="lyrics-lines" :class="{ 'is-large': large }">
+  <div class="lyrics-lines" :class="{ 'is-large': large, 'is-aligning': ui.lyricsSyncOpen.value }">
     <div
       ref="scroll"
       class="synced-scroll"
@@ -26,7 +26,7 @@
           :tabindex="idx === tabStop ? 0 : -1"
           :aria-current="idx === active ? 'true' : undefined"
           dir="auto"
-          @click="player.seekToLyric(idx)"
+          @click="onLine(idx)"
           @focus="focused = idx"
         >
           <span class="lyric-stamp" aria-hidden="true">{{ formatShort(line.time) }}</span>
@@ -59,11 +59,23 @@ import { useI18n } from '/src/i18n'
 import { formatShort } from '/src/model/lyrics/lrc'
 import { useLyricsFollow } from '/src/model/lyrics/useLyricsFollow'
 import LyricWords from '/src/components/lyrics/LyricWords.vue'
+import { useUi } from '/src/model/ui'
+import { useLyricsTools } from '/src/model/lyrics/useLyricsTools'
 
 defineProps({ large: { type: Boolean, default: false } })
 
 const { t } = useI18n()
 const player = usePlayer()
+
+const ui = useUi()
+const tools = useLyricsTools()
+
+// A line clicked plays from it; while the timing card is open, it is the line
+// being heard, and the words line up to it instead.
+function onLine(idx) {
+  if (ui.lyricsSyncOpen.value) tools.alignTo(idx)
+  else player.seekToLyric(idx)
+}
 
 const scroll = ref(null)
 const lines = computed(() => player.lyricsLines.value)
@@ -123,6 +135,15 @@ function onFocusOut(e) {
 </script>
 
 <style scoped>
+/* Timing open: every line is "this is the one I hear", and looks it. */
+.is-aligning .lyric-line {
+  cursor: crosshair;
+}
+.is-aligning .lyric-line:hover {
+  border-radius: 10px;
+  background: rgb(var(--c-accent) / 0.1);
+  color: rgb(var(--c-fg));
+}
 .lyrics-lines {
   position: relative;
   height: 100%;

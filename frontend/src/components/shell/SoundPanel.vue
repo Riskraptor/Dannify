@@ -26,22 +26,30 @@
         <section v-if="tab === 'eq'" class="snd-body">
           <template v-if="engineOn">
             <div class="snd-line">
-              <span class="snd-label">{{ t('settings.equalizer') }}</span>
+              <span class="snd-label">
+                {{ t('settings.equalizer') }}
+                <span v-if="player.eq.value.on" class="snd-preset">{{ presetName }}</span>
+              </span>
               <input
                 type="checkbox"
                 class="switch"
                 :checked="player.eq.value.on"
+                :aria-label="t('settings.equalizer')"
                 @change="player.setEqEnabled($event.target.checked)"
               />
             </div>
+            <!-- Dragging a band, or picking a sound, turns it on. -->
             <EqGraph
               :on="player.eq.value.on"
               :gains="player.eq.value.gains"
+              :title="t('sound.graphHint')"
               @band="(i, db) => player.setEqBand(i, db)"
             />
-            <p class="snd-hint">{{ t('sound.graphHint') }}</p>
+            <p class="snd-hint is-one-line">{{ t('sound.graphHint') }}</p>
 
-            <div class="snd-chips">
+            <!-- One row that slides, ending in Save: wrapped, the sounds made
+                 three ragged rows with Save alone on the last. -->
+            <div class="snd-chips is-row">
               <button
                 v-for="name in builtIn"
                 :key="name"
@@ -69,7 +77,7 @@
               </button>
             </div>
 
-            <div class="snd-row">
+            <div class="snd-row is-compact">
               <span class="snd-label">
                 {{ t('sound.preamp') }}
                 <span class="snd-value">{{ preampLabel }}</span>
@@ -109,9 +117,16 @@
                 :value="player.crossfade.value / 12"
                 :step="1 / 12"
                 :label="t('settings.crossfade')"
-                :tooltip="(r) => (Math.round(r * 12) ? t('settings.seconds', { n: Math.round(r * 12) }) : t('settings.crossfadeOff'))"
+                :tooltip="(r) => (Math.round(r * 12) ? t('settings.seconds', { count: Math.round(r * 12) }) : t('settings.crossfadeOff'))"
                 @input="(v) => player.setCrossfade(Math.round(v * 12))"
               />
+              <!-- Its stops, named: at Off the bare track read as a divider. -->
+              <div class="snd-ticks" aria-hidden="true">
+                <span>{{ t('settings.crossfadeOff') }}</span>
+                <span>{{ t('settings.seconds', { count: 4 }) }}</span>
+                <span>{{ t('settings.seconds', { count: 8 }) }}</span>
+                <span>{{ t('settings.seconds', { count: 12 }) }}</span>
+              </div>
             </div>
             <label class="snd-line" :class="{ 'is-dim': player.crossfade.value > 0 }">
               <span class="snd-label"><Icon icon="ph:infinity" class="h-4 w-4" />{{ t('settings.gapless') }}</span>
@@ -151,24 +166,21 @@
               <Icon icon="ph:gauge" class="h-4 w-4" />{{ t('sound.speed') }}
               <span class="snd-value">{{ player.speed.value.toFixed(2).replace(/0$/, '') }}×</span>
             </span>
-            <div class="snd-chips is-tight">
+            <!-- One set of choices: chips and a slider for the same thing
+                 were two answers to one question. -->
+            <div class="seg snd-seg" role="radiogroup" :aria-label="t('sound.speed')">
               <button
-                v-for="s in [0.75, 1, 1.25, 1.5]"
+                v-for="s in SPEEDS"
                 :key="s"
-                class="snd-chip"
-                :class="{ 'is-on': player.speed.value === s }"
+                class="seg-item"
+                role="radio"
+                :aria-checked="Math.abs(player.speed.value - s) < 0.01 ? 'true' : 'false'"
+                :class="{ 'is-active': Math.abs(player.speed.value - s) < 0.01 }"
                 @click="player.setSpeed(s)"
               >
                 {{ s }}×
               </button>
             </div>
-            <RangeSlider
-              :value="(player.speed.value - 0.5) / 1.5"
-              :step="0.05 / 1.5"
-              :label="t('sound.speed')"
-              :tooltip="(r) => `${(0.5 + r * 1.5).toFixed(2)}×`"
-              @input="(v) => player.setSpeed(0.5 + v * 1.5)"
-            />
           </div>
           <label class="snd-line">
             <span class="snd-label"><Icon icon="ph:music-note" class="h-4 w-4" />{{ t('sound.keepPitch') }}</span>
@@ -189,8 +201,13 @@
                 {{ t('settings.balance') }}
                 <span class="snd-value">{{ balanceLabel }}</span>
               </span>
+              <!-- A speaker at each end, fading as the sound moves away
+                   from it. They floated under the track, saying nothing. -->
               <div class="bal-wrap">
-                <span class="bal-side">{{ t('settings.balanceLeft') }}</span>
+                <span class="bal-side" :style="{ opacity: 0.35 + 0.65 * Math.min(1, 1 - player.balance.value) }">
+                  <Icon icon="ph:speaker-simple-high-fill" class="h-4 w-4 -scale-x-100" />
+                  {{ t('settings.balanceLeft') }}
+                </span>
                 <div class="bal-track">
                   <span class="bal-centre" />
                   <span class="bal-fill" :style="balanceFill" />
@@ -205,14 +222,9 @@
                     @input="onBalance($event.target.value)"
                   />
                 </div>
-                <span class="bal-side">{{ t('settings.balanceRight') }}</span>
-              </div>
-              <div class="bal-ears" aria-hidden="true">
-                <span class="bal-ear" :style="{ opacity: 0.3 + 0.7 * Math.min(1, 1 - player.balance.value) }">
-                  <Icon icon="ph:speaker-simple-high-fill" class="h-5 w-5 -scale-x-100" />
-                </span>
-                <span class="bal-ear" :style="{ opacity: 0.3 + 0.7 * Math.min(1, 1 + player.balance.value) }">
-                  <Icon icon="ph:speaker-simple-high-fill" class="h-5 w-5" />
+                <span class="bal-side" :style="{ opacity: 0.35 + 0.65 * Math.min(1, 1 + player.balance.value) }">
+                  {{ t('settings.balanceRight') }}
+                  <Icon icon="ph:speaker-simple-high-fill" class="h-4 w-4" />
                 </span>
               </div>
             </div>
@@ -294,6 +306,14 @@ function setTab(id) {
   }
 }
 
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2]
+// The sound chosen, by name, beside the switch.
+const presetName = computed(() => {
+  const name = String(player.eq.value.preset || 'custom')
+  if (name.startsWith('user:')) return name.slice(5)
+  return t(`settings.eqPreset.${builtIn.includes(name) ? name : 'custom'}`)
+})
+
 const formatDb = (db) => (db > 0 ? `+${db.toFixed(1)} dB` : `${db.toFixed(1)} dB`)
 const autoPreamp = computed(() => -Math.max(0, ...player.eq.value.gains.map((g) => Number(g) || 0)) / 2)
 const preampValue = computed(() => (player.eq.value.preamp === 'auto' ? autoPreamp.value : player.eq.value.preamp))
@@ -301,7 +321,7 @@ const preampLabel = computed(() =>
   player.eq.value.preamp === 'auto' ? `${t('sound.auto')} · ${formatDb(autoPreamp.value)}` : formatDb(preampValue.value)
 )
 const crossfadeLabel = computed(() =>
-  player.crossfade.value ? t('settings.seconds', { n: player.crossfade.value }) : t('settings.crossfadeOff')
+  player.crossfade.value ? t('settings.seconds', { count: player.crossfade.value }) : t('settings.crossfadeOff')
 )
 const balanceLabel = computed(() => {
   const v = Math.round(player.balance.value * 100)
@@ -360,7 +380,10 @@ watch(
     const bottom = r ? Math.max(8, window.innerHeight - r.top + 10) : 96
     place.value = { right: `${Math.min(right, window.innerWidth - width - 8)}px`, bottom: `${bottom}px`, width: `${width}px` }
     box.value && box.value.focus({ preventScroll: true })
-  }
+  },
+  // It is fetched on its first opening (PlayerBar.vue), and so arrives
+  // already open: placed then too, not left in the window's corner.
+  { immediate: true }
 )
 
 function close() {
@@ -454,8 +477,44 @@ function openSettings() {
   gap: 6px;
   margin-top: 10px;
 }
-.snd-chips.is-tight {
-  margin-top: 0;
+.snd-chips.is-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  -webkit-mask: linear-gradient(90deg, #000 88%, transparent);
+  mask: linear-gradient(90deg, #000 88%, transparent);
+}
+.snd-chips.is-row::-webkit-scrollbar {
+  display: none;
+}
+.snd-chips.is-row .snd-chip {
+  flex: none;
+}
+.snd-preset {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgb(var(--c-accent) / 0.14);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgb(var(--c-accent));
+}
+.snd-hint.is-one-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.snd-row.is-compact {
+  padding-top: 14px;
+}
+.snd-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--c-fg) / var(--fg-50));
 }
 .snd-chip {
   display: inline-flex;
@@ -520,11 +579,13 @@ function openSettings() {
   gap: 10px;
 }
 .bal-side {
-  width: 12px;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 700;
-  color: rgb(var(--c-fg) / var(--fg-50));
+  color: rgb(var(--c-accent));
+  transition: opacity 0.15s ease;
 }
 .bal-track {
   position: relative;
@@ -556,15 +617,6 @@ function openSettings() {
   width: 100%;
   opacity: 0;
   cursor: pointer;
-}
-.bal-ears {
-  display: flex;
-  justify-content: space-between;
-  padding: 2px 4px 0;
-  color: rgb(var(--c-accent));
-}
-.bal-ear {
-  transition: opacity 0.15s ease;
 }
 .snd-wide {
   display: flex;

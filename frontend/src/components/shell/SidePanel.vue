@@ -77,7 +77,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useUi } from '/src/model/ui'
 import { usePlayer } from '/src/model/player'
@@ -88,7 +88,8 @@ import CoverImage from '../ui/CoverImage.vue'
 import LyricsView from '../lyrics/LyricsView.vue'
 import LyricsToolbar from '../lyrics/LyricsToolbar.vue'
 import QueueList from './QueueList.vue'
-import NowPlayingAbout from './NowPlayingAbout.vue'
+// The About tab is fetched the first time it is shown.
+const NowPlayingAbout = defineAsyncComponent(() => import('./NowPlayingAbout.vue'))
 
 const { t } = useI18n()
 const ui = useUi()
@@ -146,10 +147,13 @@ function startResize(e) {
   min-width: 0;
   gap: 2px;
 }
+/* Each tab as wide as its words, sharing what is left: equal thirds cut
+   "Warteschlange" or "Maneno ya wimbo" short beside a tab with room to spare.
+   The open one gives way last. */
 .sp-tab {
   position: relative;
   display: inline-flex;
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
   align-items: center;
   justify-content: center;
@@ -169,6 +173,8 @@ function startResize(e) {
   background: rgb(var(--c-tint) / 0.05);
 }
 .sp-tab.is-active {
+  flex-shrink: 0;
+  max-width: 60%;
   color: rgb(var(--c-fg));
 }
 /* The bar under the open tab, grown from its middle. */

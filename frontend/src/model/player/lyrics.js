@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import API from '/src/model/api'
 import { currentTime, currentTrack, duration, isPlaying, readStored, storeSetting } from '/src/model/player/state'
 import { play, seek } from '/src/model/player/transport'
@@ -14,7 +14,7 @@ export const lyricsLoading = ref(false)
 export const activeLyricIndex = ref(-1)
 export const lyricsOffset = ref(0) // seconds; positive = lyrics appear later
 const lyricsMeta = ref({ title: '', artist: '' }) // for saving offsets
-const lyricVersions = ref([]) // all synced versions [{synced, plain}]
+const lyricVersions = ref([]) // all synced versions [{synced, plain, about}]
 export const lyricVersionIndex = ref(0) // which version is showing
 export const lyricVersionCount = ref(0) // how many versions exist
 let lyricsToken = 0
@@ -183,36 +183,81 @@ export function saveLyricsOffset() {
   ).catch(() => {})
 }
 
-// Cycle to the next synced lyric version (when there are several). Lazily
-// fetches the full version list the first time it's needed.
-export async function switchLyricVersion(dir = 1) {
+/**
+ * Every synced version of the current song's lyrics, fetched the first time
+ * it is wanted. The list is a round trip, and the track can change while it
+ * is out: switching version and then skipping once put the previous song's
+ * lyrics on the new one.
+ * @returns {Promise<boolean>} whether there is a list for this track
+ */
+export async function loadLyricVersions() {
   const track = currentTrack.value
-  if (!track) return
-  // The version list is a round trip, and the track can change while it is
-  // out. Nothing checked, so switching version and then skipping put the
-  // previous song's lyrics on the new one, and left its version list behind
-  // for the next switch to cycle through.
+  if (!track) return false
+  if (lyricVersions.value.length) return true
   const token = lyricsToken
-  if (lyricVersions.value.length === 0) {
-    // Load all versions on demand.
-    let versions = []
-    try {
-      const res = await API.getLyricVersions(_lyricsParams(track))
-      versions = (res.data && res.data.versions) || []
-    } catch {
-      versions = []
-    }
-    if (token !== lyricsToken || currentTrack.value !== track) return
-    lyricVersions.value = versions
-    if (lyricVersions.value.length === 0) return
+  let versions = []
+  try {
+    const res = await API.getLyricVersions(_lyricsParams(track))
+    versions = (res.data && res.data.versions) || []
+  } catch {
+    versions = []
   }
+  if (token !== lyricsToken || currentTrack.value !== track) return false
+  lyricVersions.value = versions
+  if (versions.length) lyricVersionCount.value = versions.length
+  return versions.length > 0
+}
+
+/**
+ * What the picker shows of each version: how it is timed, its length beside
+ * the song's, how many lines, and how it starts.
+ */
+export const lyricVersionList = computed(() =>
+  lyricVersions.value.map((v, index) => {
+    const lines = v.synced || []
+    return {
+      index,
+      about: v.about || {},
+      preview: lines
+        .map((l) => l.text)
+        .filter(Boolean)
+        .slice(0, 2),
+    }
+  })
+)
+
+/** Show version `index`, and keep it as this song's choice. */
+export async function chooseLyricVersion(index) {
+  if (!(await loadLyricVersions())) return
   const n = lyricVersions.value.length
-  if (n <= 1) return
-  lyricVersionIndex.value = (lyricVersionIndex.value + dir + n) % n
-  const v = lyricVersions.value[lyricVersionIndex.value]
+  const at = ((index % n) + n) % n
+  const v = lyricVersions.value[at]
+  lyricVersionIndex.value = at
   lyricsLines.value = v.synced || []
   lyricsPlain.value = v.plain || null
   lyricVersionCount.value = n
+  updateActiveLyric()
+  // Kept with the song's timing, so it is the one shown next time too.
+  saveLyricsOffset()
+}
+
+// Cycle to the next synced lyric version (when there are several).
+export async function switchLyricVersion(dir = 1) {
+  if (!(await loadLyricVersions())) return
+  if (lyricVersions.value.length <= 1) return
+  await chooseLyricVersion(lyricVersionIndex.value + dir)
+}
+
+/**
+ * Line the lyrics up with the song by the line being heard now: the words
+ * move so that line is the one playing. Easier than working out by ear
+ * whether they are early or late, and by how much.
+ */
+export function alignLyricToNow(index) {
+  const line = lyricsLines.value[index]
+  if (!line || typeof line.time !== 'number') return
+  const next = Math.max(-30, Math.min(30, (currentTime.value || 0) - line.time))
+  lyricsOffset.value = Math.round(next * 10) / 10
   updateActiveLyric()
 }
 

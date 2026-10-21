@@ -42,6 +42,7 @@ async function fontsSettled(ms = 450) {
 
 /** A palette, light or dark, a typeface, an accent: cross-faded, kept in place. */
 export function restyle(change, anchor = null) {
+  if (typeof document === 'undefined') return Promise.resolve(change())
   const restore = pin(anchor)
   const run = async () => {
     change()

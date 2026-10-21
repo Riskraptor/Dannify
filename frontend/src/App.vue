@@ -70,7 +70,7 @@
   <LyricsEditor v-if="wanted.editor" :open="submitOpen" @close="submitOpen = false" />
   <Onboarding v-if="wanted.onboarding" />
   <!-- A special day's greeting: its code is fetched on such a day only. -->
-  <OccasionGreeting v-if="greetToday" />
+  <OccasionGreeting v-if="greetToday" :occasion="greetToday" />
 </template>
 
 <script setup>
@@ -87,7 +87,8 @@ import ContextMenuHost from './components/ui/ContextMenuHost.vue'
 import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
 import { startOnboarding, useOnboarding } from './model/onboarding'
-import { occasionOn, seasonal, shouldGreet } from './model/occasions'
+import { loadCalendar, region, shouldGreet, systemRegion, today } from './model/occasions'
+import { startYtmSync } from './model/ytmSync'
 import { useReporting } from './model/problems'
 import { whatsNew } from './model/updates'
 
@@ -105,6 +106,7 @@ const OccasionGreeting = defineAsyncComponent(() => import('./components/ui/Occa
 import { useUi } from './model/ui'
 import { usePlayer } from './model/player'
 import { desktop } from './desktop/bridge'
+import API from './model/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -202,10 +204,21 @@ const removeAfter = router.afterEach((to, from) => {
 // --- Lyrics contribution modal (opened from several places) ---------------
 const submitOpen = ref(false)
 
-// Christmas, the New Year (model/occasions.js): greeted once, if still to be.
-const greetToday = shouldGreet(occasionOn())
-// Turned off in Settings, Appearance: off on the splash at the next start too.
-watch(seasonal, (on) => desktop.setSeasonal(on), { immediate: true })
+// Special days (model/occasions.js): the calendar is read, the computer
+// asked where it is, and today's day greeted once, if still to be.
+const greetToday = ref(null)
+loadCalendar().then(() => {
+  if (today.value && shouldGreet(today.value)) greetToday.value = today.value
+})
+API.region()
+  .then((res) => {
+    systemRegion.value = (res.data && res.data.system) || ''
+  })
+  .catch(() => {})
+// The splash is drawn before the window: it is told where we are.
+watch(region, (code) => code && desktop.setRegion(code))
+// YouTube Music's history, into Your stats (model/ytmSync.js).
+startYtmSync()
 
 // Once wanted, kept: each dialog's closing animation needs it still there.
 const reporting = useReporting()

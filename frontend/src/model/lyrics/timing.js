@@ -73,6 +73,25 @@ export function enoughTimed(lines) {
 }
 
 /**
+ * The line being sung now: the latest timed line whose time has come. -1
+ * before the first, or when nothing is timed. The editor shows it beside the
+ * line to tap next, which is the one after it: shown alone, that one read as
+ * the lyrics running a line ahead of the song.
+ */
+export function sungLine(lines, now) {
+  let best = -1
+  let bestTime = -Infinity
+  ;(lines || []).forEach((line, i) => {
+    const t = line.time
+    if (t != null && t <= now && t > bestTime) {
+      bestTime = t
+      best = i
+    }
+  })
+  return best
+}
+
+/**
  * The line the song has reached, for the editor to follow: the one after the
  * latest line whose time has come, because that is the one about to be
  * tapped. -1 when nothing is timed yet.

@@ -172,16 +172,13 @@ describe('after a restart', () => {
     expect(api.acknowledgeUpdate).toHaveBeenCalledTimes(1)
   })
 
-  it('with special days turned off, even a big release is told in a line', async () => {
-    const { setSeasonal } = await import('/src/model/occasions')
-    setSeasonal(false)
+  it('a fix with notes is still told in a line', async () => {
     api.updateStatus.mockResolvedValue({
-      data: { just_updated: { version: '4.8.0', notes: '- New: Special days' } },
+      data: { just_updated: { version: '4.8.1', notes: '- Fixed: something' } },
     })
     await vi.advanceTimersByTimeAsync(2600)
     expect((await import('../model/updates.js')).whatsNew.value).toBe(null)
     expect(toasts.some((x) => x.msg.startsWith('update.updatedToast'))).toBe(true)
-    setSeasonal(true)
   })
 
   it('says nothing when there is nothing to say', async () => {

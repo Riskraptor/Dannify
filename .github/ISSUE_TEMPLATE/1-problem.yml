@@ -1,0 +1,47 @@
+name: Something went wrong
+description: Dannify did something it should not have, or did not do something it should.
+labels: [problem]
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for taking the time. The more exactly you can say what happened, the sooner it is fixed.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Settings → About shows it.
+      placeholder: "4.13.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS
+        - Linux (Ubuntu, Debian, Mint…)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+      placeholder: "I pressed Save on a song in Now Playing, and…"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      description: Steps someone else could follow, if you know them.
+      placeholder: |
+        1. Open …
+        2. Press …
+  - type: textarea
+    id: pictures
+    attributes:
+      label: Screenshots
+      description: Drag pictures here. They help a lot.

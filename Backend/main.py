@@ -253,6 +253,10 @@ def build_app() -> FastAPI:
     from dannify import listens as _listens
 
     _listens.init(DATABASE_DIR)
+    # YouTube Music's history, brought into it (see ytm_history.py).
+    from dannify import ytm_history as _ytm_history
+
+    _ytm_history.init(DATABASE_DIR)
     from dannify import bench as _bench
 
     # Songs are put together in here before they are sealed (see bench.py).

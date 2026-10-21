@@ -90,8 +90,10 @@ function onlineCopyOf(track) {
 
 // A YouTube or Spotify track without what the views show: the online copy of
 // a saved song (its picture was in the file), or an entry a version before
-// this one wrote down thinly. Asked for once per run, as each one comes up,
-// rather than for a whole long queue at once.
+// this one wrote down thinly. Asked for once per run, as each one comes up
+// to play and as its row comes into view in the queue: only for the next
+// song, the rest of "Up next" was a column of blank squares. A few at a
+// time, so a long queue scrolled through is not a flood of requests.
 export function needsDetails(track) {
   if (!track || track.type !== 'stream') return false
   if (!videoIdOf(track) && !track.spotify_url) return false
@@ -99,12 +101,35 @@ export function needsDetails(track) {
 }
 
 const detailsAsked = new Set()
-export function fillMissingDetails(track) {
+const DETAILS_AT_ONCE = 3
+let detailsRunning = 0
+const detailsWaiting = []
+
+function nextDetails() {
+  while (detailsRunning < DETAILS_AT_ONCE && detailsWaiting.length) {
+    const run = detailsWaiting.shift()
+    detailsRunning++
+    run().finally(() => {
+      detailsRunning--
+      nextDetails()
+    })
+  }
+}
+
+/** Ask for a track's missing details; the song about to play goes first. */
+export function fillMissingDetails(track, { soon = true } = {}) {
   const vid = videoIdOf(track)
   const key = vid || track.spotify_url
   if (!key || detailsAsked.has(key)) return
   detailsAsked.add(key)
-  API.resolveStream(vid ? musicLink(vid) : track.spotify_url)
+  const run = () => askDetails(track, vid, key)
+  if (soon) detailsWaiting.unshift(run)
+  else detailsWaiting.push(run)
+  nextDetails()
+}
+
+function askDetails(track, vid, key) {
+  return API.resolveStream(vid ? musicLink(vid) : track.spotify_url)
     .then((res) => {
       const song = (res && res.data) || {}
       const names = Array.isArray(song.artists) ? song.artists : []

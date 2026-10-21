@@ -9,7 +9,7 @@
       :aria-label="t('lyrics.syncHint')"
       :aria-pressed="ui.lyricsSyncOpen.value ? 'true' : 'false'"
       :disabled="!tools.hasLines.value"
-      @click="ui.lyricsSyncOpen.value = !ui.lyricsSyncOpen.value"
+      @click="toggleSync"
     >
       <Icon icon="ph:sliders-horizontal" class="h-4 w-4" />
       <span v-if="bar" class="lt-label">
@@ -37,8 +37,9 @@
       class="lt-btn press"
       :title="t('lyrics.versionHint')"
       :aria-label="versionLabel"
-      :disabled="tools.switching.value"
-      @click="tools.switchVersion"
+      :class="{ 'is-active': tools.versionsOpen.value }"
+      :aria-expanded="tools.versionsOpen.value ? 'true' : 'false'"
+      @click="toggleVersions"
     >
       <Icon icon="ph:stack" class="h-4 w-4" />
       <!-- Both are rendered; which one shows is down to how much room the
@@ -83,6 +84,16 @@ defineProps({ bar: { type: Boolean, default: false } })
 const { t } = useI18n()
 const ui = useUi()
 const tools = useLyricsTools()
+
+// One card at a time over the lyrics: timing or versions.
+function toggleSync() {
+  tools.versionsOpen.value = false
+  ui.lyricsSyncOpen.value = !ui.lyricsSyncOpen.value
+}
+function toggleVersions() {
+  ui.lyricsSyncOpen.value = false
+  tools.openVersions()
+}
 
 const versionLabel = computed(() =>
   tools.versionsCounted.value

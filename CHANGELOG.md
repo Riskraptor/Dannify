@@ -4,6 +4,72 @@ What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
 page](https://github.com/Riskraptor/Dannify/releases).
 
+## 4.13.0
+
+Every special day of your year, your listening from everywhere, your
+language, and lyrics done right.
+
+- **Special days, all year, wherever you are.** Dannify knows the days your
+  part of the world celebrates and celebrates them with you: the New Year,
+  Lunar New Year, Ramadan and Eid, Holi, Easter, Vesak, Diwali, Hanukkah,
+  Christmas and many more, each on your country's own date, plus your
+  country's own days in its flag's colours (in Kenya: Madaraka, Mashujaa
+  and Jamhuri Days). Every day moves its own way: snow sways down, lanterns
+  swing, Diwali's lamps flicker, bats flit across on Halloween. Each has a
+  greeting and a "Music for…" shelf on Home. It is always on, works
+  offline, and asks no one where you are; Settings, Appearance shows your
+  region and the special days ahead.
+- **Your YouTube Music listening, in Your stats.** Signed in with Google,
+  what you play on YouTube Music on your phone, the web or a speaker counts
+  in History, Your stats and Your year in music, so a copy installed today
+  starts with all of it, and keeps up by itself without counting a song
+  twice. It can be turned off in Settings, Accounts.
+- **Six languages, and yours from the first start.** Kiswahili, Español,
+  Português and Deutsch join English and Français. Dannify starts in your
+  computer's language and follows it; pick another in Settings, Appearance,
+  or on the welcome screen. Switching cross-fades smoothly, and the startup
+  screen speaks your language too.
+- **Lyrics in time, made easy.** Lyrics early or late? Open Timing and
+  click the line you are hearing: the words line up to it, and it is kept
+  for the song. Several versions? Pick from a list that says how each is
+  timed and how long it is, with the best match marked. Dannify also finds
+  the right lyrics more often, telling a remix or a live take from the song.
+- **Writing lyrics, faster.** Type a chorus once and repeat it (Ctrl+D)
+  wherever it comes back. While timing, the line being sung is marked, so
+  the line to tap next is plainly the next one.
+- **The player, clearer.** Save shows a ring filling as the song saves, so
+  there is no pressing it twice. ⋯ holds everything about the song playing.
+  On Now Playing, the Lyrics and Queue buttons switch what is beside the
+  artwork. The sound panel is tidier: the equalizer's sounds in one row,
+  one set of speeds, and a balance you can read.
+- **Downloads, without the worry.** The Downloads page says plainly that it
+  is only a list: clearing it never deletes a song.
+- **Faster and smoother.** Dannify reads less at every start, and every
+  change of look, language or page was measured and stays well under a
+  frame's notice.
+- **Polished all over.** Every page, panel and dialog was gone over in
+  light and dark, large and small, in every language: long names wrap
+  instead of being cut, tabs fit their words, pages say what they are the
+  same way, and palettes line up in even rows.
+
+Fixed:
+
+- Songs a radio or "Keep the music playing" added to the queue came without
+  their pictures and lengths; only the song about to play got them. Every
+  song in "Next up" has them now.
+- Sharing lyrics could fail with a message from the lyrics service itself;
+  a passing fault is now tried again for you, and anything else is said
+  plainly in your language.
+- The Crossfade setting in the sound panel read "{count} s".
+- Leaving the mini player put the window back a pixel smaller each time.
+- A part of Dannify fetched when first opened (like the mini player) could
+  stay blank if its files were replaced while Dannify was open.
+- Two lengths of one song could share each other's lyrics.
+- Home asked for the same listening summary twice.
+
+From this version Dannify has a licence of its own: free to download and
+use, and not to be copied. See the licence on the project's page.
+
 ## 4.12.0
 
 A fresh new look and a little festive cheer.

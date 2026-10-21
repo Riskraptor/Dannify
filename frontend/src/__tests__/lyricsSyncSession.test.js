@@ -91,6 +91,22 @@ describe('following the song', () => {
     expect(editor.active.value).toBe(0)
   })
 
+  it('takes the line to tap along when the paused song is moved', async () => {
+    const { player, editor, session } = setup(timed)
+    player.seek = (t) => {
+      player.currentTime.value = t
+    }
+    editor.setActive(0)
+    session.seekBy(15.1)
+    await nextTick()
+    expect(editor.active.value).toBe(2)
+    session.seekTo(0)
+    await nextTick()
+    expect(editor.active.value).toBe(2)
+    session.seekTo(10.5)
+    expect(editor.active.value).toBe(1)
+  })
+
   it('leaves the cursor where the user just put it, for a moment', async () => {
     const { player, editor, session } = setup(timed)
     player.isPlaying.value = true

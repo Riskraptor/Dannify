@@ -9,8 +9,16 @@
       <span v-if="issue" class="pill-danger">{{ t('publish.issueHere') }}</span>
     </div>
 
+    <!-- Where the song is, so the line to tap below is plainly the next one
+         and not the lyrics running ahead of the music. -->
+    <p v-if="sungText != null" class="now-sung" dir="auto">
+      <Icon icon="ph:speaker-simple-high-fill" class="h-3.5 w-3.5 shrink-0" />
+      <span class="up-label">{{ t('publish.nowSinging') }}</span>
+      <span class="truncate">{{ sungText || '♪' }}</span>
+    </p>
     <!-- The line to tap, big enough to read while listening, and the one
          after it, so the next tap is never a surprise. -->
+    <p class="tap-hint">{{ t('publish.tapWhen') }}</p>
     <p class="text" dir="auto">{{ line && line.text ? line.text : t('publish.emptyLine') }}</p>
     <p class="up-next" dir="auto">
       <template v-if="nextText != null">
@@ -104,10 +112,32 @@ const nextText = computed(() => {
   return next ? next.text : null
 })
 const issue = computed(() => !!editor.quality.value[index.value]?.error)
+const sungText = computed(() => {
+  const at = session.sung.value
+  if (at < 0 || at === index.value) return null
+  return editor.lines.value[at]?.text ?? null
+})
 const looping = computed(() => session.loopIndex.value === index.value)
 </script>
 
 <style scoped>
+.now-sung {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: rgb(var(--c-accent));
+}
+.tap-hint {
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(var(--c-fg) / 0.5);
+}
 .card {
   display: flex;
   flex-direction: column;

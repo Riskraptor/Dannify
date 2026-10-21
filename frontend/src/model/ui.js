@@ -92,6 +92,16 @@ function setPanel(name) {
   panel.value = panel.value === name ? null : name
   stowedPanel.value = null
 }
+
+// What the full Now Playing view shows beside the artwork. The lyrics and
+// queue buttons of the play bar, and Ctrl+L and Ctrl+Q, switch it while that
+// view is open: they toggled the side panel, which it hides, so they seemed
+// to do nothing at all.
+const npTab = ref('lyrics')
+function showPane(name, onNowPlaying) {
+  if (onNowPlaying && (name === 'lyrics' || name === 'queue')) npTab.value = name
+  else setPanel(name)
+}
 function openPanel(name) {
   panel.value = name
   stowedPanel.value = null
@@ -141,6 +151,8 @@ export function useUi() {
     panelWidth,
     panelFloating,
     setPanel,
+    showPane,
+    npTab,
     openPanel,
     closePanel,
     leavePage,

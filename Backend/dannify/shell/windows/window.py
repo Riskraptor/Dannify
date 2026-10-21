@@ -246,11 +246,13 @@ class WindowMixin:
                 form.TopMost = False
                 form.MinimumSize = Size(int(state.min_fit[0] * scale), int(state.min_fit[1] * scale))
                 if restore:
+                    # Rounded, as it was kept: cut down instead, a 704 pixel
+                    # window came back 703, and a little smaller every time.
                     form.Bounds = Rectangle(
-                        int(restore['x'] * scale),
-                        int(restore['y'] * scale),
-                        int(restore['w'] * scale),
-                        int(restore['h'] * scale),
+                        round(restore['x'] * scale),
+                        round(restore['y'] * scale),
+                        round(restore['w'] * scale),
+                        round(restore['h'] * scale),
                     )
                     if restore.get('maximized'):
                         form.WindowState = FormWindowState.Maximized

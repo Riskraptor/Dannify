@@ -4,7 +4,7 @@ import { desktop } from '/src/desktop/bridge'
 import { toast } from '/src/model/toast'
 import { confirmDialog } from '/src/model/dialog'
 import { hasNotes, readNotes } from '/src/model/releaseNotes'
-import { isBigRelease, seasonal } from '/src/model/occasions'
+import { isBigRelease } from '/src/model/occasions'
 import { t, currentLocale } from '/src/i18n'
 
 // In-app updates.
@@ -293,7 +293,7 @@ async function loadStatus() {
       API.acknowledgeUpdate().catch(() => {})
       // A release with something new in it is welcomed: What's new opens on
       // its own, as a celebration. A fix is told in a line.
-      if (isBigRelease(version) && seasonal.value && hasNotes(readNotes(notes))) {
+      if (isBigRelease(version) && hasNotes(readNotes(notes))) {
         showWhatsNew(version, notes, { celebrate: true })
         return
       }

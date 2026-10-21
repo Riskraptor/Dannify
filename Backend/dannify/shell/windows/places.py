@@ -89,18 +89,19 @@ def _splash_html(theme: str, native_frame: bool, body: str = '') -> str:
     fg = '#e7e7ef' if dark else '#16181c'
     muted = '#8a8a98' if dark else '#6b6f78'
     track = '#23232e' if dark else '#d5d8de'
+    # A special day (Christmas, the New Year): a greeting, and snow or confetti.
+    # In the language the window was last in.
+    from dannify import occasions  # noqa: PLC0415
+
+    prefs = _read_prefs()
+    words = occasions.clean_words(prefs.get('splash'))
+    hint, fx_css, fx = ('', '', '') if body else occasions.splash_extras(
+        region=str(prefs.get('region') or '') or occasions.guess_region(), light=not dark, words=words)
     content = body or (
         "<div class='logo'>Dan<span>nify</span></div>"
         "<div class='bar'></div>"
-        "<div class='hint'>Starting your music…</div>"
+        f"<div class='hint'>{hint or occasions.starting_words(words)}</div>"
     )
-    # A special day (Christmas, the New Year): a greeting, and snow or confetti.
-    from dannify import occasions  # noqa: PLC0415
-
-    festive = not body and _read_prefs().get('seasonal', True) is not False
-    hint, fx_css, fx = occasions.splash_extras() if festive else ('', '', '')
-    if hint:
-        content = content.replace('Starting your music…', hint)
     controls = '' if native_frame else (
         "<div class='caption' onmousedown='drag(event)' ondblclick='api(\"win_toggle_maximize\")'>"
         "<button onclick='api(\"win_minimize\")' title='Minimize'>&#xE921;</button>"

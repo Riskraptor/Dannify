@@ -200,18 +200,23 @@ export function setScrobbling(on) {
 // ---------------------------------------------------------------------------
 
 // The last answer for each stretch, good until the history changes: going
-// from Stats to a song and back does not ask again.
+// from Stats to a song and back does not ask again. Kept from the moment it
+// is asked for, so two parts of a page asking at once share one request.
 const statsCache = new Map()
 
 /** The summary for the last `days` days (0: ever). See listens.stats. */
-export async function fetchStats(days = 0, top = 50) {
+export function fetchStats(days = 0, top = 50) {
   const key = `${days}:${top}`
   const hit = statsCache.get(key)
-  if (hit && hit.epoch === listensEpoch.value) return hit.data
+  if (hit && hit.epoch === listensEpoch.value) return hit.answer
   const epoch = listensEpoch.value
-  const res = await API.getListenStats(days, top)
-  statsCache.set(key, { epoch, data: res.data })
-  return res.data
+  const answer = API.getListenStats(days, top).then((res) => res.data)
+  statsCache.set(key, { epoch, answer })
+  // A failed answer is not kept: the next ask tries again.
+  answer.catch(() => {
+    if (statsCache.get(key)?.answer === answer) statsCache.delete(key)
+  })
+  return answer
 }
 
 /** A page of the history, newest first: `{items, more, total}`. */

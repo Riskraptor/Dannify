@@ -196,11 +196,21 @@ class ActionsMixin:
             return False
 
     # --- app / shell --------------------------------------------------------
-    def app_set_seasonal(self, on: bool) -> None:
-        """Special days on or off (Settings, Appearance), for the splash."""
+    def app_set_region(self, code: str) -> None:
+        """The country whose special days are kept, for the splash."""
 
-        if _read_prefs().get('seasonal', True) is not bool(on):
-            _write_prefs({'seasonal': bool(on)})
+        code = str(code or '').strip().upper()
+        if len(code) == 2 and code.isalpha() and code.isascii() and _read_prefs().get('region') != code:
+            _write_prefs({'region': code})
+
+    def app_set_splash_words(self, words: dict) -> None:
+        """What the splash says, in the window's language, for the next start."""
+
+        from dannify import occasions  # noqa: PLC0415
+
+        clean = occasions.clean_words(words)
+        if clean and _read_prefs().get('splash') != clean:
+            _write_prefs({'splash': clean})
 
     def app_set_theme(self, theme: str) -> None:
         theme = 'light' if theme == 'light' else 'dark'

@@ -143,18 +143,11 @@
         <p class="row-label">{{ t('settings.language') }}</p>
         <p class="row-hint">{{ t('settings.languageHint') }}</p>
       </div>
-      <select class="field-select w-44" :value="locale" @change="setLocale($event.target.value)">
+      <select class="field-select w-48" :value="choice" @change="setLocale($event.target.value)">
+        <option value="auto">{{ t('settings.languageAuto', { language: systemName }) }}</option>
         <option v-for="l in locales" :key="l.code" :value="l.code">{{ l.name }}</option>
       </select>
     </div>
-    <label class="row">
-      <Icon icon="ph:confetti" class="row-icon" />
-      <div class="row-text">
-        <p class="row-label">{{ t('settings.seasonal') }}</p>
-        <p class="row-hint">{{ t('settings.seasonalHint') }}</p>
-      </div>
-      <input type="checkbox" class="switch" :checked="seasonal" @change="setSeasonal($event.target.checked)" />
-    </label>
   </section>
 </template>
 
@@ -168,9 +161,11 @@ import { ZOOM_STEPS, currentZoom, setZoom } from '/src/desktop/shortcuts'
 import { restyle, resize } from '/src/model/smoothChange'
 import { useI18n } from '/src/i18n'
 import { tp } from '/src/i18n/platform'
-import { seasonal, setSeasonal } from '/src/model/occasions'
 
-const { t, locale, setLocale, locales } = useI18n()
+const { t, choice, setLocale, locales, systemLocale } = useI18n()
+// Each language under its own name, so whoever cannot read the one on screen
+// still finds theirs.
+const systemName = computed(() => locales.find((l) => l.code === systemLocale())?.name || 'English')
 const theme = useTheme()
 const fonts = useFonts()
 

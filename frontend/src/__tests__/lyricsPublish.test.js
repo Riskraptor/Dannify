@@ -24,9 +24,16 @@ describe('sendLyrics', () => {
     expect(api.publishLyrics).toHaveBeenCalledWith(PAYLOAD)
   })
 
-  it('passes on the reason the catalogue gave', async () => {
-    api.publishLyrics = async () => ({ data: { published: false, error: ' Track duration is required. ' } })
-    expect(await sendLyrics(PAYLOAD)).toEqual({ ok: false, reason: 'rejected', error: 'Track duration is required.' })
+  it('passes on the kind of failure, never the catalogue’s own words', async () => {
+    for (const reason of ['busy', 'refused', 'slow', 'invalid', 'offline']) {
+      api.publishLyrics = async () => ({ data: { published: false, reason, error: 'lrclib rejected publish (HTTP 500)' } })
+      expect(await sendLyrics(PAYLOAD)).toEqual({ ok: false, reason })
+    }
+  })
+
+  it('treats a kind it does not know as a plain failure', async () => {
+    api.publishLyrics = async () => ({ data: { published: false, reason: 'lrclib exploded' } })
+    expect(await sendLyrics(PAYLOAD)).toEqual({ ok: false, reason: 'failed' })
   })
 
   it('fails plainly when no reason was given', async () => {

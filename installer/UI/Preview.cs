@@ -15,6 +15,9 @@ namespace Dannify.Setup.UI
             // DANNIFY_SETUP_DATE=2026-12-24: the look of a special day, to check it.
             if (System.DateTime.TryParse(System.Environment.GetEnvironmentVariable("DANNIFY_SETUP_DATE"), out var day))
                 Season.Override = day;
+            // DANNIFY_SETUP_REGION=KE: as seen from that country.
+            string region = System.Environment.GetEnvironmentVariable("DANNIFY_SETUP_REGION");
+            if (!string.IsNullOrWhiteSpace(region)) Season.RegionOverride = region.Trim().ToUpperInvariant();
             string state = (args.UiState ?? "welcome").ToLowerInvariant();
             string music = System.IO.Path.Combine(
                 System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyMusic), "Dannify");
