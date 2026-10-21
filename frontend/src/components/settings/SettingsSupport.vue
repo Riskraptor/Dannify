@@ -8,9 +8,10 @@
       <span><b>{{ t('support.heroTitle') }}.</b> {{ support.message || t('support.heroText') }}</span>
     </p>
 
-    <!-- M-PESA first, and plain to see: the number large, and how to pay it
-         from a phone, step by step. -->
-    <article v-if="mpesa" class="sp-mpesa">
+    <!-- In Kenya, M-PESA first and plain to see: the number large, and how to
+         pay it from a phone, step by step. Elsewhere it is a card among the
+         others: Dannify is used all over the world. -->
+    <article v-if="mpesa && inKenya" class="sp-mpesa">
       <div class="sp-mpesa-brand">
         <span class="sp-mpesa-lipa">Lipa na</span>
         <span class="sp-mpesa-mark"><Icon icon="ph:device-mobile-fill" class="h-5 w-5" />M-PESA</span>
@@ -47,6 +48,16 @@
         </button>
       </div>
 
+
+      <div v-if="mpesa && !inKenya" class="sp-way is-mpesa">
+        <span class="sp-way-mark is-mpesa-mark">M-PESA</span>
+        <p class="sp-way-name">M-PESA</p>
+        <p class="sp-way-text">{{ t('support.mpesaKenya', { number: grouped(mpesa.number) }) }}</p>
+        <button class="sp-way-btn press" @click="copyNumber">
+          <Icon :icon="copied ? 'ph:check-bold' : 'ph:copy'" class="h-3.5 w-3.5" />
+          {{ copied ? t('support.copied') : t('support.copyNumber') }}
+        </button>
+      </div>
 
       <div v-if="support.paypal_link" class="sp-way is-paypal">
         <span class="sp-way-mark"><Icon icon="ph:paypal-logo-fill" class="h-6 w-6" /></span>
@@ -89,6 +100,7 @@
 import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useSupport } from '/src/model/support'
+import { region } from '/src/model/occasions'
 import { useReporting } from '/src/model/problems'
 import { useUpdates } from '/src/model/updates'
 import { copyText } from '/src/model/clipboard'
@@ -103,6 +115,9 @@ const reporting = useReporting()
 const updates = useUpdates()
 
 const mpesa = computed(() => (support.mpesa && support.mpesa.number ? support.mpesa : null))
+// Where the app thinks it is (Settings, Special days): a Kenyan till is the
+// way to give in Kenya, and a curiosity anywhere else.
+const inKenya = computed(() => region.value === 'KE')
 
 // 8496746 reads as 849 6746, the way a number is read out and typed in.
 function grouped(number) {
@@ -313,6 +328,17 @@ async function copyLink() {
 }
 .sp-way.is-kofi {
   --way: 255 94 91;
+}
+.sp-way.is-mpesa {
+  --way: 0 166 81;
+}
+.sp-way-mark.is-mpesa-mark {
+  width: auto;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.02em;
 }
 .sp-way.is-paypal {
   --way: 0 112 224;

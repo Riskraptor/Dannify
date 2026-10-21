@@ -262,7 +262,7 @@
         <div class="min-w-0 flex-1">
           <p class="give-title">{{ t('support.nudgeTitle') }}</p>
           <p class="give-text">{{ support.config.message || t('support.nudgeText') }}</p>
-          <p v-if="support.config.mpesa && support.config.mpesa.number" class="give-till">
+          <p v-if="region === 'KE' && support.config.mpesa && support.config.mpesa.number" class="give-till">
             <b>M-PESA</b> {{ t('support.mpesaChip', { number: support.config.mpesa.number }) }}
           </p>
         </div>
@@ -301,7 +301,7 @@ import { useSupport } from '/src/model/support'
 import { useListens } from '/src/model/listens'
 import { entryRow } from '/src/model/playlists'
 import { mixCovers, MIXES, useMixes } from '/src/model/mixes'
-import { loadCalendar, today, toneOf, wordsFor } from '/src/model/occasions'
+import { loadCalendar, region, today, toneOf, wordsFor } from '/src/model/occasions'
 // Only on a special day: fetched then.
 const Particles = defineAsyncComponent(() => import('/src/components/ui/Particles.vue'))
 import Shelf from '/src/components/ui/Shelf.vue'

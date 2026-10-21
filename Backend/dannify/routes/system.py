@@ -315,6 +315,10 @@ async def support_report_status_endpoint() -> dict[str, Any]:
     return {
         'enabled': report_mod.enabled(),
         'mode': report_mod.mode(),
+        # By email, the person shows they are one: hCaptcha, which the form
+        # requires (report.py).
+        'captcha': {'provider': 'hcaptcha', 'sitekey': report_mod.HCAPTCHA_SITEKEY}
+        if report_mod.mode() == 'email' else None,
         'pending': report_mod.pending(data) if data else 0,
         'categories': list(report_mod.CATEGORIES),
     }

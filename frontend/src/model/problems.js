@@ -69,7 +69,7 @@ export function installErrorReporting(app) {
 // Written in the app and sent from it (Backend/dannify/report.py). Closed,
 // and shown as coming soon, until the report server exists.
 
-const status = reactive({ loaded: false, enabled: false, pending: 0 })
+const status = reactive({ loaded: false, enabled: false, pending: 0, captcha: null })
 const dialogOpen = ref(false)
 const kind = ref('') // what the dialog opens on: 'idea' from "Share an idea"
 let loading = null
@@ -111,18 +111,29 @@ async function emailIt(email, url) {
   } catch {
     // not JSON: the status says enough
   }
-  if (!res.ok || !answer.success) throw new Error(answer.message || `Web3Forms answered ${res.status}`)
+  if (!res.ok || !answer.success) {
+    const err = new Error(answer.message || `Web3Forms answered ${res.status}`)
+    err.status = res.status
+    throw err
+  }
 }
 
-/** Send one. Resolves to {id, status: 'sent' | 'queued'}; rejects on failure. */
-async function send(payload) {
+/**
+ * Send one. Resolves to {id, status: 'sent' | 'queued'}; rejects on failure.
+ * *captcha* is the solved hCaptcha the form asks for, when it asks.
+ */
+async function send(payload, captcha = '') {
   const res = await API.sendReport(payload)
   const data = res.data || {}
   if (data.status === 'prepared' && data.email) {
+    const email = captcha ? { ...data.email, 'h-captcha-response': captcha } : data.email
     try {
-      await emailIt(data.email, data.url)
+      await emailIt(email, data.url)
       return { id: data.id, status: 'sent' }
     } catch (err) {
+      // A solved check lasts minutes, so a report that carries one cannot
+      // wait for later: the dialog keeps what was written and says why.
+      if (captcha || err.status) throw err
       // Offline, most likely: kept, and sent when Dannify next starts.
       console.warn('[report] not sent now, kept for later', err)
       await API.holdReport(data.email).catch(() => {})
@@ -146,8 +157,14 @@ export async function sendHeldReports() {
   for (const email of list.emails || []) {
     try {
       await emailIt(email, list.url)
-    } catch {
-      break // still offline: the rest can wait too
+    } catch (err) {
+      // Refused (the form now wants a check it does not carry): let go,
+      // or it would be tried at every start. Offline: the rest can wait too.
+      if (!err.status) break
+      console.warn('[report] a waiting report was refused, and let go', err)
+      await API.reportDone(email.report_id).catch(() => {})
+      status.pending = Math.max(0, status.pending - 1)
+      continue
     }
     await API.reportDone(email.report_id).catch(() => {})
     status.pending = Math.max(0, status.pending - 1)

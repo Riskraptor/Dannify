@@ -1000,6 +1000,7 @@ export default {
     mpesaStep3Paybill: 'Enter business number {number} and account {account}.',
     mpesaStep4: 'Enter any amount, then your PIN. Asante!',
     mpesaChip: 'Till {number}',
+    mpesaKenya: 'In Kenya? Lipa na M-PESA, Buy Goods and Services, Till {number}.',
   },
   tray: {
     nowPlaying: 'Nothing playing',
@@ -1134,6 +1135,10 @@ export default {
     tooMany: 'That is plenty for today, thank you! You can send more tomorrow.',
     ideaTitle: 'Share an idea',
     yourIdea: 'What would make Dannify better?',
+    captchaOffline: 'The check that keeps robots out could not load. Check your connection.',
+    offline: 'It could not be sent: Dannify seems to be offline. What you wrote is still here; try again when you are connected.',
+    ideaIntro: 'Something you would love Dannify to do, or do better? It goes straight to the developer.',
+    ideaHint: 'Your idea, in a few words: what it is, and what it would help you do.',
   },
   sound: {
     tabEq: 'Equalizer',

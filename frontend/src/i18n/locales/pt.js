@@ -969,6 +969,7 @@ export default {
     mpesaStep3Paybill: 'Digite o número da empresa {number} e a conta {account}.',
     mpesaStep4: 'Digite qualquer valor e depois o seu PIN. Asante!',
     mpesaChip: 'Till {number}',
+    mpesaKenya: 'No Quênia? Lipa na M-PESA, Buy Goods and Services, Till {number}.',
   },
   tray: {
     nowPlaying: 'Nada tocando',
@@ -1103,6 +1104,10 @@ export default {
     tooMany: 'Já é bastante por hoje, obrigado! Você pode mandar mais amanhã.',
     ideaTitle: 'Compartilhar uma ideia',
     yourIdea: 'O que deixaria o Dannify melhor?',
+    captchaOffline: 'A verificação contra robôs não pôde carregar. Confira sua conexão.',
+    offline: 'Não foi possível enviar: o Dannify parece estar offline. O que você escreveu continua aqui; tente de novo quando estiver conectado.',
+    ideaIntro: 'Algo que você adoraria que o Dannify fizesse, ou fizesse melhor? Vai direto para o desenvolvedor.',
+    ideaHint: 'Sua ideia em poucas palavras: o que é e no que ela ajudaria você.',
   },
   sound: {
     tabEq: 'Equalizador',

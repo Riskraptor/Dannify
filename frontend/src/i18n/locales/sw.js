@@ -969,6 +969,7 @@ export default {
     mpesaStep3Paybill: 'Weka nambari ya biashara {number} na akaunti {account}.',
     mpesaStep4: 'Weka kiasi chochote, kisha PIN yako. Asante!',
     mpesaChip: 'Till {number}',
+    mpesaKenya: 'Uko Kenya? Lipa na M-PESA, Buy Goods and Services, Till {number}.',
   },
   tray: {
     nowPlaying: 'Hakuna kinachocheza',
@@ -1103,6 +1104,10 @@ export default {
     tooMany: 'Inatosha kwa leo, asante! Unaweza kutuma zaidi kesho.',
     ideaTitle: 'Shiriki wazo',
     yourIdea: 'Nini kingefanya Dannify iwe bora zaidi?',
+    captchaOffline: 'Ukaguzi wa kuzuia roboti haukuweza kupakia. Angalia muunganisho wako.',
+    offline: 'Haikuweza kutumwa: Dannify inaonekana kuwa nje ya mtandao. Ulichoandika bado kipo; jaribu tena ukiunganishwa.',
+    ideaIntro: 'Kuna kitu ungependa Dannify ifanye, au ifanye vizuri zaidi? Kinamfikia msanidi moja kwa moja.',
+    ideaHint: 'Wazo lako kwa maneno machache: ni nini, na lingekusaidia kufanya nini.',
   },
   sound: {
     tabEq: 'Kisawazishi',

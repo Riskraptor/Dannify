@@ -51,6 +51,9 @@ REPORT_ENDPOINT = ''
 # it names the form, not the inbox, and a form only ever emails its owner.
 WEB3FORMS_KEY = 'cb3ea72a-da7d-49fb-bece-bc4e85a3f98f'
 WEB3FORMS_URL = 'https://api.web3forms.com/submit'
+# The form asks for hCaptcha (its Block Spam setting): each report carries a
+# solved check, and this is the site key Web3Forms gives free forms for it.
+HCAPTCHA_SITEKEY = '50b2fe65-b00b-4b9e-ad62-3ba471098be2'
 
 CATEGORIES = ('playback', 'downloads', 'lyrics', 'looks', 'crash', 'idea', 'other')
 # At most this many reports a day from one copy: a stuck button, or someone

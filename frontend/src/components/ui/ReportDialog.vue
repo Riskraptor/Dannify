@@ -31,7 +31,7 @@
             <header class="rp-head">
               <div class="min-w-0">
                 <h2 class="rp-title">{{ category === 'idea' ? t('problems.ideaTitle') : t('problems.title') }}</h2>
-                <p class="rp-sub">{{ t('problems.intro') }}</p>
+                <p class="rp-sub">{{ category === 'idea' ? t('problems.ideaIntro') : t('problems.intro') }}</p>
               </div>
               <button class="icon-btn h-8 w-8" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
                 <Icon icon="ph:x" class="h-4 w-4" />
@@ -63,7 +63,7 @@
                 class="rp-field rp-text"
                 rows="5"
                 :maxlength="5000"
-                :placeholder="t('problems.whatHappenedHint')"
+                :placeholder="category === 'idea' ? t('problems.ideaHint') : t('problems.whatHappenedHint')"
               />
               <p class="rp-count" :class="{ 'is-short': description.trim().length > 0 && !longEnough }">
                 {{ longEnough ? `${description.length} / 5000` : t('problems.tooShort') }}
@@ -77,6 +77,14 @@
                 type="email"
                 autocomplete="email"
                 :placeholder="t('problems.contactHint')"
+              />
+
+              <!-- The check the form asks for, so no robot sends a report. -->
+              <HCaptchaBox
+                v-if="captchaKey"
+                ref="captchaBox"
+                :sitekey="captchaKey"
+                @token="(token) => (captchaToken = token)"
               />
 
               <!-- No person sees this, so no person fills it in (report.py). -->
@@ -142,6 +150,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useReporting } from '/src/model/problems'
+import HCaptchaBox from '/src/components/ui/HCaptchaBox.vue'
 import { rememberFocus } from '/src/model/focusTrap'
 import { useI18n } from '/src/i18n'
 import { tp } from '/src/i18n/platform'
@@ -185,7 +194,13 @@ const longEnough = computed(() => description.value.trim().length >= 10)
 const contactOk = computed(
   () => !contact.value.trim() || /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(contact.value.trim())
 )
-const canSend = computed(() => longEnough.value && contactOk.value && !sending.value)
+// hCaptcha, when the form asks for it: solved before the note will slide.
+const captchaKey = computed(() => (reporting.status.captcha && reporting.status.captcha.sitekey) || '')
+const captchaToken = ref('')
+const captchaBox = ref(null)
+const canSend = computed(
+  () => longEnough.value && contactOk.value && !sending.value && (!captchaKey.value || !!captchaToken.value)
+)
 
 // Immediate as well: the dialog is loaded the first time it is opened, by
 // which time it is already open (App.vue).
@@ -225,19 +240,31 @@ async function submit() {
   sending.value = true
   error.value = ''
   try {
-    result.value = await reporting.send({
-      category: category.value,
-      description: description.value,
-      contact: contact.value.trim(),
-      include_diagnostics: includeDiagnostics.value,
-      website: website.value,
-    })
+    result.value = await reporting.send(
+      {
+        category: category.value,
+        description: description.value,
+        contact: contact.value.trim(),
+        include_diagnostics: includeDiagnostics.value,
+        website: website.value,
+      },
+      captchaToken.value
+    )
     await nextTick()
     doneBtn.value && doneBtn.value.focus()
   } catch (err) {
     const code = err && err.response && err.response.status
-    error.value = code === 503 ? t('problems.notOpen') : code === 429 ? t('problems.tooMany') : t('problems.failed')
+    error.value =
+      code === 503
+        ? t('problems.notOpen')
+        : code === 429
+          ? t('problems.tooMany')
+          : err && !err.response && !err.status
+            ? t('problems.offline')
+            : t('problems.failed')
     knobBack()
+    // A check is good for one try.
+    if (captchaBox.value) captchaBox.value.reset()
   } finally {
     sending.value = false
   }
