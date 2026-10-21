@@ -1,5 +1,5 @@
 <template>
-  <div class="recap" tabindex="-1" :style="{ '--hue': `${hue}deg` }">
+  <div class="recap" tabindex="-1" :style="{ '--hue': `${hue}deg` }" @wheel.passive="onWheel">
     <div class="recap-bg" aria-hidden="true" />
     <div class="recap-glow" aria-hidden="true" />
     <!-- The year's own covers, drifting behind the story. -->
@@ -11,12 +11,34 @@
       <button class="icon-btn recap-btn" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
         <Icon icon="ph:x" class="h-5 w-5" />
       </button>
-      <!-- Each slide's bar fills as it plays, like a story. -->
-      <div v-if="slides.length > 1" class="recap-steps" aria-hidden="true">
-        <span v-for="(s, i) in slides" :key="s.id" class="recap-step">
-          <i :style="{ transform: `scaleX(${i < at ? 1 : i > at ? 0 : progress})` }" />
-        </span>
+      <!-- Each slide's bar fills as it plays, like a story; a click on one
+           goes straight to it. -->
+      <div v-if="slides.length > 1" class="recap-steps">
+        <button
+          v-for="(s, i) in slides"
+          :key="s.id"
+          class="recap-step"
+          :aria-label="t('recap.page', { n: i + 1, total: slides.length })"
+          :aria-current="i === at ? 'step' : undefined"
+          @click="jump(i)"
+        >
+          <span class="recap-step-track">
+            <i :style="{ transform: `scaleX(${i < at ? 1 : i > at ? 0 : progress})` }" />
+          </span>
+        </button>
       </div>
+      <!-- The music follows the story: each page plays its own song. -->
+      <button
+        v-if="songRows.length"
+        class="icon-btn recap-btn"
+        :class="{ 'is-on': follow }"
+        :title="t('recap.followMusic')"
+        :aria-label="t('recap.followMusic')"
+        :aria-pressed="follow"
+        @click="setFollow(!follow)"
+      >
+        <Icon :icon="follow ? 'ph:music-notes-fill' : 'ph:music-notes'" class="h-4 w-4" />
+      </button>
       <button
         v-if="slides.length > 1 && timed"
         class="icon-btn recap-btn"
@@ -80,9 +102,15 @@
           <!-- How the year began -->
           <template v-else-if="slide.id === 'first'">
             <p class="recap-eyebrow">{{ t('recap.firstEyebrow') }}</p>
-            <div class="recap-cover is-tilted">
+            <button
+              class="recap-cover is-tilted recap-play"
+              :class="{ 'is-current': isPlayingRow(firstRow) }"
+              :aria-label="t('recap.playSong', { title: firstRow.title })"
+              @click="playOne(firstRow)"
+            >
               <CoverImage :src="firstRow.cover" radius="lg" :size="260" class="h-full w-full" eager />
-            </div>
+              <span class="recap-play-mark"><Icon :icon="isPlayingRow(firstRow) ? 'ph:pause-fill' : 'ph:play-fill'" class="h-7 w-7" /></span>
+            </button>
             <h1 class="recap-big">{{ firstRow.title }}</h1>
             <p class="recap-lead">{{ firstRow.artistText }}</p>
             <p class="recap-small">{{ t('recap.firstOn', { date: dateText(data.first.at) }) }}</p>
@@ -103,22 +131,46 @@
           <!-- The artist -->
           <template v-else-if="slide.id === 'artist'">
             <p class="recap-eyebrow">{{ t('recap.topArtist') }}</p>
-            <div class="recap-portrait">
+            <button
+              class="recap-portrait recap-play"
+              :class="{ 'is-current': artistPlaying(topArtist) }"
+              :aria-label="t('recap.playArtist', { artist: topArtist.name })"
+              @click="playArtist(topArtist)"
+            >
               <CoverImage :src="artistPicture(topArtist, 440)" kind="artist" round :size="220" class="h-full w-full" eager />
-            </div>
+              <span class="recap-play-mark"><Icon :icon="artistPlaying(topArtist) ? 'ph:pause-fill' : 'ph:play-fill'" class="h-7 w-7" /></span>
+            </button>
             <h1 class="recap-big">{{ topArtist.name }}</h1>
             <p class="recap-lead">{{ t('recap.together', { minutes: number(Math.round(topArtist.seconds / 60)) }) }}</p>
             <p class="recap-pill">{{ t('recap.shareOf', { percent: Math.round(artistShare * 100) }) }}</p>
+            <div class="recap-ctas">
+              <button class="recap-cta is-ghost" @click="openArtistOf(topArtist)">
+                <Icon icon="ph:arrow-up-right-bold" class="h-4 w-4" /> {{ t('recap.openArtist', { artist: topArtist.name }) }}
+              </button>
+            </div>
           </template>
 
           <template v-else-if="slide.id === 'artists'">
             <p class="recap-eyebrow">{{ t('recap.topArtists') }}</p>
             <ol class="recap-artists">
-              <li v-for="(a, i) in data.top_artists" :key="a.name" class="recap-artist" :style="{ '--i': i }">
-                <span class="recap-rank">{{ i + 1 }}</span>
-                <CoverImage :src="artistPicture(a, 160)" kind="artist" round :size="80" class="recap-artist-pic" />
-                <span class="recap-row-title">{{ a.name }}</span>
-                <span class="recap-row-sub">{{ t('recap.minutesShort', { minutes: number(Math.round(a.seconds / 60)) }) }}</span>
+              <li v-for="(a, i) in data.top_artists" :key="a.name" class="recap-artist-item" :style="{ '--i': i }">
+                <button
+                  class="recap-artist"
+                  :class="{ 'is-current': artistPlaying(a) }"
+                  :aria-label="t('recap.playArtist', { artist: a.name })"
+                  @click="playArtist(a)"
+                >
+                  <span class="recap-rank">{{ i + 1 }}</span>
+                  <span class="recap-artist-pic-wrap">
+                    <CoverImage :src="artistPicture(a, 160)" kind="artist" round :size="80" class="recap-artist-pic" />
+                    <span class="recap-play-mark is-small"><Icon :icon="artistPlaying(a) ? 'ph:pause-fill' : 'ph:play-fill'" class="h-4 w-4" /></span>
+                  </span>
+                  <span class="recap-row-title">{{ a.name }}</span>
+                  <span class="recap-row-sub">{{ t('recap.minutesShort', { minutes: number(Math.round(a.seconds / 60)) }) }}</span>
+                </button>
+                <button class="recap-mini" :title="t('recap.openArtist', { artist: a.name })" :aria-label="t('recap.openArtist', { artist: a.name })" @click="openArtistOf(a)">
+                  <Icon icon="ph:arrow-up-right-bold" class="h-3.5 w-3.5" />
+                </button>
               </li>
             </ol>
           </template>
@@ -126,9 +178,15 @@
           <!-- The song -->
           <template v-else-if="slide.id === 'song'">
             <p class="recap-eyebrow">{{ t('recap.topSong') }}</p>
-            <div class="recap-cover">
+            <button
+              class="recap-cover recap-play"
+              :class="{ 'is-current': isPlayingRow(songRows[0]) }"
+              :aria-label="t('recap.playSong', { title: songRows[0].title })"
+              @click="playAt(0)"
+            >
               <CoverImage :src="songRows[0].cover" radius="lg" :size="260" class="h-full w-full" eager />
-            </div>
+              <span class="recap-play-mark"><Icon :icon="isPlayingRow(songRows[0]) ? 'ph:pause-fill' : 'ph:play-fill'" class="h-7 w-7" /></span>
+            </button>
             <h1 class="recap-big">{{ songRows[0].title }}</h1>
             <p class="recap-lead">{{ songRows[0].artistText }}</p>
             <div class="recap-chips">
@@ -145,14 +203,27 @@
           <template v-else-if="slide.id === 'songs'">
             <p class="recap-eyebrow">{{ t('recap.topSongs') }}</p>
             <ol class="recap-list">
-              <li v-for="(row, i) in songRows.slice(0, 5)" :key="row.key" class="recap-row" :style="{ '--i': i }">
-                <span class="recap-rank">{{ i + 1 }}</span>
-                <CoverImage :src="row.cover" radius="sm" :size="56" class="recap-thumb" />
-                <span class="min-w-0 flex-1">
-                  <span class="recap-row-title">{{ row.title }}</span>
-                  <span class="recap-row-sub">{{ row.artistText }}</span>
-                </span>
-                <span class="recap-row-count">{{ t('stats.playCount', { count: data.top_songs[i].plays }) }}</span>
+              <li v-for="(row, i) in songRows.slice(0, 5)" :key="row.key" :style="{ '--i': i }" class="recap-row-item">
+                <button
+                  class="recap-row"
+                  :class="{ 'is-current': isPlayingRow(row) }"
+                  :aria-label="t('recap.playSong', { title: row.title })"
+                  @click="playAt(i)"
+                >
+                  <span class="recap-rank">
+                    <span v-if="isPlayingRow(row)" class="recap-eq" :aria-label="t('recap.playing')"><i /><i /><i /></span>
+                    <template v-else>{{ i + 1 }}</template>
+                  </span>
+                  <span class="recap-thumb-wrap">
+                    <CoverImage :src="row.cover" radius="sm" :size="56" class="recap-thumb" />
+                    <Icon icon="ph:play-fill" class="recap-thumb-play h-5 w-5" />
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="recap-row-title">{{ row.title }}</span>
+                    <span class="recap-row-sub">{{ row.artistText }}</span>
+                  </span>
+                  <span class="recap-row-count">{{ t('stats.playCount', { count: data.top_songs[i].plays }) }}</span>
+                </button>
               </li>
             </ol>
           </template>
@@ -160,13 +231,23 @@
           <template v-else-if="slide.id === 'albums'">
             <p class="recap-eyebrow">{{ t('recap.topAlbums') }}</p>
             <div class="recap-albums">
-              <figure v-for="(a, i) in data.top_albums" :key="a.name + a.artist" class="recap-album" :style="{ '--i': i }">
-                <CoverImage :src="coverURL(a.cover)" kind="album" radius="md" :size="160" class="recap-album-art" />
-                <figcaption>
+              <button
+                v-for="(a, i) in data.top_albums"
+                :key="a.name + a.artist"
+                class="recap-album"
+                :style="{ '--i': i }"
+                :aria-label="t('recap.openAlbum', { album: a.name })"
+                @click="openAlbum(a)"
+              >
+                <span class="recap-album-art-wrap">
+                  <CoverImage :src="coverURL(a.cover)" kind="album" radius="md" :size="160" class="recap-album-art" />
+                  <span class="recap-play-mark is-small"><Icon icon="ph:arrow-up-right-bold" class="h-4 w-4" /></span>
+                </span>
+                <span class="recap-album-words">
                   <span class="recap-row-title">{{ a.name }}</span>
                   <span class="recap-row-sub">{{ a.artist }}</span>
-                </figcaption>
-              </figure>
+                </span>
+              </button>
             </div>
           </template>
 
@@ -174,18 +255,21 @@
           <template v-else-if="slide.id === 'months'">
             <p class="recap-eyebrow">{{ t('recap.monthsTitle') }}</p>
             <div class="recap-months-grid">
-              <div
+              <component
+                :is="m ? 'button' : 'div'"
                 v-for="(m, i) in data.month_artists"
                 :key="i"
                 class="recap-month-tile"
-                :class="{ 'is-empty': !m }"
+                :class="{ 'is-empty': !m, 'is-current': m && artistPlaying(m) }"
                 :style="{ '--i': i }"
+                :aria-label="m ? t('recap.playArtist', { artist: m.name }) : undefined"
+                @click="m && playArtist(m)"
               >
                 <CoverImage v-if="m" :src="coverURL(m.cover)" radius="sm" :size="96" class="recap-month-art" />
                 <span v-else class="recap-month-art is-blank"><Icon icon="ph:music-note" class="h-5 w-5" /></span>
                 <span class="recap-month-name">{{ monthText(i, 'short') }}</span>
                 <span class="recap-month-who">{{ m ? m.name : '—' }}</span>
-              </div>
+              </component>
             </div>
           </template>
 
@@ -243,13 +327,20 @@
                   {{ t('recap.busiest', { minutes: number(Math.round(data.busiest_day.seconds / 60)) }) }}
                 </p>
               </div>
-              <div v-if="repeatRow" class="recap-fact" style="--i: 3">
-                <Icon icon="ph:repeat-bold" class="recap-fact-icon" />
-                <p class="recap-fact-value recap-fact-song">{{ repeatRow.title }}</p>
-                <p class="recap-fact-label">
+              <button
+                v-if="repeatRow"
+                class="recap-fact is-playable"
+                :class="{ 'is-current': isPlayingRow(repeatRow) }"
+                style="--i: 3"
+                :aria-label="t('recap.playSong', { title: repeatRow.title })"
+                @click="playOne(repeatRow)"
+              >
+                <Icon :icon="isPlayingRow(repeatRow) ? 'ph:pause-circle-fill' : 'ph:play-circle-fill'" class="recap-fact-icon" />
+                <span class="recap-fact-value recap-fact-song">{{ repeatRow.title }}</span>
+                <span class="recap-fact-label">
                   {{ t('recap.repeatFact', { count: data.repeat.plays, date: isoText(data.repeat.date) }) }}
-                </p>
-              </div>
+                </span>
+              </button>
             </div>
           </template>
 
@@ -279,7 +370,7 @@
 
           <!-- The year on one card -->
           <template v-else-if="slide.id === 'summary'">
-            <article class="recap-card" @pointerdown.stop>
+            <article class="recap-card">
               <header class="recap-card-head">
                 <span class="recap-card-brand">Dannify</span>
                 <span class="recap-card-year">{{ t('recap.summaryTitle', { year }) }}</span>
@@ -294,13 +385,21 @@
                   <div>
                     <p class="recap-card-label">{{ t('recap.topSongs') }}</p>
                     <ol class="recap-card-list">
-                      <li v-for="(row, i) in songRows.slice(0, 5)" :key="row.key"><b>{{ i + 1 }}</b>{{ row.title }}</li>
+                      <li v-for="(row, i) in songRows.slice(0, 5)" :key="row.key">
+                        <button class="recap-card-item" :class="{ 'is-current': isPlayingRow(row) }" :aria-label="t('recap.playSong', { title: row.title })" @click="playAt(i)">
+                          <b>{{ i + 1 }}</b>{{ row.title }}
+                        </button>
+                      </li>
                     </ol>
                   </div>
                   <div>
                     <p class="recap-card-label">{{ t('recap.topArtists') }}</p>
                     <ol class="recap-card-list">
-                      <li v-for="(a, i) in data.top_artists" :key="a.name"><b>{{ i + 1 }}</b>{{ a.name }}</li>
+                      <li v-for="(a, i) in data.top_artists" :key="a.name">
+                        <button class="recap-card-item" :class="{ 'is-current': artistPlaying(a) }" :aria-label="t('recap.playArtist', { artist: a.name })" @click="playArtist(a)">
+                          <b>{{ i + 1 }}</b>{{ a.name }}
+                        </button>
+                      </li>
                     </ol>
                   </div>
                 </div>
@@ -348,7 +447,8 @@ import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
 import { coverURL, entryRow, usePlaylists } from '/src/model/playlists'
 import { useArtistLinks } from '/src/model/artistLinks'
-import { playRows } from '/src/model/tracks'
+import { isRowCurrent, openArtist, playRows } from '/src/model/tracks'
+import { usePlayer } from '/src/model/player'
 import { hourText } from '/src/model/statsFormat'
 import { listensEpoch } from '/src/model/listens'
 import { syncSoon } from '/src/model/ytmSync'
@@ -357,9 +457,10 @@ import { useI18n } from '/src/i18n'
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import CountUp from '/src/components/ui/CountUp.vue'
 
-// "Your year in music": the year's listening told as a story that plays by
-// itself (hold to pause, tap to step), made from the app's own history and
-// what YouTube Music adds to it (Backend listens.recap).
+// "Your Soundtrack": the year's listening told as a story that plays by
+// itself (hold to pause, tap, swipe, scroll or click a bar to move), made from
+// the app's own history and what YouTube Music adds to it (Backend
+// listens.recap). Everything in it plays or opens what it shows.
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -378,8 +479,11 @@ async function load() {
   try {
     const res = await API.getRecap(year.value)
     if (mine !== asked) return
+    const first = !data.value
     data.value = res.data
     state.value = 'ready'
+    // Back from an artist the story opened: where it was.
+    if (first && at.value === 0) at.value = Math.min(recalled(), Math.max(0, slides.value.length - 1))
     // New listens that came in while the story is under way leave it where it is.
     if (at.value >= slides.value.length) at.value = 0
   } catch {
@@ -476,9 +580,12 @@ const HUES = [0, -30, 25, 55, 90, 140, 175, 210, 245, 280, 315, 340, 20, 0]
 const hue = computed(() => HUES[at.value % HUES.length])
 
 function go(step) {
-  const next = Math.max(0, Math.min(slides.value.length - 1, at.value + step))
+  jump(at.value + step)
+}
+function jump(index) {
+  const next = Math.max(0, Math.min(slides.value.length - 1, index))
   if (next === at.value) return
-  direction.value = step
+  direction.value = next > at.value ? 1 : -1
   at.value = next
   elapsed.value = 0
 }
@@ -505,18 +612,35 @@ function tick(now) {
   raf = requestAnimationFrame(tick)
 }
 
-// Press and hold pauses; a quick tap steps (the left third back, the rest on).
-function hold() {
+// Press and hold pauses; a quick tap steps (the left third back, the rest on);
+// a swipe goes the way it was swiped. What can be pressed is left to itself.
+let heldX = 0
+function hold(e) {
+  if (e.button > 0 || (e.target && e.target.closest && e.target.closest('button, a, select, input'))) return
   holding = true
   heldAt = performance.now()
+  heldX = e.clientX
 }
 function release(e) {
   if (!holding) return
   holding = false
   if (!e) return
+  const dx = e.clientX - heldX
+  if (Math.abs(dx) > 60) return go(dx < 0 ? 1 : -1)
   if (performance.now() - heldAt > 300) return
   const box = e.currentTarget.getBoundingClientRect()
   go(e.clientX - box.left < box.width / 3 ? -1 : 1)
+}
+
+// A wheel or a touchpad turns the pages, one per gesture.
+let wheeled = 0
+function onWheel(e) {
+  const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+  if (Math.abs(d) < 24 || state.value !== 'ready') return
+  const now = performance.now()
+  if (now - wheeled < 600) return
+  wheeled = now
+  go(d > 0 ? 1 : -1)
 }
 
 // The arrows step through the story wherever the focus is, ahead of the
@@ -535,6 +659,9 @@ function onKey(e) {
   } else if (e.key === 'ArrowLeft') {
     e.preventDefault()
     go(-1)
+  } else if (e.key === 'Home' || e.key === 'End') {
+    e.preventDefault()
+    jump(e.key === 'Home' ? 0 : slides.value.length - 1)
   } else if (e.key === 'Escape') {
     e.preventDefault()
     close()
@@ -547,19 +674,146 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey, true)
   cancelAnimationFrame(raf)
+  if (!closing) remember()
 })
 
+// Where the story was, for coming back to it from a page it opened: kept a
+// while, and forgotten when it is closed.
+const PLACE_KEY = 'dn.recapPlace'
+let closing = false
+function remember() {
+  try {
+    sessionStorage.setItem(PLACE_KEY, JSON.stringify({ year: year.value, at: at.value, when: Date.now() }))
+  } catch {
+    // storage blocked: the story starts at its beginning
+  }
+}
+function recalled() {
+  try {
+    const place = JSON.parse(sessionStorage.getItem(PLACE_KEY) || 'null')
+    if (place && place.year === year.value && Date.now() - place.when < 30 * 60 * 1000) return place.at || 0
+  } catch {
+    // nothing kept
+  }
+  return 0
+}
+
 function close() {
+  closing = true
+  try {
+    sessionStorage.removeItem(PLACE_KEY)
+  } catch {
+    // nothing kept
+  }
   if (window.history.length > 1) router.back()
   else router.push({ name: 'Stats' })
 }
 
-function playTop() {
-  if (songRows.value.length) playRows(songRows.value, 0)
+// --- Playing what it shows ----------------------------------------------------------
+const player = usePlayer()
+function songId(row) {
+  return (row && (row.file || (row.raw && (row.raw.song_id || row.raw.video_id)))) || ''
 }
+function isPlayingRow(row) {
+  return !!row && player.isPlaying.value && isRowCurrent(row)
+}
+// A song, then the rest of the year's top songs after it.
+function playOne(row, { toggle = true } = {}) {
+  if (!row) return
+  const id = songId(row)
+  const at = id ? songRows.value.findIndex((r) => songId(r) === id) : -1
+  if (at >= 0) playRows(songRows.value, at, { toggle })
+  else playRows([row, ...songRows.value], 0, { toggle })
+}
+function playAt(index) {
+  playRows(songRows.value, index)
+}
+function playTop() {
+  if (songRows.value.length) playRows(songRows.value, 0, { toggle: false })
+}
+// An artist's songs of the year, as far as the year's top songs go.
+function artistRows(a) {
+  if (!a || !a.name) return []
+  const name = a.name.toLowerCase()
+  return songRows.value.filter(
+    (r) => (r.artists || []).some((x) => (x.name || '').toLowerCase() === name) || (r.primaryArtist || '').toLowerCase() === name
+  )
+}
+function artistPlaying(a) {
+  return artistRows(a).some(isPlayingRow)
+}
+function playArtist(a) {
+  const rows = artistRows(a)
+  if (!rows.length) return openArtistOf(a)
+  if (artistPlaying(a)) return player.toggle()
+  playRows(rows, 0, { toggle: false })
+}
+// Their page: on YouTube Music when the app knows them there, in the library
+// when songs of theirs are saved, else a search for them.
+function openArtistOf(a) {
+  if (!a) return
+  if (a.id) openArtist({ id: a.id, name: a.name })
+  else if (artistRows(a).some((r) => r.kind === 'local')) router.push({ name: 'Artist', params: { name: a.name } })
+  else router.push({ name: 'Search', params: { query: a.name } })
+}
+function openAlbum(a) {
+  if (a.album_id) router.push({ name: 'ExploreAlbum', params: { id: a.album_id } })
+  else router.push({ name: 'Search', params: { query: `${a.artist || ''} ${a.name}`.trim() } })
+}
+
+// The music following the story: the year's first song on its page, the top
+// artist's song on theirs, the song of the year on its own.
+const FOLLOW_KEY = 'dn.recapFollow'
+function storedFollow() {
+  try {
+    return localStorage.getItem(FOLLOW_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const follow = ref(storedFollow())
+const slideTrack = computed(() => {
+  switch (slide.value.id) {
+    case 'first':
+      return firstRow.value
+    case 'artist':
+      return artistRows(topArtist.value)[0] || null
+    case 'song':
+      return songRows.value[0] || null
+    case 'habits':
+      return repeatRow.value
+    default:
+      return null
+  }
+})
+function followSlide(starting = false) {
+  if (!follow.value || state.value !== 'ready') return
+  const row = slideTrack.value
+  if (row) {
+    if (!isRowCurrent(row)) playOne(row, { toggle: false })
+  } else if (starting && !player.isPlaying.value) {
+    playTop()
+  }
+}
+function setFollow(on) {
+  follow.value = on
+  try {
+    localStorage.setItem(FOLLOW_KEY, on ? '1' : '0')
+  } catch {
+    // kept for this visit only
+  }
+  followSlide(on)
+}
+watch(() => slide.value.id, () => followSlide())
 function startWithMusic() {
-  playTop()
+  follow.value = true
+  try {
+    localStorage.setItem(FOLLOW_KEY, '1')
+  } catch {
+    // kept for this visit only
+  }
   go(1)
+  followSlide(true)
 }
 const playlists = usePlaylists()
 function saveTop() {
@@ -681,11 +935,25 @@ function hourShort(h) {
   gap: 5px;
 }
 .recap-step {
+  display: grid;
   flex: 1;
+  align-items: center;
+  height: 18px;
+  cursor: pointer;
+}
+.recap-step-track {
   height: 3px;
   overflow: hidden;
   border-radius: 999px;
   background: rgb(255 255 255 / 0.28);
+  transition: height 0.15s ease;
+}
+.recap-step:hover .recap-step-track,
+.recap-step:focus-visible .recap-step-track {
+  height: 6px;
+}
+.recap-step:focus-visible {
+  outline: none;
 }
 .recap-step i {
   display: block;
@@ -708,6 +976,124 @@ function hourShort(h) {
 .recap-btn:hover:not(:disabled) {
   color: #fff;
   background: rgb(255 255 255 / 0.14);
+}
+.recap-btn.is-on,
+.recap-btn.is-on:hover {
+  color: #111;
+  background: #fff;
+}
+/* What plays: a round white button that comes up over it. */
+.recap-play {
+  position: relative;
+  display: block;
+  padding: 0;
+  cursor: pointer;
+}
+.recap-play-mark {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.35);
+  opacity: 0;
+  transform: scale(0.8) translateY(6px);
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.2, 0.9, 0.2, 1.2);
+  pointer-events: none;
+}
+.recap-play-mark.is-small {
+  right: 4px;
+  bottom: 4px;
+  width: 34px;
+  height: 34px;
+}
+.recap-play:hover .recap-play-mark,
+.recap-play:focus-visible .recap-play-mark,
+.recap-play.is-current .recap-play-mark,
+.recap-artist:hover .recap-play-mark,
+.recap-artist:focus-visible .recap-play-mark,
+.recap-artist.is-current .recap-play-mark,
+.recap-album:hover .recap-play-mark,
+.recap-album:focus-visible .recap-play-mark {
+  opacity: 1;
+  transform: none;
+}
+.recap-play:focus-visible,
+.recap-artist:focus-visible,
+.recap-album:focus-visible,
+.recap-row:focus-visible,
+.recap-month-tile:focus-visible,
+.recap-fact.is-playable:focus-visible,
+.recap-card-item:focus-visible,
+.recap-mini:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+.recap-play.is-current {
+  box-shadow:
+    0 0 0 4px rgb(255 255 255 / 0.85),
+    0 24px 60px rgb(0 0 0 / 0.4);
+}
+.recap-mini {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  z-index: 1;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.35);
+  color: #fff;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+.recap-artist-item:hover .recap-mini,
+.recap-mini:focus-visible {
+  opacity: 1;
+}
+.recap-mini:hover {
+  background: rgb(0 0 0 / 0.6);
+}
+/* Three bars that move, where the number was, while the song plays. */
+.recap-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+}
+.recap-eq i {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: #fff;
+  transform-origin: bottom;
+  animation: recap-eq 0.9s ease-in-out infinite;
+}
+.recap-eq i:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.recap-eq i:nth-child(3) {
+  animation-delay: -0.6s;
+}
+@keyframes recap-eq {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }
 .recap-center,
 .recap-slide {
@@ -814,6 +1200,10 @@ function hourShort(h) {
   justify-content: center;
   gap: 8px;
 }
+.recap-portrait .recap-play-mark {
+  right: 6%;
+  bottom: 6%;
+}
 .recap-portrait {
   width: clamp(140px, 24vw, 220px);
   aspect-ratio: 1;
@@ -838,14 +1228,31 @@ function hourShort(h) {
   gap: 18px;
   width: min(900px, 100%);
 }
+.recap-artist-item {
+  position: relative;
+  min-width: 0;
+  animation: recap-in 0.45s ease both;
+  animation-delay: calc(var(--i) * 90ms);
+}
 .recap-artist {
   position: relative;
   display: grid;
   justify-items: center;
   gap: 6px;
+  width: 100%;
   min-width: 0;
-  animation: recap-in 0.45s ease both;
-  animation-delay: calc(var(--i) * 90ms);
+  padding: 4px 4px 8px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.recap-artist:hover,
+.recap-artist.is-current {
+  background: rgb(255 255 255 / 0.1);
+}
+.recap-artist-pic-wrap {
+  position: relative;
+  display: block;
 }
 .recap-artist .recap-rank {
   position: absolute;
@@ -868,15 +1275,46 @@ function hourShort(h) {
   width: min(560px, 100%);
   text-align: left;
 }
+.recap-row-item {
+  animation: recap-in 0.45s ease both;
+  animation-delay: calc(var(--i) * 80ms);
+}
 .recap-row {
   display: flex;
   align-items: center;
   gap: 14px;
+  width: 100%;
   padding: 8px 12px;
   border-radius: 12px;
+  text-align: left;
   background: rgb(0 0 0 / 0.18);
-  animation: recap-in 0.45s ease both;
-  animation-delay: calc(var(--i) * 80ms);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+.recap-row:hover {
+  background: rgb(0 0 0 / 0.3);
+  transform: translateX(4px);
+}
+.recap-row.is-current {
+  background: rgb(255 255 255 / 0.18);
+}
+.recap-thumb-wrap {
+  position: relative;
+  flex: none;
+}
+.recap-thumb-play {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: #fff;
+  filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.6));
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.recap-row:hover .recap-thumb-play {
+  opacity: 1;
 }
 .recap-rank {
   width: 1.5em;
@@ -918,9 +1356,24 @@ function hourShort(h) {
 .recap-album {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  padding: 0;
   text-align: left;
+  cursor: pointer;
   animation: recap-in 0.45s ease both;
   animation-delay: calc(var(--i) * 80ms);
+}
+.recap-album-art-wrap {
+  position: relative;
+  display: block;
+  transition: transform 0.2s ease;
+}
+.recap-album:hover .recap-album-art-wrap {
+  transform: translateY(-4px);
+}
+.recap-album-words {
+  display: grid;
+  min-width: 0;
 }
 .recap-album-art {
   width: 100%;
@@ -947,6 +1400,17 @@ function hourShort(h) {
 }
 .recap-month-tile.is-empty {
   opacity: 0.45;
+}
+button.recap-month-tile {
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+button.recap-month-tile:hover,
+.recap-month-tile.is-current {
+  background: rgb(255 255 255 / 0.16);
+  transform: translateY(-3px);
 }
 .recap-month-art {
   width: 100%;
@@ -1055,6 +1519,17 @@ function hourShort(h) {
   background: rgb(0 0 0 / 0.2);
   animation: recap-in 0.45s ease both;
   animation-delay: calc(var(--i) * 90ms);
+}
+.recap-fact.is-playable {
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+.recap-fact.is-playable:hover,
+.recap-fact.is-current {
+  background: rgb(255 255 255 / 0.16);
+  transform: translateY(-3px);
 }
 .recap-fact-icon {
   width: 28px;
@@ -1177,9 +1652,24 @@ function hourShort(h) {
   font-weight: 600;
 }
 .recap-card-list li {
+  min-width: 0;
+}
+.recap-card-item {
+  display: block;
+  width: calc(100% + 8px);
+  margin-left: -4px;
+  padding: 1px 4px;
   overflow: hidden;
+  border-radius: 6px;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.recap-card-item:hover,
+.recap-card-item.is-current {
+  background: rgb(255 255 255 / 0.14);
 }
 .recap-card-list b {
   display: inline-block;

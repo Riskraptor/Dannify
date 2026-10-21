@@ -5,7 +5,7 @@ import { useAccount } from './account'
 
 // YouTube Music's history in Dannify's (Backend/dannify/ytm_history.py): for
 // anyone signed in with Google, what they played there, on their phone or on
-// the web, counts in History, Your stats and Your year in music. A copy
+// the web, counts in History, Your stats and Your Soundtrack. A copy
 // installed today starts from all of it, and keeps up by itself: a little
 // after start, every few hours, as soon as someone signs in, and whenever a
 // page that shows listening is opened (Your stats, History, Your year in

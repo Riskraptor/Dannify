@@ -31,7 +31,7 @@ import { Icon } from '@iconify/vue'
 import MixArt from './ui/MixArt.vue'
 import { useI18n } from '/src/i18n'
 
-// A mix on a shelf (model/mixes.js), or "Your year in music": the same card
+// A mix on a shelf (model/mixes.js), or "Your Soundtrack": the same card
 // as an album's, with a picture made from what is in it.
 
 defineProps({

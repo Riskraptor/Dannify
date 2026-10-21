@@ -6,7 +6,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 // A number that counts up to itself when it appears: the big moments of
-// "Your year in music". Straight to the number for less motion.
+// "Your Soundtrack". Straight to the number for less motion.
 const props = defineProps({
   value: { type: Number, default: 0 },
   // How it is written: Intl.NumberFormat in the app's language.
