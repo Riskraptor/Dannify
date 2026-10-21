@@ -258,7 +258,7 @@
       <!-- Once in a while, after real use: never a pop-up, and "Not now"
            is believed for two months (model/support.js). -->
       <section v-if="support.due.value" class="give-card">
-        <Icon icon="ph:coffee" class="give-icon" />
+        <Icon icon="ph:hand-heart-fill" class="give-icon" />
         <div class="min-w-0 flex-1">
           <p class="give-title">{{ t('support.nudgeTitle') }}</p>
           <p class="give-text">{{ support.config.message || t('support.nudgeText') }}</p>
@@ -268,8 +268,8 @@
             {{ t('support.notNow') }}
           </button>
           <button class="btn-accent btn-pill h-8 px-4 text-xs" @click="support.openSupport()">
-            <Icon icon="ph:heart-fill" class="h-3.5 w-3.5" />
-            {{ t('support.give') }}
+            <Icon icon="ph:hand-heart-fill" class="h-3.5 w-3.5" />
+            {{ t('support.sidebar') }}
           </button>
         </div>
       </section>

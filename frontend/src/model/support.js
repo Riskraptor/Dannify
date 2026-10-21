@@ -2,12 +2,11 @@ import { reactive, computed, ref } from 'vue'
 import API from '/src/model/api'
 import { desktop } from '/src/desktop/bridge'
 
-// Supporting the app: one link (see Backend/dannify/support.py), reachable
-// from a small button in the side bar at any time, and mentioned once in a
-// while on Home, never as a pop-up. Only after someone has really used the
-// app (a week, and a few dozen songs), and a "Not now" is honoured for two
-// months. Before, it was a card at the bottom of Settings → About, which most
-// people never open.
+// Supporting the app: Ko-fi, M-Pesa and PayPal (see Backend/dannify/
+// support.py), on a page of their own in Settings, reachable from a small
+// button in the side bar at any time, and mentioned once in a while on Home,
+// never as a pop-up. Only after someone has really used the app (a week, and
+// a few dozen songs), and a "Not now" is honoured for two months.
 
 const FIRST_RUN_KEY = 'dn.firstRun'
 const PLAYS_KEY = 'dn.plays'
@@ -19,7 +18,7 @@ const AFTER_PLAYS = 40
 const NOT_NOW_DAYS = 60
 const AFTER_GIVING_DAYS = 180
 
-const config = reactive({ configured: false, link: '', message: '' })
+const config = reactive({ configured: false, link: '', message: '', mpesa: {}, paypal_link: '' })
 let loading = null
 
 function read(key, fallback = 0) {
@@ -76,9 +75,24 @@ function snooze(days) {
   write(SNOOZE_KEY, snoozedUntil.value)
 }
 
-export function openSupport() {
+/** The ways to give, on their page in Settings. */
+export async function openSupport() {
+  const { default: router } = await import('/src/router')
+  router.push({ name: 'Settings', query: { pane: 'support' } })
+}
+
+// Each way out to give, and the nudge on Home rests a good while after.
+export function giveByKofi() {
   if (!config.configured || !config.link) return
   desktop.openExternal(config.link)
+  snooze(AFTER_GIVING_DAYS)
+}
+export function giveByPaypal() {
+  if (!config.paypal_link) return
+  desktop.openExternal(config.paypal_link)
+  snooze(AFTER_GIVING_DAYS)
+}
+export function gaveByMpesa() {
   snooze(AFTER_GIVING_DAYS)
 }
 
@@ -88,5 +102,5 @@ export function notNow() {
 
 export function useSupport() {
   loadSupport()
-  return { config, due, openSupport, notNow }
+  return { config, due, openSupport, notNow, giveByKofi, giveByPaypal, gaveByMpesa }
 }

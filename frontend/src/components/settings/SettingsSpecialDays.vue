@@ -21,7 +21,7 @@
       </div>
     </article>
 
-    <!-- The rest of the year, each day a tile in its colours, to slide through. -->
+    <!-- The rest of the year, each day a tile in its colours. -->
     <div v-if="rest.length" class="sd-strip-head">
       <p class="row-label">{{ t('settings.comingUp') }}</p>
       <p class="row-hint">{{ t('settings.comingUpHint') }}</p>
@@ -221,14 +221,13 @@ function listen(o) {
 .sd-strip-head {
   padding: 0 2px 8px;
 }
+/* The rest of the year as a grid that fills the width: a strip to scroll
+   sideways was one more scrollbar on a page that already scrolls. */
 .sd-strip {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
-  margin: 0 -4px 18px;
-  padding: 4px 4px 10px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
+  margin: 0 0 18px;
 }
 .sd-tile {
   position: relative;
@@ -236,15 +235,13 @@ function listen(o) {
   align-content: end;
   justify-items: start;
   gap: 2px;
-  flex: none;
-  width: 150px;
+  min-width: 0;
   height: 120px;
   padding: 12px;
   overflow: hidden;
   border-radius: 16px;
   color: #fff;
   text-align: left;
-  scroll-snap-align: start;
   background:
     linear-gradient(180deg, rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.55)),
     linear-gradient(140deg, var(--sd-a), var(--sd-b));

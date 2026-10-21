@@ -18,9 +18,10 @@
         />
       </label>
       <nav class="setx-nav" :aria-label="t('settings.title')" @keydown="onNavKey">
+        <template v-for="(p, i) in panes" :key="p.id">
+        <!-- The categories in their groups, each group under its name. -->
+        <p v-if="p.group && (i === 0 || panes[i - 1].group !== p.group)" class="setx-group">{{ t(p.group) }}</p>
         <button
-          v-for="p in panes"
-          :key="p.id"
           class="setx-cat"
           :class="{ 'is-active': pane === p.id && !searching, 'is-me': p.id === 'accounts' }"
           :title="t(p.label)"
@@ -45,6 +46,7 @@
             <span class="setx-cat-label">{{ t(p.label) }}</span>
           </template>
         </button>
+        </template>
       </nav>
       <!-- The version, and whether there is a newer one: About in a glance. -->
       <button class="setx-ver" :class="{ 'is-new': updates.available.value }" :title="t('settings.about')" @click="pickPane('about')">
@@ -54,7 +56,6 @@
           <span v-if="versionState" class="setx-ver-state"><i class="setx-ver-dot" />{{ versionState }}</span>
         </span>
       </button>
-      <p class="setx-foot">{{ t('settings.subtitle') }}</p>
     </aside>
 
     <div class="setx-main settings">
@@ -110,10 +111,14 @@
 
         <!-- Appearance -->
         <SettingsAppearance v-show="showPane('appearance')" class="is-pane-named" :style="paneStyle('appearance')" @vue:updated="onSectionUpdated" />
-        <SettingsSpecialDays v-show="showPane('appearance')" :style="paneStyle('appearance')" @vue:updated="onSectionUpdated" />
+        <!-- Special days -->
+        <SettingsSpecialDays v-show="showPane('days')" class="is-pane-named" :style="paneStyle('days')" @vue:updated="onSectionUpdated" />
 
         <!-- Playback -->
         <SettingsPlayback v-show="showPane('playback')" class="is-pane-named" :style="paneStyle('playback')" @vue:updated="onSectionUpdated" />
+
+        <!-- Sound: loudness, equalizer, balance, output -->
+        <SettingsSound v-show="showPane('sound')" class="is-pane-named" :style="paneStyle('sound')" @vue:updated="onSectionUpdated" />
 
         <!-- What the app remembers of what was played -->
         <SettingsHistory v-show="showPane('playback')" :style="paneStyle('playback')" @vue:updated="onSectionUpdated" />
@@ -133,7 +138,7 @@
         <SettingsLyrics v-show="showPane('lyrics')" class="is-pane-named" :style="paneStyle('lyrics')" @vue:updated="onSectionUpdated" />
 
         <!-- Support -->
-        <SettingsSupport v-if="support.configured" v-show="showPane('about')" :style="paneStyle('about')" @vue:updated="onSectionUpdated" />
+        <SettingsSupport v-show="showPane('support')" class="is-pane-named" :style="paneStyle('support')" @vue:updated="onSectionUpdated" />
 
         <!-- About -->
         <SettingsAbout v-show="showPane('about')" class="is-pane-named" :style="paneStyle('about')" @vue:updated="onSectionUpdated" />
@@ -154,7 +159,6 @@ import { useUpdates } from '/src/model/updates'
 import { useAccount } from '/src/model/account'
 import { appVersion } from '/src/model/api'
 import { desktop } from '/src/desktop/bridge'
-import { useSupport } from '/src/model/support'
 import { useI18n } from '/src/i18n'
 import { STORAGE_INFO, createStorageInfo } from '/src/components/settings/storageInfo'
 import '/src/components/settings/settings.css'
@@ -167,6 +171,7 @@ import SettingsSpecialDays from '/src/components/settings/SettingsSpecialDays.vu
 import SettingsLanguage from '/src/components/settings/SettingsLanguage.vue'
 import SettingsSystem from '/src/components/settings/SettingsSystem.vue'
 import SettingsPlayback from '/src/components/settings/SettingsPlayback.vue'
+import SettingsSound from '/src/components/settings/SettingsSound.vue'
 import SettingsHistory from '/src/components/settings/SettingsHistory.vue'
 import SettingsLibrary from '/src/components/settings/SettingsLibrary.vue'
 import SettingsDownloads from '/src/components/settings/SettingsDownloads.vue'
@@ -188,12 +193,15 @@ const account = useAccount()
 // own, so the column can be read at a glance, and its rows wear it.
 const ALL_PANES = [
   { id: 'accounts', label: 'settings.paneAccounts', text: 'settings.paneAccountsText', icon: 'ph:user-circle-fill', mark: 'ph:user-circle-thin', tone: '59 130 246' },
-  { id: 'general', label: 'settings.paneGeneral', text: 'settings.paneGeneralText', icon: 'ph:gear-six-fill', mark: 'ph:gear-six-thin', tone: '107 114 128' },
-  { id: 'appearance', label: 'settings.appearance', text: 'settings.paneAppearanceText', icon: 'ph:palette-fill', mark: 'ph:palette-thin', tone: '168 85 247' },
-  { id: 'playback', label: 'settings.playback', text: 'settings.panePlaybackText', icon: 'ph:play-circle-fill', mark: 'ph:play-circle-thin', tone: '34 197 94' },
-  { id: 'library', label: 'settings.paneLibrary', text: 'settings.paneLibraryText', icon: 'ph:folders-fill', mark: 'ph:folders-thin', tone: '245 158 11' },
-  { id: 'lyrics', label: 'settings.lyricsGroup', text: 'settings.paneLyricsText', icon: 'ph:microphone-stage-fill', mark: 'ph:microphone-stage-thin', tone: '236 72 153' },
-  { id: 'about', label: 'settings.about', text: 'settings.paneAboutText', icon: 'ph:info-fill', mark: 'ph:info-thin', tone: '13 148 136' },
+  { id: 'general', group: 'settings.navApp', label: 'settings.paneGeneral', text: 'settings.paneGeneralText', icon: 'ph:gear-six-fill', mark: 'ph:gear-six-thin', tone: '107 114 128' },
+  { id: 'appearance', group: 'settings.navApp', label: 'settings.appearance', text: 'settings.paneAppearanceText', icon: 'ph:palette-fill', mark: 'ph:palette-thin', tone: '168 85 247' },
+  { id: 'days', group: 'settings.navApp', label: 'settings.specialDays', text: 'settings.paneDaysText', icon: 'ph:confetti-fill', mark: 'ph:confetti-thin', tone: '249 115 22' },
+  { id: 'playback', group: 'settings.navListening', label: 'settings.playback', text: 'settings.panePlaybackText', icon: 'ph:play-circle-fill', mark: 'ph:play-circle-thin', tone: '34 197 94' },
+  { id: 'sound', group: 'settings.navListening', label: 'settings.paneSound', text: 'settings.paneSoundText', icon: 'ph:speaker-hifi-fill', mark: 'ph:speaker-hifi-thin', tone: '6 182 212' },
+  { id: 'lyrics', group: 'settings.navListening', label: 'settings.lyricsGroup', text: 'settings.paneLyricsText', icon: 'ph:microphone-stage-fill', mark: 'ph:microphone-stage-thin', tone: '236 72 153' },
+  { id: 'library', group: 'settings.navListening', label: 'settings.paneLibrary', text: 'settings.paneLibraryText', icon: 'ph:folders-fill', mark: 'ph:folders-thin', tone: '234 179 8' },
+  { id: 'support', group: 'settings.navDannify', label: 'settings.paneSupport', text: 'settings.paneSupportText', icon: 'ph:hand-heart-fill', mark: 'ph:hand-heart-thin', tone: '244 63 94' },
+  { id: 'about', group: 'settings.navDannify', label: 'settings.about', text: 'settings.paneAboutText', icon: 'ph:info-fill', mark: 'ph:info-thin', tone: '99 102 241' },
 ]
 const panes = computed(() => ALL_PANES)
 // A section in its pane's colour, and under its pane's name when a search
@@ -378,8 +386,6 @@ watch(pane, (id) => {
 // yet: the answer is kept a while, so this asks no one twice.
 if (!updates.checkedOk.value && !updates.checking.value) updates.check(false)
 
-// --- Support the app (one link, see support.py and model/support.js)
-const { config: support } = useSupport()
 
 // Flash a "Saved" pill whenever any setting is persisted.
 const showSaved = ref(false)
@@ -416,7 +422,7 @@ watch(
   min-height: 100%;
 }
 .setx {
-  --side: 236px;
+  --side: 252px;
   display: grid;
   grid-template-columns: var(--side) minmax(0, 1fr);
   align-items: start;
@@ -428,7 +434,17 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* As tall as the room under the title bar and above the player, and
+     scrolling on its own past that: on a small window its foot (Support,
+     About, the version) was out of reach below the edge. */
+  max-height: calc(100vh - var(--titlebar-h, 44px) - var(--player-h, 84px));
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
   padding: 26px 14px 18px 18px;
+}
+.setx-side:hover {
+  scrollbar-color: rgb(var(--c-tint) / 0.22) transparent;
 }
 .setx-title {
   padding: 0 6px;
@@ -473,18 +489,25 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: none;
+}
+.setx-group {
+  margin: 12px 0 4px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--c-fg) / var(--fg-45));
 }
 .setx-cat {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 6px 8px;
-  border-radius: 9px;
-  font-size: 13.5px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 14px;
   font-weight: 600;
   text-align: left;
   color: rgb(var(--c-fg) / 0.78);
@@ -651,9 +674,9 @@ watch(
   display: grid;
   flex: none;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   color: #fff;
   background: linear-gradient(160deg, rgb(var(--tile) / 0.92), rgb(var(--tile)));
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
@@ -662,13 +685,6 @@ watch(
   width: 48px;
   height: 48px;
   border-radius: 12px;
-}
-.setx-foot {
-  margin-top: -4px;
-  padding: 0 6px;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: rgb(var(--c-fg) / var(--fg-45));
 }
 
 .setx-main {
@@ -764,10 +780,10 @@ watch(
   }
   .setx-side .setx-title,
   .setx-side .setx-search,
+  .setx-group,
   .setx-cat-label,
   .setx-me-text,
-  .setx-ver-text,
-  .setx-foot {
+  .setx-ver-text {
     display: none;
   }
   .setx-cat.is-me {

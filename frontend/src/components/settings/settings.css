@@ -166,6 +166,11 @@
   content: var(--pane-name) '  ›  ';
   color: rgb(var(--tone, var(--c-accent)));
 }
+/* A section named like its pane needs no title under the pane's own header;
+   a search, gathering rows from every pane, shows it again. */
+.setx:not(.is-searching) .set-pane > section.is-pane-named > .group-title {
+  display: none;
+}
 .is-searching .set-pane > section.is-pane-named > .group-title {
   color: rgb(var(--tone, var(--c-accent)));
 }

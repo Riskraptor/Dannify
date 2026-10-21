@@ -1,7 +1,8 @@
-"""The "buy me a coffee" link, and nothing more.
+"""Ways to support Dannify: Ko-fi, M-Pesa and PayPal.
 
-One URL, opened in the user's browser. No keys, no checkout page, no card
-details anywhere near the app. Set it in one of these, last one wins:
+Links opened in the user's browser, and an M-Pesa number to pay to from a
+phone. No keys, no checkout page, no card details anywhere near the app.
+Set them in one of these, last one wins:
 
 * ``config/support.json`` next to the exe, shipped with the build;
 * ``support.json`` in the data folder, per user;
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +23,12 @@ _DEFAULTS: dict[str, Any] = {
     'enabled': True,
     'link': 'https://ko-fi.com/dkavangi',
     'message': '',
+    # Lipa na M-Pesa: {'kind': 'till' | 'paybill', 'number': '...',
+    # 'account': '...' (a paybill's account), 'name': '...' (as M-Pesa
+    # shows it, so the payer knows they have the right one)}.
+    'mpesa': {},
+    # A paypal.me name.
+    'paypal': '',
 }
 
 _config: dict[str, Any] = dict(_DEFAULTS)
@@ -76,10 +84,36 @@ def configured() -> bool:
     return bool(_config.get('enabled') and link.startswith('https://'))
 
 
+def _mpesa() -> dict[str, str]:
+    """The M-Pesa way to pay, checked: digits only, a kind M-Pesa has."""
+
+    raw = _config.get('mpesa') or {}
+    if not isinstance(raw, dict) or not _config.get('enabled'):
+        return {}
+    kind = str(raw.get('kind') or '').strip().lower()
+    number = re.sub(r'\D', '', str(raw.get('number') or ''))
+    if kind not in ('till', 'paybill') or not 5 <= len(number) <= 10:
+        return {}
+    out = {'kind': kind, 'number': number, 'name': str(raw.get('name') or '').strip()[:60]}
+    if kind == 'paybill':
+        out['account'] = re.sub(r'[^0-9A-Za-z -]', '', str(raw.get('account') or '')).strip()[:30]
+    return out
+
+
+def _paypal_link() -> str:
+    name = str(_config.get('paypal') or '').strip()
+    name = name.rsplit('/', 1)[-1]  # a whole paypal.me link works too
+    if not _config.get('enabled') or not re.fullmatch(r'[A-Za-z0-9_-]{2,40}', name):
+        return ''
+    return f'https://www.paypal.com/paypalme/{name}'
+
+
 def config() -> dict[str, Any]:
     return {
         'enabled': bool(_config.get('enabled')),
         'configured': configured(),
         'link': _config.get('link', ''),
         'message': _config.get('message', ''),
+        'mpesa': _mpesa(),
+        'paypal_link': _paypal_link(),
     }
