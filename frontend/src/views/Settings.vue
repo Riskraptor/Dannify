@@ -73,7 +73,6 @@
         />
       </label>
       <header ref="headEl" class="setx-head" :style="{ '--tone': searching ? 'var(--c-accent)' : current.tone }">
-        <Icon :icon="searching ? 'ph:magnifying-glass-thin' : current.mark" class="setx-head-mark" aria-hidden="true" />
         <template v-if="!searching">
           <span class="setx-tile is-big" :style="{ '--tile': current.tone }">
             <Icon :icon="current.icon" class="h-6 w-6" />
@@ -192,16 +191,16 @@ const account = useAccount()
 // The categories, in the order they are looked for. Each has a colour of its
 // own, so the column can be read at a glance, and its rows wear it.
 const ALL_PANES = [
-  { id: 'accounts', label: 'settings.paneAccounts', text: 'settings.paneAccountsText', icon: 'ph:user-circle-fill', mark: 'ph:user-circle-thin', tone: '59 130 246' },
-  { id: 'general', group: 'settings.navApp', label: 'settings.paneGeneral', text: 'settings.paneGeneralText', icon: 'ph:gear-six-fill', mark: 'ph:gear-six-thin', tone: '107 114 128' },
-  { id: 'appearance', group: 'settings.navApp', label: 'settings.appearance', text: 'settings.paneAppearanceText', icon: 'ph:palette-fill', mark: 'ph:palette-thin', tone: '168 85 247' },
-  { id: 'days', group: 'settings.navApp', label: 'settings.specialDays', text: 'settings.paneDaysText', icon: 'ph:confetti-fill', mark: 'ph:confetti-thin', tone: '249 115 22' },
-  { id: 'playback', group: 'settings.navListening', label: 'settings.playback', text: 'settings.panePlaybackText', icon: 'ph:play-circle-fill', mark: 'ph:play-circle-thin', tone: '34 197 94' },
-  { id: 'sound', group: 'settings.navListening', label: 'settings.paneSound', text: 'settings.paneSoundText', icon: 'ph:speaker-hifi-fill', mark: 'ph:speaker-hifi-thin', tone: '6 182 212' },
-  { id: 'lyrics', group: 'settings.navListening', label: 'settings.lyricsGroup', text: 'settings.paneLyricsText', icon: 'ph:microphone-stage-fill', mark: 'ph:microphone-stage-thin', tone: '236 72 153' },
-  { id: 'library', group: 'settings.navListening', label: 'settings.paneLibrary', text: 'settings.paneLibraryText', icon: 'ph:folders-fill', mark: 'ph:folders-thin', tone: '234 179 8' },
-  { id: 'support', group: 'settings.navDannify', label: 'settings.paneSupport', text: 'settings.paneSupportText', icon: 'ph:hand-heart-fill', mark: 'ph:hand-heart-thin', tone: '244 63 94' },
-  { id: 'about', group: 'settings.navDannify', label: 'settings.about', text: 'settings.paneAboutText', icon: 'ph:info-fill', mark: 'ph:info-thin', tone: '99 102 241' },
+  { id: 'accounts', label: 'settings.paneAccounts', text: 'settings.paneAccountsText', icon: 'ph:user-circle-fill', tone: '59 130 246' },
+  { id: 'general', group: 'settings.navApp', label: 'settings.paneGeneral', text: 'settings.paneGeneralText', icon: 'ph:gear-six-fill', tone: '107 114 128' },
+  { id: 'appearance', group: 'settings.navApp', label: 'settings.appearance', text: 'settings.paneAppearanceText', icon: 'ph:palette-fill', tone: '168 85 247' },
+  { id: 'days', group: 'settings.navApp', label: 'settings.specialDays', text: 'settings.paneDaysText', icon: 'ph:confetti-fill', tone: '249 115 22' },
+  { id: 'playback', group: 'settings.navListening', label: 'settings.playback', text: 'settings.panePlaybackText', icon: 'ph:play-circle-fill', tone: '34 197 94' },
+  { id: 'sound', group: 'settings.navListening', label: 'settings.paneSound', text: 'settings.paneSoundText', icon: 'ph:speaker-hifi-fill', tone: '6 182 212' },
+  { id: 'lyrics', group: 'settings.navListening', label: 'settings.lyricsGroup', text: 'settings.paneLyricsText', icon: 'ph:microphone-stage-fill', tone: '236 72 153' },
+  { id: 'library', group: 'settings.navListening', label: 'settings.paneLibrary', text: 'settings.paneLibraryText', icon: 'ph:folders-fill', tone: '234 179 8' },
+  { id: 'support', group: 'settings.navDannify', label: 'settings.paneSupport', text: 'settings.paneSupportText', icon: 'ph:hand-heart-fill', tone: '244 63 94' },
+  { id: 'about', group: 'settings.navDannify', label: 'settings.about', text: 'settings.paneAboutText', icon: 'ph:info-fill', tone: '99 102 241' },
 ]
 const panes = computed(() => ALL_PANES)
 // A section in its pane's colour, and under its pane's name when a search
@@ -692,8 +691,8 @@ watch(
   max-width: 900px;
   padding: 26px clamp(18px, 3.4cqi, 40px) 56px;
 }
-/* The pane's header: its colour rising from a corner, its mark large and
-   faint behind, the square lit from below. */
+/* The pane's header: its colour rising from one corner and glowing softly
+   in the other, the square lit from below. */
 .setx-head {
   position: relative;
   display: flex;
@@ -705,6 +704,7 @@ watch(
   border-radius: 20px;
   background:
     radial-gradient(120% 190% at 0% 0%, rgb(var(--tone) / 0.28), transparent 62%),
+    radial-gradient(45% 140% at 100% 100%, rgb(var(--tone) / 0.16), transparent 70%),
     rgb(var(--c-tint) / 0.035);
   box-shadow: inset 0 0 0 1px rgb(var(--c-tint) / 0.07);
   isolation: isolate;
@@ -712,19 +712,8 @@ watch(
 [data-mode='light'] .setx-head {
   background:
     radial-gradient(120% 190% at 0% 0%, rgb(var(--tone) / 0.2), transparent 62%),
+    radial-gradient(45% 140% at 100% 100%, rgb(var(--tone) / 0.12), transparent 70%),
     rgb(var(--c-raised));
-}
-.setx-head-mark {
-  position: absolute;
-  z-index: -1;
-  right: -6px;
-  bottom: -52px;
-  width: 168px;
-  height: 168px;
-  color: rgb(var(--tone));
-  opacity: 0.3;
-  transform: rotate(-12deg);
-  pointer-events: none;
 }
 .setx-head .setx-tile.is-big {
   width: 56px;

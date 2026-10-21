@@ -1,5 +1,5 @@
 <template>
-  <transition name="brb">
+  <transition name="brb" appear>
     <div v-if="restarting" class="brb" role="alertdialog" aria-live="assertive" :aria-label="t('brb.title')">
       <div class="brb-stage" aria-hidden="true">
         <!-- A record that keeps turning while the new version goes on. -->

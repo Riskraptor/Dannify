@@ -61,7 +61,7 @@
   <ContextMenuHost />
   <DialogHost />
   <ToastHost />
-  <RestartScreen />
+  <RestartScreen v-if="restarting" />
   <!-- Each of these is a file of its own, fetched the first time it is
        wanted and kept from then on (see `wanted` below). -->
   <ShortcutsDialog v-if="wanted.shortcuts" />
@@ -87,8 +87,7 @@ import ResizeHandles from './components/shell/ResizeHandles.vue'
 import ContextMenuHost from './components/ui/ContextMenuHost.vue'
 import DialogHost from './components/ui/DialogHost.vue'
 import ToastHost from './components/ui/ToastHost.vue'
-import RestartScreen from './components/shell/RestartScreen.vue'
-import { welcomeBack } from './model/restart'
+import { restarting, welcomeBack } from './model/restart'
 import { startOnboarding, useOnboarding } from './model/onboarding'
 import { loadCalendar, region, shouldGreet, systemRegion, today } from './model/occasions'
 import { startYtmSync } from './model/ytmSync'
@@ -106,6 +105,8 @@ const ReportDialog = defineAsyncComponent(() => import('/src/components/ui/Repor
 const LyricsEditor = defineAsyncComponent(() => import('./components/lyrics/LyricsEditor.vue'))
 const Onboarding = defineAsyncComponent(() => import('./components/Onboarding.vue'))
 const OccasionGreeting = defineAsyncComponent(() => import('./components/ui/OccasionGreeting.vue'))
+// Fetched only when a restart into an update begins.
+const RestartScreen = defineAsyncComponent(() => import('./components/shell/RestartScreen.vue'))
 import { useUi } from './model/ui'
 import { usePlayer } from './model/player'
 import { desktop } from './desktop/bridge'
