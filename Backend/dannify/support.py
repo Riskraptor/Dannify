@@ -29,7 +29,7 @@ _DEFAULTS: dict[str, Any] = {
     'mpesa': {'kind': 'till', 'number': '8496746'},
     # A paypal.me name, or a PayPal payment link
     # (https://www.paypal.com/ncp/payment/...).
-    'paypal': '',
+    'paypal': 'https://www.paypal.com/ncp/payment/PLB-6P7SEVNLQBY9',
 }
 
 _config: dict[str, Any] = dict(_DEFAULTS)
@@ -106,7 +106,7 @@ def _paypal_link() -> str:
     if not _config.get('enabled') or not raw:
         return ''
     # A payment link made in PayPal: a checkout of its own, kept as it is.
-    link = re.fullmatch(r'https://www\.paypal\.com/ncp/payment/([A-Z0-9]{6,40})/?', raw)
+    link = re.fullmatch(r'https://www\.paypal\.com/ncp/payment/([A-Z0-9][A-Z0-9-]{5,40})/?', raw)
     if link:
         return f'https://www.paypal.com/ncp/payment/{link.group(1)}'
     # A paypal.me name, alone or as its whole address; any other address is

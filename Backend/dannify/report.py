@@ -49,7 +49,7 @@ from loguru import logger
 REPORT_ENDPOINT = ''
 # The Web3Forms form that emails reports to the developer. Public by design:
 # it names the form, not the inbox, and a form only ever emails its owner.
-WEB3FORMS_KEY = ''
+WEB3FORMS_KEY = 'cb3ea72a-da7d-49fb-bece-bc4e85a3f98f'
 WEB3FORMS_URL = 'https://api.web3forms.com/submit'
 
 CATEGORIES = ('playback', 'downloads', 'lyrics', 'looks', 'crash', 'idea', 'other')
