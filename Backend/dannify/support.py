@@ -8,9 +8,10 @@ Set them in one of these, last one wins:
 * ``support.json`` in the data folder, per user;
 * ``DANNIFY_SUPPORT_LINK`` / ``DANNIFY_SUPPORT_DISABLED`` in the environment.
 
-The PayPal link, the M-Pesa number and the message can also change between
-releases: ``config/support-live.json`` on the repository's main branch, signed
-with the release key (see ``accept_live``).
+The PayPal link, the M-Pesa number, the Ko-fi page and the message can also
+change between releases: ``config/support-live.json`` on the repository's main
+branch, signed with the release key (see ``accept_live`` and
+``packaging/support_details.py``).
 """
 
 from __future__ import annotations
@@ -53,7 +54,7 @@ _config: dict[str, Any] = dict(_DEFAULTS)
 # signature and all, so it holds offline and is checked again at every start.
 LIVE_NAME = 'support-live.json'
 LIVE_KIND = 'support'
-LIVE_FIELDS = ('paypal', 'mpesa', 'message')
+LIVE_FIELDS = ('paypal', 'mpesa', 'link', 'message')
 LIVE_EVERY = 12 * 3600
 _live: dict[str, Any] = {}
 _live_dir: Optional[Path] = None
@@ -222,9 +223,15 @@ def init(data_dir: Path) -> None:
     _load_kept_live()
 
 
+def _link() -> str:
+    """The Ko-fi (or any other) page to give on: an https address, or none."""
+
+    link = str(_current().get('link') or '').strip()
+    return link if re.fullmatch(r'https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}(/[^\s]*)?', link) else ''
+
+
 def configured() -> bool:
-    link = str(_config.get('link') or '')
-    return bool(_config.get('enabled') and link.startswith('https://'))
+    return bool(_config.get('enabled') and _link())
 
 
 def _mpesa() -> dict[str, str]:
@@ -266,7 +273,7 @@ def config() -> dict[str, Any]:
     return {
         'enabled': bool(_config.get('enabled')),
         'configured': configured(),
-        'link': _config.get('link', ''),
+        'link': _link(),
         'message': str(_current().get('message') or '')[:300],
         'mpesa': _mpesa(),
         'paypal_link': _paypal_link(),

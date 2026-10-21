@@ -1,23 +1,41 @@
 # Live settings
 
-`support-live.json` is how Dannify's payment details change between releases:
-the PayPal link, the M-Pesa till or paybill, and the line on the Support page.
-Every installed copy reads it from this branch twice a day, and believes it
-only when `support-live.json.dsig` is the release key's signature over it.
+`support-live.json` is how Dannify's ways to give change between releases:
+the PayPal link, the M-Pesa till or paybill, the Ko-fi page, and the line on
+the Support page. Every installed copy reads it from this branch when it
+starts and twice a day after, keeps it for when it is offline, and believes it
+only when `support-live.json.dsig` is the release key's signature over it. A
+copy never goes back to a lower version than the one it has.
 
-To change them:
+## See what copies are told
 
-1. Edit `support-live.json` and raise `"version"` by one. A copy never goes
-   back to a lower version than the one it has.
-2. Sign it with the release key (the same one releases are signed with):
+```
+python packaging/support_details.py
+```
 
-   ```
-   python packaging/release_key.py sign-support
-   ```
+## Change it
 
-3. Commit both files to `main`. Copies pick them up within twelve hours, or at
-   their next start.
+One command: it raises the version, signs with the release key (the same one
+releases are signed with, from `DANNIFY_RELEASE_KEY` or
+`~/.dannify/release-signing.key`), and checks the result exactly as the app
+does.
 
-Only `paypal`, `mpesa` and `message` are read from here, and each is checked as
-strictly as the built-in ones (a PayPal link must be a PayPal payment link or
-paypal.me name; an M-Pesa number must be a till or paybill).
+```
+python packaging/support_details.py --paypal https://www.paypal.com/ncp/payment/PLB-XXXXXXXXXXXX
+python packaging/support_details.py --till 8496746
+python packaging/support_details.py --paybill 247247 --account 0712345678 --mpesa-name "DANNIFY"
+python packaging/support_details.py --kofi https://ko-fi.com/yourname
+python packaging/support_details.py --message "Thank you for keeping Dannify free!"
+python packaging/support_details.py --no-mpesa        (stop showing M-Pesa)
+python packaging/support_details.py --no-paypal       (stop showing PayPal)
+```
+
+Then commit `support-live.json` and `support-live.json.dsig` to `main` (through
+a pull request). Copies pick them up within twelve hours, or at their next
+start.
+
+Each value is checked as strictly as the built-in ones: a PayPal link must be a
+PayPal payment link or a paypal.me name, an M-Pesa number a till or paybill of
+5 to 10 digits, the Ko-fi page an https address. Nothing else in the file is
+read: which repository updates come from, and everything else about the app,
+stay as built.

@@ -64,9 +64,10 @@ def test_a_release_signature_is_not_a_support_one():
 
 
 def test_only_payment_fields_are_taken():
-    raw, sig = signed({**NEW, 'enabled': False, 'link': 'https://evil.example'})
+    raw, sig = signed({**NEW, 'enabled': False, 'repo': 'someone/else', 'link': 'https://ko-fi.com/x'})
     found = support.accept_live(raw, sig, PUBLIC)
-    assert 'enabled' not in found and 'link' not in found
+    assert 'enabled' not in found and 'repo' not in found
+    assert found['link'] == 'https://ko-fi.com/x'
 
 
 def test_kept_details_are_used_and_still_checked(tmp_path):
@@ -118,3 +119,26 @@ def test_nothing_reachable_changes_nothing(tmp_path, monkeypatch):
     support.init(tmp_path)
     assert support.refresh_live() is False
     assert support.config()['mpesa']['number'] == '8496746'
+
+
+def test_the_ko_fi_page_can_change_too_but_only_to_an_https_page(tmp_path):
+    raw, sig = signed({'version': 5, 'link': 'https://ko-fi.com/dannifyapp'})
+    (tmp_path / support.LIVE_NAME).write_bytes(raw)
+    (tmp_path / (support.LIVE_NAME + signing.SIGNATURE_SUFFIX)).write_text(sig)
+    support.init(tmp_path)
+    assert support.config()['link'] == 'https://ko-fi.com/dannifyapp'
+    raw, sig = signed({'version': 6, 'link': 'javascript:alert(1)'})
+    (tmp_path / support.LIVE_NAME).write_bytes(raw)
+    (tmp_path / (support.LIVE_NAME + signing.SIGNATURE_SUFFIX)).write_text(sig)
+    support.init(tmp_path)
+    assert support.config()['link'] == '' and not support.config()['configured']
+
+
+def test_a_way_to_give_can_be_taken_away(tmp_path):
+    raw, sig = signed({'version': 7, 'mpesa': {}, 'paypal': ''})
+    (tmp_path / support.LIVE_NAME).write_bytes(raw)
+    (tmp_path / (support.LIVE_NAME + signing.SIGNATURE_SUFFIX)).write_text(sig)
+    support.init(tmp_path)
+    out = support.config()
+    assert out['mpesa'] == {} and out['paypal_link'] == ''
+    assert out['link'] == 'https://ko-fi.com/dkavangi'
