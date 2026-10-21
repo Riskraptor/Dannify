@@ -131,18 +131,18 @@ class _Req:
         return self._body
 
 
-def _saved_song(monkeypatch, tmp_path, kept_text=''):
+def _saved_song(monkeypatch, tmp_path, kept_text='', chosen=0, versions=(V1, V2)):
     song_file = tmp_path / 'Rema - Calm Down.dnf'
     song_file.write_bytes(b'x')
     monkeypatch.setattr(lyrics_routes, '_library_file', lambda f: song_file if f else None)
     # Thin tags, as a download can leave them: no artist.
     monkeypatch.setattr(lyrics_routes.library_mod, '_read_tags', lambda p: {'title': 'Calm Down', 'duration': 239})
-    monkeypatch.setattr(lyrics, '_versions_of', lambda song: [lyrics.Lyrics(synced=V1), lyrics.Lyrics(synced=V2)])
+    monkeypatch.setattr(lyrics, '_versions_of', lambda song: [lyrics.Lyrics(synced=v) for v in versions])
     monkeypatch.setattr(lyrics_routes, '_read_existing_lyrics', lambda full, a, t: kept_text)
     written, prefs = [], []
     monkeypatch.setattr(lyrics_routes, '_persist_lyrics', lambda full, a, t, text: written.append((a, t, text)))
     monkeypatch.setattr(lyrics_routes.lyrics_offsets, 'set', lambda t, a, o, v: prefs.append((t, a, v)))
-    monkeypatch.setattr(lyrics_routes.lyrics_offsets, 'get_prefs', lambda t, a: {'offset': 0.0, 'version': 0})
+    monkeypatch.setattr(lyrics_routes.lyrics_offsets, 'get_prefs', lambda t, a: {'offset': 0.0, 'version': chosen})
     return written, prefs
 
 
@@ -153,6 +153,14 @@ def test_a_saved_song_lists_its_versions_and_marks_the_one_kept(monkeypatch, tmp
     assert len(out['versions']) == 2
     assert out['version'] == 1
     assert out['artist'] == 'Rema'
+
+
+def test_of_two_uploads_that_differ_by_a_comma_the_one_picked_is_marked(monkeypatch, tmp_path):
+    twin = '[00:01.50] one,\n[00:02.50] two'
+    _saved_song(monkeypatch, tmp_path, kept_text=twin, chosen=2, versions=(V1, V2, twin))
+    out = asyncio.run(lyrics_routes.lyrics_versions_endpoint(
+        title='Calm Down', artist='Rema', album='', duration=239, url='', file='Rema - Calm Down.dnf'))
+    assert out['version'] == 2
 
 
 def test_picking_a_version_keeps_it_beside_the_saved_song(monkeypatch, tmp_path):

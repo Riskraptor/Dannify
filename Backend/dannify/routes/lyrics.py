@@ -399,8 +399,10 @@ async def lyrics_versions_endpoint(
     primary = song_artists[0] if song_artists else ''
     prefs = lyrics_offsets.get_prefs(song.get('name', ''), primary)
     current = prefs['version'] if prefs['version'] < len(versions) else 0
-    if kept:
+    if kept and not lyrics_mod.same_words(kept, lyrics_mod.version_text(song, current)):
         # A saved song shows what is kept beside it: that is the version it is.
+        # The one picked is trusted first: two uploads can differ only by a
+        # comma, and the first of them is not the one that was chosen.
         for i in range(len(versions)):
             if lyrics_mod.same_words(kept, lyrics_mod.version_text(song, i)):
                 current = i
