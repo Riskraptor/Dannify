@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "paypal": "https://www.paypal.com/ncp/payment/PLB-WVTSZMLQNTLQ",
+  "version": 4,
+  "paypal": "",
   "mpesa": {
     "kind": "till",
     "number": "8496746"
