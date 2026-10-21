@@ -936,6 +936,13 @@ export default {
     rolledBack: 'Dannify {version} hat auf diesem Computer nicht geöffnet, deshalb sind Sie wieder auf {running}. Diese Version wird nicht erneut angeboten, die nächste schon.',
   },
   support: {
+    sponsorsTitle: 'Dannify auf GitHub unterstützen',
+    sponsorsLead: 'Mit GitHub Sponsors werden Entwickler auf der ganzen Welt unterstützt. Einmalig oder jeden Monat ein wenig.',
+    sponsorsMonthly: 'Monatlich oder einmalig, beliebiger Betrag',
+    sponsorsCard: 'Per Karte, von überall auf der Welt',
+    sponsorsFee: 'GitHub behält keine Gebühr: alles geht an den Entwickler',
+    sponsorsGive: 'Auf GitHub unterstützen',
+    sponsorsNote: 'Öffnet GitHub in Ihrem Browser. Ein kostenloses GitHub-Konto wird benötigt.',
     title: 'Unterstützen',
     give: 'Ko-fi öffnen',
     sidebar: 'Dannify unterstützen',

@@ -1,4 +1,5 @@
-"""Ways to support Dannify: Ko-fi, M-Pesa and PayPal.
+"""Ways to support Dannify: GitHub Sponsors first, M-Pesa in Kenya, and
+Ko-fi and PayPal when they are set.
 
 Links opened in the user's browser, and an M-Pesa number to pay to from a
 phone. No keys, no checkout page, no card details anywhere near the app.
@@ -30,15 +31,19 @@ from loguru import logger
 
 _DEFAULTS: dict[str, Any] = {
     'enabled': True,
-    'link': 'https://ko-fi.com/dkavangi',
+    # GitHub Sponsors: the GitHub account to sponsor. Monthly or one time,
+    # any amount, by card from anywhere; GitHub keeps no fee.
+    'github': 'Riskraptor',
+    # A page to give on (Ko-fi was the first): none since 4.14.1.
+    'link': '',
     'message': '',
     # Lipa na M-Pesa: {'kind': 'till' | 'paybill', 'number': '...',
     # 'account': '...' (a paybill's account), 'name': '...' (as M-Pesa
     # shows it, so the payer knows they have the right one)}.
     'mpesa': {'kind': 'till', 'number': '8496746'},
     # A paypal.me name, or a PayPal payment link
-    # (https://www.paypal.com/ncp/payment/...).
-    'paypal': 'https://www.paypal.com/ncp/payment/PLB-WVTSZMLQNTLQ',
+    # (https://www.paypal.com/ncp/payment/...): none since 4.14.1.
+    'paypal': '',
 }
 
 _config: dict[str, Any] = dict(_DEFAULTS)
@@ -54,7 +59,7 @@ _config: dict[str, Any] = dict(_DEFAULTS)
 # signature and all, so it holds offline and is checked again at every start.
 LIVE_NAME = 'support-live.json'
 LIVE_KIND = 'support'
-LIVE_FIELDS = ('paypal', 'mpesa', 'link', 'message')
+LIVE_FIELDS = ('paypal', 'mpesa', 'link', 'message', 'github')
 LIVE_EVERY = 12 * 3600
 _live: dict[str, Any] = {}
 _live_dir: Optional[Path] = None
@@ -230,8 +235,21 @@ def _link() -> str:
     return link if re.fullmatch(r'https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}(/[^\s]*)?', link) else ''
 
 
+def _sponsors_link() -> str:
+    """The GitHub Sponsors page of the account named, checked as GitHub names
+    accounts: letters, digits and single hyphens, at most 39."""
+
+    current = _current()
+    login = str(current.get('github') or '').strip()
+    if not current.get('enabled') or not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}', login):
+        return ''
+    return f'https://github.com/sponsors/{login}'
+
+
 def configured() -> bool:
-    return bool(_config.get('enabled') and _link())
+    """Whether there is any way to give from anywhere (M-Pesa is Kenya only)."""
+
+    return bool(_config.get('enabled') and (_sponsors_link() or _link() or _paypal_link()))
 
 
 def _mpesa() -> dict[str, str]:
@@ -274,6 +292,7 @@ def config() -> dict[str, Any]:
         'enabled': bool(_config.get('enabled')),
         'configured': configured(),
         'link': _link(),
+        'sponsors_link': _sponsors_link(),
         'message': str(_current().get('message') or '')[:300],
         'mpesa': _mpesa(),
         'paypal_link': _paypal_link(),

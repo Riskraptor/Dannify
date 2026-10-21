@@ -971,6 +971,13 @@ export default {
     gotIt: 'Compris',
   },
   support: {
+    sponsorsTitle: 'Soutenir Dannify sur GitHub',
+    sponsorsLead: 'GitHub Sponsors permet de soutenir des développeurs partout dans le monde. Donnez une fois, ou un peu chaque mois.',
+    sponsorsMonthly: 'Chaque mois ou une seule fois, le montant de votre choix',
+    sponsorsCard: "Par carte, depuis n'importe où",
+    sponsorsFee: 'GitHub ne prend aucune commission : tout va au développeur',
+    sponsorsGive: 'Soutenir sur GitHub',
+    sponsorsNote: 'Ouvre GitHub dans votre navigateur. Un compte GitHub gratuit est nécessaire.',
     title: 'Soutien',
     give: 'Ouvrir Ko-fi',
     sidebar: 'Soutenir Dannify',

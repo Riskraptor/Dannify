@@ -56,3 +56,18 @@ describe('giving by PayPal', () => {
     expect(desktop.openExternal).toHaveBeenCalledWith(LINK)
   })
 })
+
+describe('giving through GitHub Sponsors', () => {
+  it('opens the sponsors page in the browser, where GitHub is signed in', () => {
+    support.useSupport().config.sponsors_link = 'https://github.com/sponsors/Riskraptor'
+    support.giveBySponsors()
+    expect(desktop.openExternal).toHaveBeenCalledWith('https://github.com/sponsors/Riskraptor')
+    expect(desktop.checkout).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when no sponsors page is set', () => {
+    support.useSupport().config.sponsors_link = ''
+    support.giveBySponsors()
+    expect(desktop.openExternal).not.toHaveBeenCalled()
+  })
+})
