@@ -1,12 +1,23 @@
 <template>
-  <!-- hCaptcha, the check the Web3Forms form asks for: a robot cannot send a
-       report (see report.py). Its own box, in the app's light or dark. -->
+  <!-- hCaptcha, the check the Web3Forms form asks for, so no robot sends a
+       report (see report.py). Invisible: nothing here takes room, and when
+       hCaptcha does want a challenge, it shows it in the middle of the
+       window rather than hanging off a box near the dialog's foot. -->
   <div class="hcb">
     <div ref="box" class="hcb-box" />
+    <p class="hcb-notice">
+      <Icon icon="ph:shield-check" class="h-3.5 w-3.5" />
+      <span>
+        {{ t('problems.captchaNotice') }}
+        <button type="button" class="hcb-link" @click="desktop.openExternal('https://www.hcaptcha.com/privacy')">{{ t('problems.captchaPrivacy') }}</button>
+        ·
+        <button type="button" class="hcb-link" @click="desktop.openExternal('https://www.hcaptcha.com/terms')">{{ t('problems.captchaTerms') }}</button>
+      </span>
+    </p>
     <p v-if="failed" class="hcb-failed">
       <Icon icon="ph:wifi-slash" class="h-4 w-4" />
       {{ t('problems.captchaOffline') }}
-      <button class="hcb-retry" type="button" @click="start">{{ t('common.retry') }}</button>
+      <button class="hcb-link" type="button" @click="start">{{ t('common.retry') }}</button>
     </p>
   </div>
 </template>
@@ -14,10 +25,10 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
+import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
 
 const props = defineProps({ sitekey: { type: String, required: true } })
-const emit = defineEmits(['token'])
 const { t, locale } = useI18n()
 
 const box = ref(null)
@@ -53,23 +64,31 @@ async function start() {
     box.value.innerHTML = ''
     widget = hcaptcha.render(box.value, {
       sitekey: props.sitekey,
+      size: 'invisible',
       theme: document.documentElement.dataset.mode === 'light' ? 'light' : 'dark',
-      callback: (token) => emit('token', token),
-      'expired-callback': () => emit('token', ''),
-      'error-callback': () => emit('token', ''),
     })
   } catch {
     failed.value = true
-    emit('token', '')
   }
 }
 
-/** A token is good for one report: after a send, the box asks again. */
+/**
+ * The check, when the note reaches the end: a token straight away for most
+ * people, after a challenge (in the middle of the window) for some. Rejects
+ * when the challenge is closed, or the check cannot load.
+ */
+async function run() {
+  if (widget === null) await start()
+  if (widget === null || !window.hcaptcha) throw new Error('hCaptcha is not available')
+  const { response } = await window.hcaptcha.execute(widget, { async: true })
+  return response
+}
+
+/** A token is good for one report: the next send asks again. */
 function reset() {
-  emit('token', '')
   if (widget !== null && window.hcaptcha) window.hcaptcha.reset(widget)
 }
-defineExpose({ reset })
+defineExpose({ run, reset })
 
 onMounted(start)
 onBeforeUnmount(() => {
@@ -86,20 +105,35 @@ onBeforeUnmount(() => {
 <style scoped>
 .hcb {
   display: grid;
-  justify-items: start;
   gap: 6px;
-  margin-top: 16px;
-  min-height: 78px;
+  margin-top: 14px;
 }
+.hcb-box {
+  height: 0;
+}
+.hcb-notice,
 .hcb-failed {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: rgb(var(--c-fg) / 0.75);
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: rgb(var(--c-fg) / var(--fg-55));
 }
-.hcb-retry {
+.hcb-notice :deep(svg) {
+  flex: none;
+  margin-top: 1px;
+  color: rgb(var(--c-accent));
+}
+.hcb-failed {
+  font-size: 12.5px;
+  color: rgb(var(--c-fg) / 0.8);
+}
+.hcb-link {
   font-weight: 700;
   color: rgb(var(--c-accent));
+}
+.hcb-link:hover {
+  text-decoration: underline;
 }
 </style>

@@ -80,12 +80,7 @@
               />
 
               <!-- The check the form asks for, so no robot sends a report. -->
-              <HCaptchaBox
-                v-if="captchaKey"
-                ref="captchaBox"
-                :sitekey="captchaKey"
-                @token="(token) => (captchaToken = token)"
-              />
+              <HCaptchaBox v-if="captchaKey" ref="captchaBox" :sitekey="captchaKey" />
 
               <!-- No person sees this, so no person fills it in (report.py). -->
               <input v-model="website" class="rp-trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
@@ -194,12 +189,12 @@ const longEnough = computed(() => description.value.trim().length >= 10)
 const contactOk = computed(
   () => !contact.value.trim() || /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(contact.value.trim())
 )
-// hCaptcha, when the form asks for it: solved before the note will slide.
+// hCaptcha, when the form asks for it: run as the note reaches the end, its
+// challenge (when there is one) in the middle of the window.
 const captchaKey = computed(() => (reporting.status.captcha && reporting.status.captcha.sitekey) || '')
-const captchaToken = ref('')
 const captchaBox = ref(null)
 const canSend = computed(
-  () => longEnough.value && contactOk.value && !sending.value && (!captchaKey.value || !!captchaToken.value)
+  () => longEnough.value && contactOk.value && !sending.value
 )
 
 // Immediate as well: the dialog is loaded the first time it is opened, by
@@ -239,6 +234,21 @@ async function submit() {
   }
   sending.value = true
   error.value = ''
+  let captcha = ''
+  if (captchaKey.value) {
+    try {
+      captcha = await captchaBox.value.run()
+    } catch (err) {
+      // Closed the challenge: the note goes back, and nothing is said. One
+      // that could not load says so.
+      sending.value = false
+      knobBack()
+      if (!/challenge-closed|challenge-expired/.test(String(err && (err.message || err)))) {
+        error.value = t('problems.captchaOffline')
+      }
+      return
+    }
+  }
   try {
     result.value = await reporting.send(
       {
@@ -248,7 +258,7 @@ async function submit() {
         include_diagnostics: includeDiagnostics.value,
         website: website.value,
       },
-      captchaToken.value
+      captcha
     )
     await nextTick()
     doneBtn.value && doneBtn.value.focus()

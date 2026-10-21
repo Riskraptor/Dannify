@@ -8,8 +8,45 @@
       <span><b>{{ t('support.heroTitle') }}.</b> {{ support.message || t('support.heroText') }}</span>
     </p>
 
-    <!-- In Kenya, M-PESA first and plain to see: the number large, and how to
-         pay it from a phone, step by step. Elsewhere it is a card among the
+    <!-- Just gave: thank you, there and then. -->
+    <article v-if="thanked" class="sp-thanks">
+      <Particles :look="{ shape: 'heart', motion: 'rise', palette: ['#ffd1dc', '#ff8fab', '#fda4af'] }" :count="18" contain fall="220px" />
+      <span class="sp-thanks-heart"><Icon icon="ph:heart-fill" class="h-7 w-7" /></span>
+      <div class="min-w-0">
+        <h3 class="sp-thanks-title">{{ t('support.thanksTitle') }}</h3>
+        <p class="sp-thanks-text">{{ t('support.thanksText') }}</p>
+      </div>
+    </article>
+
+    <!-- PayPal, the way to give from anywhere: first, and inside the app. -->
+    <article v-if="support.paypal_link" class="sp-paypal">
+      <div class="sp-paypal-main">
+        <span class="sp-paypal-mark" aria-label="PayPal"><b>Pay</b><i>Pal</i></span>
+        <h3 class="sp-paypal-title">{{ t('support.paypalTitle') }}</h3>
+        <p class="sp-paypal-text">{{ t('support.paypalLead') }}</p>
+        <div class="sp-tiers">
+          <button v-for="tier in tiers" :key="tier.label" class="sp-tier press" :disabled="checkingOut" @click="giveByPaypal()">
+            <Icon :icon="tier.icon" class="h-4 w-4" />
+            <span>{{ t(tier.label) }}</span>
+            <b>{{ price(tier.usd) }}</b>
+          </button>
+        </div>
+      </div>
+      <div class="sp-paypal-side">
+        <button class="sp-paypal-btn press" :disabled="checkingOut" @click="giveByPaypal()">
+          <span v-if="checkingOut" class="spinner h-4 w-4" />
+          <Icon v-else icon="ph:paypal-logo-fill" class="h-5 w-5" />
+          {{ checkingOut ? t('support.checkoutOpen') : t('support.paypalGive') }}
+        </button>
+        <button class="sp-paypal-alt" @click="giveByPaypal({ inBrowser: true })">
+          {{ t('support.inBrowser') }} <Icon icon="ph:arrow-up-right-bold" class="h-3 w-3" />
+        </button>
+        <p class="sp-paypal-safe"><Icon icon="ph:lock-simple-fill" class="h-3.5 w-3.5" />{{ t('support.paypalSafe') }}</p>
+      </div>
+    </article>
+
+    <!-- In Kenya, M-PESA too, plain to see: the number large, and how to pay
+         it from a phone, step by step. Elsewhere it is a card among the
          others: Dannify is used all over the world. -->
     <article v-if="mpesa && inKenya" class="sp-mpesa">
       <div class="sp-mpesa-brand">
@@ -23,7 +60,7 @@
         <span v-if="mpesa.kind === 'paybill' && mpesa.account" class="sp-mpesa-account">{{ t('support.mpesaAccountLabel') }} {{ mpesa.account }}</span>
         <span v-if="mpesa.name" class="sp-mpesa-name">{{ t('support.mpesaName', { name: mpesa.name }) }}</span>
         <button class="sp-mpesa-copy press" @click="copyNumber">
-          <Icon :icon="copied ? 'ph:check-bold' : 'ph:copy-bold'" class="h-4 w-4" />
+          <Icon :icon="copied ? 'ph:check-bold' : 'ph:copy'" class="h-4 w-4" />
           {{ copied ? t('support.copied') : t('support.copyNumber') }}
         </button>
       </div>
@@ -37,7 +74,7 @@
       </ol>
     </article>
 
-    <!-- The ways to give from anywhere, side by side. -->
+    <!-- The other ways, side by side. -->
     <div class="sp-ways">
       <div v-if="support.configured" class="sp-way is-kofi">
         <span class="sp-way-mark"><Icon icon="ph:coffee-fill" class="h-6 w-6" /></span>
@@ -59,20 +96,12 @@
         </button>
       </div>
 
-      <div v-if="support.paypal_link" class="sp-way is-paypal">
-        <span class="sp-way-mark"><Icon icon="ph:paypal-logo-fill" class="h-6 w-6" /></span>
-        <p class="sp-way-name">PayPal</p>
-        <p class="sp-way-text">{{ t('support.paypalText') }}</p>
-        <button class="sp-way-btn press" @click="giveByPaypal()">
-          {{ t('support.openPaypal') }} <Icon icon="ph:arrow-up-right-bold" class="h-3.5 w-3.5" />
-        </button>
-      </div>
     </div>
 
     <!-- Giving is not only money. -->
     <p class="sp-more">{{ t('support.moreTitle') }}</p>
     <div class="row">
-      <Icon icon="ph:share-network" class="row-icon" />
+      <Icon icon="ph:link" class="row-icon" />
       <div class="row-text">
         <p class="row-label">{{ t('support.shareTitle') }}</p>
         <p class="row-hint">{{ t('support.shareText') }}</p>
@@ -89,7 +118,7 @@
         <p class="row-hint">{{ t('support.ideaText') }}</p>
       </div>
       <button class="btn" @click="reporting.openReport('idea')">
-        <Icon icon="ph:pencil-simple-line" class="h-4 w-4" />
+        <Icon icon="ph:pencil-simple" class="h-4 w-4" />
         {{ t('support.ideaButton') }}
       </button>
     </div>
@@ -97,9 +126,9 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useSupport } from '/src/model/support'
+import { checkingOut, thankedAt, useSupport } from '/src/model/support'
 import { region } from '/src/model/occasions'
 import { useReporting } from '/src/model/problems'
 import { useUpdates } from '/src/model/updates'
@@ -109,12 +138,25 @@ import { useI18n } from '/src/i18n'
 // Supporting Dannify, on a page of its own: why, the ways to give (each
 // shown only when it is set up, see support.py), and the ways to help that
 // cost nothing.
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const Particles = defineAsyncComponent(() => import('/src/components/ui/Particles.vue'))
 const { config: support, giveByKofi, giveByPaypal, gaveByMpesa } = useSupport()
 const reporting = useReporting()
 const updates = useUpdates()
 
 const mpesa = computed(() => (support.mpesa && support.mpesa.number ? support.mpesa : null))
+
+// What the PayPal checkout offers (made with these, in USD): chosen there.
+const tiers = [
+  { label: 'support.tierCoffee', icon: 'ph:coffee-fill', usd: 3 },
+  { label: 'support.tierLunch', icon: 'ph:bowl-food-fill', usd: 10 },
+  { label: 'support.tierThanks', icon: 'ph:heart-fill', usd: 25 },
+]
+function price(usd) {
+  return new Intl.NumberFormat(locale.value || 'en', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(usd)
+}
+// Thanked for a while after giving, then the page is as it was.
+const thanked = computed(() => thankedAt.value > 0 && Date.now() - thankedAt.value < 30 * 60 * 1000)
 // Where the app thinks it is (Settings, Special days): a Kenyan till is the
 // way to give in Kenya, and a curiosity anywhere else.
 const inKenya = computed(() => region.value === 'KE')
@@ -298,6 +340,195 @@ async function copyLink() {
     text-align: left;
   }
 }
+/* PayPal, first: its blues, its two-tone name, the amounts it offers. */
+.sp-paypal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px 28px;
+  margin-bottom: 14px;
+  padding: 24px;
+  border-radius: 18px;
+  color: #fff;
+  background:
+    radial-gradient(70% 120% at 100% 0%, rgb(255 255 255 / 0.16), transparent 60%),
+    linear-gradient(135deg, #003087, #0070e0);
+  box-shadow: 0 16px 36px rgb(0 48 135 / 0.35);
+}
+.sp-paypal-main {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+.sp-paypal-mark {
+  display: inline-flex;
+  padding: 3px 12px;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 22px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -0.01em;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+}
+.sp-paypal-mark b {
+  color: #003087;
+}
+.sp-paypal-mark i {
+  color: #009cde;
+}
+.sp-paypal-title {
+  margin-top: 6px;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.sp-paypal-text {
+  max-width: 56ch;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: rgb(255 255 255 / 0.85);
+}
+.sp-tiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.sp-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.14);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22);
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+.sp-tier:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.24);
+  transform: translateY(-1px);
+}
+.sp-tier b {
+  font-weight: 900;
+}
+.sp-paypal-side {
+  display: grid;
+  align-content: center;
+  justify-items: stretch;
+  gap: 10px;
+  min-width: 220px;
+}
+.sp-paypal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: #ffc439;
+  color: #111;
+  font-size: 15px;
+  font-weight: 800;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.25);
+  transition:
+    filter 0.15s ease,
+    transform 0.15s ease;
+}
+.sp-paypal-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+.sp-paypal-btn:disabled {
+  opacity: 0.85;
+  cursor: progress;
+}
+.sp-paypal-alt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: rgb(255 255 255 / 0.85);
+}
+.sp-paypal-alt:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+.sp-paypal-safe {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 260px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.75);
+}
+.sp-paypal-safe :deep(svg) {
+  flex: none;
+  margin-top: 1px;
+}
+@container (max-width: 760px) {
+  .sp-paypal {
+    grid-template-columns: 1fr;
+  }
+  .sp-paypal-side {
+    justify-items: start;
+    min-width: 0;
+  }
+}
+/* Thank you: warm, and gone after a while. */
+.sp-thanks {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 22px 24px;
+  overflow: hidden;
+  border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(135deg, #e11d48, #fb7185);
+  box-shadow: 0 16px 36px rgb(225 29 72 / 0.35);
+  animation: sp-thanks-in 0.6s cubic-bezier(0.2, 0.9, 0.2, 1.2) both;
+}
+.sp-thanks-heart {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  flex: none;
+  place-items: center;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.2);
+  animation: sp-beat 1.6s ease-in-out infinite;
+}
+.sp-thanks-title {
+  position: relative;
+  z-index: 1;
+  font-size: 20px;
+  font-weight: 900;
+}
+.sp-thanks-text {
+  position: relative;
+  z-index: 1;
+  font-size: 13.5px;
+  color: rgb(255 255 255 / 0.9);
+}
+@keyframes sp-thanks-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
 .sp-ways {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -339,9 +570,6 @@ async function copyLink() {
   font-weight: 900;
   font-style: italic;
   letter-spacing: 0.02em;
-}
-.sp-way.is-paypal {
-  --way: 0 112 224;
 }
 .sp-way-mark {
   display: grid;

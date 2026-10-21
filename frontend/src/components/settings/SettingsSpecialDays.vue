@@ -2,6 +2,24 @@
   <section>
     <h2 class="group-title">{{ t('settings.specialDays') }}</h2>
 
+    <!-- Where first: the days below are the ones kept there, and it is what
+         someone changes when they are not the right ones. -->
+    <div class="row sd-region">
+      <span class="sd-flag" aria-hidden="true">
+        <i v-for="(c, i) in flagOf(region)" :key="i" :style="{ background: c }" />
+      </span>
+      <div class="row-text">
+        <p class="row-label">{{ t('settings.region') }}</p>
+        <p class="row-hint">{{ t('settings.regionHint') }}</p>
+      </div>
+      <select class="field-select w-56" :value="regionChoice" :aria-label="t('settings.region')" @change="setRegion($event.target.value)">
+        <option value="auto">
+          {{ detectedName ? t('settings.regionAuto', { country: detectedName }) : t('settings.regionAutoNone') }}
+        </option>
+        <option v-for="c in countries" :key="c.code" :value="c.code">{{ c.name }}</option>
+      </select>
+    </div>
+
     <!-- The next special day, in its own colours, moving its own way: a
          list of dates said nothing of what the days are like. -->
     <article v-if="next" class="sd-hero" :style="paint(next)">
@@ -43,21 +61,6 @@
     </div>
     <p v-if="!next" class="sd-empty">{{ t('settings.comingUpNone') }}</p>
 
-    <div class="row">
-      <span class="sd-flag" aria-hidden="true">
-        <i v-for="(c, i) in flagOf(region)" :key="i" :style="{ background: c }" />
-      </span>
-      <div class="row-text">
-        <p class="row-label">{{ t('settings.region') }}</p>
-        <p class="row-hint">{{ t('settings.regionHint') }}</p>
-      </div>
-      <select class="field-select w-56" :value="regionChoice" :aria-label="t('settings.region')" @change="setRegion($event.target.value)">
-        <option value="auto">
-          {{ detectedName ? t('settings.regionAuto', { country: detectedName }) : t('settings.regionAutoNone') }}
-        </option>
-        <option v-for="c in countries" :key="c.code" :value="c.code">{{ c.name }}</option>
-      </select>
-    </div>
   </section>
 </template>
 
@@ -282,6 +285,9 @@ function listen(o) {
   font-size: 13px;
   font-weight: 800;
   line-height: 1.2;
+}
+.sd-region {
+  margin-bottom: 16px;
 }
 .sd-flag {
   display: flex;

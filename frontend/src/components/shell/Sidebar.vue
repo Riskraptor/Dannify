@@ -189,7 +189,7 @@
           :aria-label="t('support.sidebar')"
           @click="support.openSupport()"
         >
-          <Icon icon="ph:hand-heart" class="h-[18px] w-[18px]" />
+          <Icon icon="ph:hand-heart-fill" class="h-[18px] w-[18px]" />
         </button>
       </div>
     </div>

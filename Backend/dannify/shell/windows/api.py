@@ -67,6 +67,7 @@ class DesktopApi(WindowMixin, ActionsMixin):
         # Set while the user is genuinely quitting, so close-to-tray steps aside.
         self._quitting = False
         self._login = None  # the Google sign-in window, while it is open
+        self._checkout = None  # PayPal's checkout window, while it is open
         self._launch_geometry: tuple[int, int, int, int] | None = None
         # Once the window starts closing, calling into it (Invoke/evaluate_js)
         # raises from a destroyed handle: stop talking to it.

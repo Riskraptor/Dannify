@@ -19,6 +19,10 @@ const NOT_NOW_DAYS = 60
 const AFTER_GIVING_DAYS = 180
 
 const config = reactive({ configured: false, link: '', message: '', mpesa: {}, paypal_link: '' })
+/** PayPal's checkout is open in its window (the button says so). */
+export const checkingOut = ref(false)
+/** When someone last gave through the app: the page says thank you. */
+export const thankedAt = ref(0)
 let loading = null
 
 function read(key, fallback = 0) {
@@ -87,10 +91,45 @@ export function giveByKofi() {
   desktop.openExternal(config.link)
   snooze(AFTER_GIVING_DAYS)
 }
-export function giveByPaypal() {
+/**
+ * PayPal, in a window of Dannify's own (Windows), so giving does not mean
+ * leaving the app; in the browser where there is no such window. A payment
+ * that went through is thanked for, there and then.
+ */
+export async function giveByPaypal({ inBrowser = false } = {}) {
   if (!config.paypal_link) return
-  desktop.openExternal(config.paypal_link)
+  if (inBrowser || !desktop.isDesktop) {
+    desktop.openExternal(config.paypal_link)
+    snooze(AFTER_GIVING_DAYS)
+    return
+  }
+  if (checkingOut.value) {
+    desktop.checkout(config.paypal_link) // brings the open window forward
+    return
+  }
+  checkingOut.value = true
+  let result
+  try {
+    const { t } = await import('/src/i18n')
+    result = await desktop.checkout(config.paypal_link, t('support.checkoutTitle'))
+  } finally {
+    checkingOut.value = false
+  }
+  if (!result || !result.opened) {
+    // No window of our own here (another system, or WebView2 failed): the browser.
+    desktop.openExternal(config.paypal_link)
+    snooze(AFTER_GIVING_DAYS)
+    return
+  }
+  if (result.paid) await thank()
+}
+
+/** Thank you, said where it shows: on the page, and in a note. */
+export async function thank() {
+  thankedAt.value = Date.now()
   snooze(AFTER_GIVING_DAYS)
+  const [{ toast }, { t }] = await Promise.all([import('/src/model/toast'), import('/src/i18n')])
+  toast(t('support.thanksToast'), { icon: 'ph:heart-fill', tone: 'success', timeout: 9000 })
 }
 export function gaveByMpesa() {
   snooze(AFTER_GIVING_DAYS)
