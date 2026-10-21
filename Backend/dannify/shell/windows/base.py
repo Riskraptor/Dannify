@@ -416,6 +416,14 @@ def _lock_view_settings(core) -> None:  # noqa: ANN001
         ('IsGeneralAutofillEnabled', False),
         # Swiping back and forward through pages.
         ('IsSwipeNavigationEnabled', False),
+        # The browser's own keys: Ctrl+P printing the page, F7 offering
+        # caret browsing, Ctrl+U, Ctrl+J, F3. The app's own shortcuts, and
+        # copying and pasting, are untouched: they are the page's.
+        ('AreBrowserAcceleratorKeysEnabled', False),
+        # The address of a link, shown in a bubble in the corner on hover.
+        ('IsStatusBarEnabled', False),
+        # The inspector, in a copy someone installed.
+        *((('AreDevToolsEnabled', False),) if _FROZEN else ()),
     ):
         try:
             setattr(core.Settings, name, value)
