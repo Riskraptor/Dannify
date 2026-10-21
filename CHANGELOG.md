@@ -6,16 +6,29 @@ page](https://github.com/Riskraptor/Dannify/releases).
 
 ## 4.14.0
 
-Your Soundtrack, a kinder update, a Settings worth opening, and an app that
-feels like one.
+Your Soundtrack for today, this week, this month and the year, a kinder
+update, a Settings worth opening, and an app that feels like one.
 
+- **Your music lately.** Home opens with four tiles: today, this week, this
+  month and this year, each in its own colour, with the minutes you
+  listened, the shape of your listening and its best moments taking turns.
+  Your biggest music day ever, days in a row, every day of the week so far,
+  an artist climbing to number one or coming straight into your top five, a
+  song back after months away, the artists new to you, a song on repeat:
+  Dannify finds what is worth saying and says the best first. Each tile
+  opens its own story, and the stories have tabs to move between them.
+- **Hello, by name.** Signed in to YouTube, Home and Your Soundtrack greet
+  you by your first name, the letters rising into place.
 - **Your year in music is now Your Soundtrack, and everything in it plays.**
   Up to fourteen pages, each in its own colour: the minutes you listened
   against last year; your top artist and their share of your listening;
   your song of the year, when you first played it and the most times in a
   day; your top albums; the year month by month; the hours and weekdays you
   listen most; your longest streak and the song you could not stop
-  repeating; what you discovered; and the kind of listener you are. Every
+  repeating; what you discovered; and the kind of listener you are. Today,
+  this week and this month have stories of their own: each compared with the
+  one before, told part by part (a day's morning to night, a week day by
+  day, a month week by week), with a page of its moments. Every
   song, artist and album in it plays or opens at a click, and with the
   music following the story, each page plays its own song. Click the bars
   at the top to jump to any page, swipe, scroll or use Home and End, and
@@ -39,18 +52,23 @@ feels like one.
   days have pages of their own. Panes slide in, the arrow keys move
   between them, and a search marks the words it found. Language is in
   General.
-- **Support Dannify.** A page of its own: Ko-fi, M-Pesa and PayPal, and the
-  ways to help that cost nothing, like telling a friend.
+- **Support Dannify.** A page of its own, with PayPal first: give in
+  PayPal's own secure checkout without leaving Dannify, and be thanked when
+  it goes through. In Kenya, M-PESA Till 8496746 is right there too, and
+  Ko-fi works everywhere. Plus the ways to help that cost nothing, like
+  telling a friend.
 - **Tell the developer.** Report a problem or share an idea from inside the
   app, and it reaches the developer's inbox, with the app's details if you
   want them to go. Sending is a slide of a music note, so nothing goes by
-  accident.
+  accident, and a quick check (hCaptcha, invisible for most people) keeps
+  robots out.
 - **Special days, brought to life.** Every day's weather has depth now:
   far pieces small and faint, near ones large and soft, parting as you move
   the mouse, with gusts of wind for what falls. Lamps, lanterns and stars
   glow, a star shoots across on Eid, and New Year's fireworks climb on a
   trail and burst in rings of sparks. Settings shows the next day as a card
-  in its own colours, and setting up Dannify asks where you are.
+  in its own colours, its region right at the top, and setting up Dannify
+  asks where you are.
 - **An app, not a page.** The browser's own keys and habits are gone:
   Ctrl+P printing, the caret browsing prompt, the link address in the
   corner, middle-click autoscroll, links opening second windows, pictures

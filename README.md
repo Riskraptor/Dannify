@@ -18,7 +18,7 @@ outside the app can reach.
 
 | | |
 | --- | --- |
-| ![Made for you: mixes on Home that keep up with your listening](docs/screenshots/made-for-you.png) | ![Your Soundtrack: your year in music, told as a story you can play](docs/screenshots/year-in-music.png) |
+| ![Your music lately and Made for you: today, this week, this month and this year at a glance, and mixes that keep up with your listening](docs/screenshots/made-for-you.png) | ![Your Soundtrack: your year in music, told as a story you can play](docs/screenshots/year-in-music.png) |
 | ![Now Playing, with synced lyrics](docs/screenshots/now-playing.png) | ![Your stats: time listened, streaks and a chart of every day](docs/screenshots/stats.png) |
 | ![Settings: each pane in its own colour, with your account and version down the side](docs/screenshots/settings.png) | ![The welcome after a big update](docs/screenshots/welcome.png) |
 | ![A special day: Diwali, with its lamps and its music](docs/screenshots/special-day.png) | ![Lyrics timing: click the line you hear and the words line up](docs/screenshots/lyrics-timing.png) |
@@ -58,7 +58,11 @@ year month by month, the hours and weekdays you listen most, your longest
 streak, the song you could not stop repeating, what you discovered and the
 kind of listener you are. Everything in it plays at a click, the music can
 follow the story page by page, and it ends on a card you can play or save
-as a playlist.
+as a playlist. Today, this week and this month get stories of their own,
+and Home's Your music lately shows all four at a glance: the minutes, the
+shape of your listening, and the moments worth telling, like your biggest
+music day ever, days in a row, an artist climbing to number one or a song
+back after months away. Signed in to YouTube, it all says hello by name.
 
 Lyrics scroll in a side panel and follow the song, lighting up word by word
 as each line is sung. If they run early or late, click the line you are
@@ -153,7 +157,8 @@ use it:
 - **Lyrics missing or out of time?** Add or improve them right in the lyrics
   panel; everyone who plays the song gets them.
 - **Enjoying it?** Star the repository, tell a friend, or support Dannify
-  from Settings, Support Dannify (Ko-fi, M-Pesa or PayPal), or
+  from Settings, Support Dannify (PayPal right inside the app, M-Pesa or
+  Ko-fi), or
   [buy me a coffee](https://ko-fi.com/dkavangi).
 
 How to do each is in [CONTRIBUTING.md](CONTRIBUTING.md).
