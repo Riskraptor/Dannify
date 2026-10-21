@@ -121,6 +121,22 @@ async def listens_recap_endpoint(year: int = Query(0, ge=0, le=9999)) -> dict[st
     return await asyncio.to_thread(listens_mod.recap, year or datetime.date.today().year)
 
 
+@router.get('/api/listens/story')
+async def listens_story_endpoint(
+    period: str = Query('year', pattern='^(day|week|month|year)$'), year: int = Query(0, ge=0, le=9999)
+) -> dict[str, Any]:
+    """Today, this week, this month or a year, told as a story (see listens.story)."""
+
+    return await asyncio.to_thread(listens_mod.story, period, year or None)
+
+
+@router.get('/api/listens/glance')
+async def listens_glance_endpoint() -> dict[str, Any]:
+    """Today, this week, this month and this year at a glance, for Home."""
+
+    return await asyncio.to_thread(listens_mod.glance)
+
+
 @router.get('/api/listens/history')
 async def listens_history_endpoint(
     limit: int = Query(100, ge=1, le=500), before: int = Query(0, ge=0)

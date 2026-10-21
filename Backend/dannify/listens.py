@@ -630,65 +630,147 @@ def mixes(now: Optional[float] = None) -> dict[str, Any]:
 
 
 def recap(year: int, now: Optional[float] = None) -> dict[str, Any]:
-    """A year of listening, for "Your year in music"."""
+    """A year of listening: the year's story (see story)."""
 
+    return story('year', year, now)
+
+
+# ---------------------------------------------------------------------------
+# Your Soundtrack: a story of any stretch of time
+# ---------------------------------------------------------------------------
+
+PERIODS = ('day', 'week', 'month', 'year')
+# Lifetime marks worth a word when a stretch crosses them.
+_HOUR_MARKS = (10, 25, 50, 100, 250, 500, 1000, 2500, 5000)
+_PLAY_MARKS = (100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000)
+# How many different songs make a stretch "a little of everything".
+_VARIETY = {'day': 12, 'week': 30, 'month': 70, 'year': 250}
+
+
+def _month_start(day: date) -> date:
+    return day.replace(day=1)
+
+
+def _next_month(day: date) -> date:
+    return date(day.year + 1, 1, 1) if day.month == 12 else date(day.year, day.month + 1, 1)
+
+
+def _bounds(period: str, today: date, year: Optional[int] = None) -> tuple[date, date, date]:
+    """Where a stretch starts and ends (end not included), and where the one
+    before it starts: today; this week, Monday first; this month; a year."""
+
+    if period == 'day':
+        return today, today + timedelta(days=1), today - timedelta(days=1)
+    if period == 'week':
+        start = today - timedelta(days=today.weekday())
+        return start, start + timedelta(days=7), start - timedelta(days=7)
+    if period == 'month':
+        start = _month_start(today)
+        return start, _next_month(start), _month_start(start - timedelta(days=1))
+    y = year or today.year
+    return date(y, 1, 1), date(y + 1, 1, 1), date(y - 1, 1, 1)
+
+
+def _part_of(period: str, day: date, at: int, start: date) -> int:
+    """Which part of the stretch a listen fell in, for "each part's own
+    favourite": a year's months, a month's weeks, a week's days, a day's
+    night, morning, afternoon and evening."""
+
+    if period == 'year':
+        return day.month - 1
+    if period == 'month':
+        return min(4, (day.day - 1) // 7)
+    if period == 'week':
+        return (day - start).days
+    return time.localtime(at).tm_hour // 6
+
+
+_PARTS = {'year': 12, 'month': 5, 'week': 7, 'day': 4}
+
+
+def _chart_of(period: str, day: date, at: int, start: date) -> int:
+    """The finer bars: a year by month, a month by day, a week by day, a day by hour."""
+
+    if period == 'year':
+        return day.month - 1
+    if period == 'month':
+        return day.day - 1
+    if period == 'week':
+        return (day - start).days
+    return time.localtime(at).tm_hour
+
+
+def _chart_size(period: str, start: date, end: date) -> int:
+    return {'year': 12, 'week': 7, 'day': 24}.get(period, (end - start).days)
+
+
+def story(period: str = 'year', year: Optional[int] = None, now: Optional[float] = None) -> dict[str, Any]:
+    """A stretch of listening told as a story: today, this week, this month,
+    or a year. What was played most, when, how it compares with the stretch
+    before, and the moments worth saying (``insights``), the strongest first."""
+
+    if period not in PERIODS:
+        period = 'year'
     now = time.time() if now is None else now
     with _lock:
         _load()
         plays = list(_plays)
         songs = dict(_songs)
+    return _story(plays, songs, period, year, now)
 
+
+def _story(plays, songs, period: str, year: Optional[int], now: float) -> dict[str, Any]:
+    today = date.fromtimestamp(now)
+    start_day, end_day, prev_day = _bounds(period, today, year)
+    start, end, prev_start = _day_start(start_day), _day_start(end_day), _day_start(prev_day)
     years = sorted({date.fromtimestamp(p[0]).year for p in plays}, reverse=True)
-    start = _day_start(date(year, 1, 1))
-    end = _day_start(date(year + 1, 1, 1))
     lo = bisect.bisect_left(plays, (start, -1, ''))
     hi = bisect.bisect_left(plays, (end, -1, ''))
+    before_lo = bisect.bisect_left(plays, (prev_start, -1, ''))
     chosen = plays[lo:hi]
+    previous = plays[before_lo:lo]
 
     by_song, by_artist, by_album, by_hour, total = _tally(chosen, songs)
-    # Twenty-five songs: five are shown, all of them make "Your top songs of
-    # the year" when it is saved as a playlist.
+    # Twenty-five songs: five are shown, all of them make the playlist when
+    # the story is saved as one.
     top_songs, top_artists, top_albums = _ranked(songs, by_song, by_artist, by_album, 25)
     top_artists, top_albums = top_artists[:5], top_albums[:5]
 
     by_day: dict[date, int] = {}
-    months = [0] * 12
     weekdays = [0] * 7  # Monday first
-    # Each month's own favourite artist, and the most a song was played in a day.
-    month_artists: list[dict[str, list]] = [{} for _ in range(12)]
+    chart = [0] * _chart_size(period, start_day, end_day)
+    parts: list[dict[str, list]] = [{} for _ in range(_PARTS[period])]
     song_days: dict[tuple[str, date], int] = {}
     first_heard: dict[str, int] = {}
     for at, seconds, key in chosen:
         day = date.fromtimestamp(at)
         by_day[day] = by_day.get(day, 0) + seconds
-        months[day.month - 1] += seconds
         weekdays[day.weekday()] += seconds
+        chart[_chart_of(period, day, at, start_day)] += seconds
         song_days[(key, day)] = song_days.get((key, day), 0) + 1
         first_heard.setdefault(key, at)
+        part = parts[_part_of(period, day, at, start_day)]
         for name in songs[key].get('artists') or []:
             folded = name.casefold().strip()
             if folded:
-                who = month_artists[day.month - 1].setdefault(folded, [name, 0, {}])
+                who = part.setdefault(folded, [name, 0, {}])
                 who[1] += seconds
                 who[2][key] = who[2].get(key, 0) + 1
     busiest = max(by_day.items(), key=lambda kv: (kv[1], kv[0])) if by_day else None
     _current, longest = _streaks(set(by_day), date.fromtimestamp(min(now, end - 1)))
 
-    # Artists first heard this year: not in anything played before it.
-    before: set[str] = set()
-    for _at, _seconds, key in plays[:lo]:
-        for name in songs[key].get('artists') or []:
-            before.add(name.casefold().strip())
-    new_artists = sum(1 for folded in by_artist if folded not in before)
+    # Artists first heard in this stretch: not in anything played before it.
+    history = _history(plays[:lo], songs)
+    new_artist_keys = [folded for folded in by_artist if folded not in history['artists']]
 
-    def month_top(tally: dict[str, list]) -> Optional[dict[str, Any]]:
+    def part_top(tally: dict[str, list]) -> Optional[dict[str, Any]]:
         if not tally:
             return None
         name, seconds, keys = max(tally.values(), key=lambda w: (w[1], w[0]))
         favourite = max(keys, key=lambda k: keys[k])
         return {'name': name, 'seconds': seconds, 'cover': _cover(songs[favourite])}
 
-    # The song played most in a single day: the year's "on repeat" moment.
+    # The song played most in a single day: the stretch's "on repeat" moment.
     repeat = None
     if song_days:
         (key, day), n = max(song_days.items(), key=lambda kv: (kv[1], kv[0][1]))
@@ -702,20 +784,21 @@ def recap(year: int, now: Optional[float] = None) -> dict[str, Any]:
             'most_in_a_day': max((n for (k, _d), n in song_days.items() if k == key), default=0),
         }
 
-    # The year before, to say how this one compares.
-    before_lo = bisect.bisect_left(plays, (_day_start(date(year - 1, 1, 1)), -1, ''))
-    last_year = plays[before_lo:lo]
-
-    return {
-        'year': year,
+    before = {'seconds': sum(sec for _at, sec, _k in previous), 'plays': len(previous)}
+    out = {
+        'period': period,
+        'start': start_day.isoformat(),
+        'end': end_day.isoformat(),
+        'year': start_day.year,
         'years': years,
         'seconds': total,
         'hours': by_hour,
         'weekdays': weekdays,
-        'month_artists': [month_top(m) for m in month_artists],
+        'chart': chart,
+        'parts': [part_top(p) for p in parts],
         'repeat': repeat,
         'top_song_more': top_song_more,
-        'last_year': {'seconds': sum(sec for _at, sec, _k in last_year), 'plays': len(last_year)},
+        'before': before,
         'plays': len(chosen),
         'songs': len(by_song),
         'artists': len(by_artist),
@@ -724,10 +807,192 @@ def recap(year: int, now: Optional[float] = None) -> dict[str, Any]:
         'longest_streak': longest,
         'busiest_day': {'date': busiest[0].isoformat(), 'seconds': busiest[1]} if busiest else None,
         'peak_hour': max(range(24), key=lambda h: by_hour[h]) if total else None,
-        'months': months,
-        'new_artists': new_artists,
+        'new_artists': len(new_artist_keys),
         'top_songs': top_songs,
         'top_artists': top_artists,
         'top_albums': top_albums,
         'first': _entry(songs, chosen[0][2], at=chosen[0][0]) if chosen else None,
     }
+    out['insights'] = _insights(
+        plays, songs, period, out, chosen, previous, history, by_artist, by_day, new_artist_keys, start_day, end_day, now
+    )
+    if period == 'year':
+        # The names the year's story has always used.
+        out['months'] = chart
+        out['month_artists'] = out['parts']
+        out['last_year'] = before
+    return out
+
+
+def _history(before: list[tuple[int, int, str]], songs: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Everything played before a stretch, in one pass: the artists already
+    known, each day's minutes, every song's last listen and count."""
+
+    artists: set[str] = set()
+    days: dict[date, int] = {}
+    last: dict[str, int] = {}
+    count: dict[str, int] = {}
+    seconds = 0
+    for at, sec, key in before:
+        if key not in count:
+            for name in songs[key].get('artists') or []:
+                artists.add(name.casefold().strip())
+        day = date.fromtimestamp(at)
+        days[day] = days.get(day, 0) + sec
+        last[key] = at
+        count[key] = count.get(key, 0) + 1
+        seconds += sec
+    return {'artists': artists, 'days': days, 'last': last, 'count': count, 'seconds': seconds, 'plays': len(before)}
+
+
+def _insights(plays, songs, period, d, chosen, previous, history, by_artist, by_day, new_artist_keys, start_day, end_day, now):
+    """The moments of a stretch worth saying, each with how much it is worth
+    saying, the strongest first: records, streaks, climbs, comebacks, firsts,
+    milestones. Words are the window's; this says what and how much."""
+
+    found: list[dict[str, Any]] = []
+    total = d['seconds']
+    if not chosen:
+        return found
+    today = date.fromtimestamp(now)
+    ongoing = start_day <= today < end_day
+
+    # More than the stretch before: only ever said when it is more.
+    before = d['before']['seconds']
+    if before >= 600 and total > before * 1.1:
+        percent = round((total - before) / before * 100)
+        found.append({'kind': 'more', 'percent': percent, 'score': 55 + min(30, percent // 5)})
+
+    # A record: the biggest day ever, by a margin, with some history behind it.
+    best_before = history['days']
+    if d['busiest_day'] and len(best_before) >= 7:
+        record = max(best_before.values())
+        if d['busiest_day']['seconds'] > record * 1.05:
+            found.append({
+                'kind': 'record_day',
+                'date': d['busiest_day']['date'],
+                'minutes': round(d['busiest_day']['seconds'] / 60),
+                'score': 92,
+            })
+
+    # A run of days, still going.
+    if ongoing:
+        all_days = {date.fromtimestamp(at) for at, _s, _k in plays}
+        current, _longest = _streaks(all_days, today)
+        if current >= 3:
+            found.append({'kind': 'streak', 'days': current, 'score': 60 + min(30, current * 3)})
+
+    # Every single day of it so far.
+    elapsed = (min(today, end_day - timedelta(days=1)) - start_day).days + 1
+    if period in ('week', 'month') and elapsed >= 4 and len(by_day) >= elapsed:
+        found.append({'kind': 'every_day', 'days': elapsed, 'score': 74})
+
+    # Lifetime marks crossed in this stretch: news while it is news, so today
+    # and this week only. A month or a year has its own things to say.
+    lifetime_before, lo = history['seconds'], history['plays']
+    if period in ('day', 'week'):
+        hours = [m for m in _HOUR_MARKS if lifetime_before < m * 3600 <= lifetime_before + total]
+        if hours:
+            found.append({'kind': 'milestone_hours', 'hours': hours[-1], 'score': 88})
+        marks = [m for m in _PLAY_MARKS if lo < m <= lo + len(chosen)]
+        if marks:
+            found.append({'kind': 'milestone_plays', 'plays': marks[-1], 'score': 86})
+
+    # An artist climbing: from far down, or from nowhere, into the top five.
+    if previous and d['top_artists']:
+        prev_artists = sorted(_tally(previous, songs)[1].values(), key=lambda w: (-w['seconds'], w['name']))
+        prev_rank = {w['name'].casefold(): i for i, w in enumerate(prev_artists)}
+        for i, a in enumerate(d['top_artists'][:5]):
+            was = prev_rank.get(a['name'].casefold())
+            if was is None and len(prev_artists) >= 3:
+                found.append({'kind': 'new_in_top', 'artist': a['name'], 'id': a['id'], 'cover': a['cover'],
+                              'rank': i + 1, 'score': 78 - i * 3})
+                break
+            if was is not None and was - i >= 3:
+                found.append({'kind': 'climber', 'artist': a['name'], 'id': a['id'], 'cover': a['cover'],
+                              'rank': i + 1, 'from': was + 1, 'score': 80 - i * 2})
+                break
+
+    # A comeback: a song back after a month or more away.
+    last_before, count_before = history['last'], history['count']
+    in_stretch: dict[str, list[int]] = {}
+    for at, _sec, key in chosen:
+        in_stretch.setdefault(key, []).append(at)
+    back = [
+        (len(ats), key, (min(ats) - last_before[key]) // 86400)
+        for key, ats in in_stretch.items()
+        if key in last_before and count_before.get(key, 0) >= 2 and min(ats) - last_before[key] >= 30 * 86400
+    ]
+    if back:
+        n, key, days = max(back)
+        found.append({'kind': 'comeback', 'song': _entry(songs, key, plays=n), 'days': int(days), 'score': 70})
+
+    # New to you.
+    if new_artist_keys and lo:
+        best = max(new_artist_keys, key=lambda k: by_artist[k]['seconds'])
+        found.append({'kind': 'new_artists', 'count': len(new_artist_keys), 'artist': by_artist[best]['name'],
+                      'score': 58 + min(20, len(new_artist_keys) * 2)})
+
+    # The song of the stretch.
+    if d['top_songs'] and d['top_songs'][0].get('plays', 0) >= 2:
+        found.append({'kind': 'top_song', 'song': d['top_songs'][0], 'plays': d['top_songs'][0]['plays'], 'score': 62})
+
+    # On repeat in a single day.
+    if d['repeat'] and d['repeat']['plays'] >= 3:
+        found.append({'kind': 'repeat', 'song': d['repeat'], 'plays': d['repeat']['plays'], 'score': 66})
+
+    # Faithful to one artist.
+    if d['top_artists'] and d['artists'] >= 2:
+        share = d['top_artists'][0]['seconds'] / total
+        if share >= 0.3:
+            a = d['top_artists'][0]
+            found.append({'kind': 'loyal', 'artist': a['name'], 'id': a['id'], 'cover': a['cover'],
+                          'percent': round(share * 100), 'score': 50 + round(share * 20)})
+
+    # When it is played.
+    night = sum(d['hours'][h] for h in (22, 23, 0, 1, 2, 3, 4)) / total
+    morning = sum(d['hours'][h] for h in (5, 6, 7, 8, 9)) / total
+    if night >= 0.4:
+        found.append({'kind': 'night', 'percent': round(night * 100), 'score': 46})
+    elif morning >= 0.35:
+        found.append({'kind': 'morning', 'percent': round(morning * 100), 'score': 46})
+
+    # A little of everything.
+    if d['songs'] >= _VARIETY[period]:
+        found.append({'kind': 'variety', 'songs': d['songs'], 'artists': d['artists'], 'score': 44})
+
+    # Always something to say, however quiet the stretch.
+    found.append({'kind': 'minutes', 'minutes': round(total / 60), 'score': 10})
+    found.sort(key=lambda f: -f['score'])
+    return found[:8]
+
+
+def glance(now: Optional[float] = None) -> dict[str, Any]:
+    """Today, this week, this month and this year at a glance: for Home's
+    "Your music lately", each with its minutes, its bars and its best moments."""
+
+    now = time.time() if now is None else now
+    with _lock:
+        _load()
+        plays = list(_plays)
+        songs = dict(_songs)
+    out: dict[str, Any] = {}
+    # A run of days, a record, a comeback or a lifetime mark is the same news
+    # whichever stretch tells it: the first to have it says it, the others
+    # leave it and say something else.
+    said: set[str] = set()
+    once = {'streak', 'record_day', 'every_day', 'comeback', 'repeat', 'milestone_hours', 'milestone_plays'}
+    for period in PERIODS:
+        d = _story(plays, songs, period, None, now)
+        moments = [f for f in d['insights'] if f['kind'] not in said]
+        said |= {f['kind'] for f in moments[:3] if f['kind'] in once}
+        out[period] = {
+            'seconds': d['seconds'],
+            'plays': d['plays'],
+            'chart': d['chart'],
+            'top_song': d['top_songs'][0] if d['top_songs'] else None,
+            'top_artist': d['top_artists'][0] if d['top_artists'] else None,
+            'insights': moments[:3],
+            'start': d['start'],
+        }
+    return out

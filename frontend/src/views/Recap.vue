@@ -1,5 +1,5 @@
 <template>
-  <div class="recap" tabindex="-1" :style="{ '--hue': `${hue}deg` }" @wheel.passive="onWheel">
+  <div class="recap" :class="`is-${period}`" tabindex="-1" :style="{ '--hue': `${hue}deg` }" @wheel.passive="onWheel">
     <div class="recap-bg" aria-hidden="true" />
     <div class="recap-glow" aria-hidden="true" />
     <!-- The year's own covers, drifting behind the story. -->
@@ -49,7 +49,7 @@
         <Icon :icon="paused ? 'ph:play-fill' : 'ph:pause-fill'" class="h-4 w-4" />
       </button>
       <select
-        v-if="data && data.years && data.years.length > 1"
+        v-if="period === 'year' && data && data.years && data.years.length > 1"
         class="recap-year"
         :value="year"
         :aria-label="t('recap.pickYear')"
@@ -58,6 +58,19 @@
         <option v-for="y in data.years" :key="y" :value="y">{{ y }}</option>
       </select>
     </header>
+    <!-- Today, this week, this month, the year: one story each. -->
+    <nav class="recap-periods" :aria-label="t('story.tabs')">
+      <button
+        v-for="p in PERIODS"
+        :key="p"
+        class="recap-period"
+        :class="{ 'is-on': p === period }"
+        :aria-pressed="p === period"
+        @click="pickPeriod(p)"
+      >
+        {{ t(`story.period.${p}`) }}
+      </button>
+    </nav>
 
     <div v-if="state === 'loading'" class="recap-center">
       <span class="spinner h-8 w-8" />
@@ -69,9 +82,9 @@
     </div>
 
     <div v-else-if="!data || !data.plays" class="recap-center">
-      <p class="recap-eyebrow">{{ year }}</p>
-      <h1 class="recap-big">{{ t('recap.emptyTitle') }}</h1>
-      <p class="recap-small">{{ t('recap.emptyText') }}</p>
+      <p class="recap-eyebrow">{{ title }}</p>
+      <h1 class="recap-big">{{ period === 'year' ? t('recap.emptyTitle') : t(`story.empty.${period}`) }}</h1>
+      <p class="recap-small">{{ period === 'year' ? t('recap.emptyText') : t(`story.startNow.${period}`) }}</p>
     </div>
 
     <template v-else>
@@ -86,9 +99,11 @@
         >
           <!-- The start -->
           <template v-if="slide.id === 'intro'">
+            <!-- Signed in: the story says hello by name. -->
+            <p v-if="firstName" class="recap-hey"><AnimatedName :text="t('story.hey', { name: firstName })" /></p>
             <p class="recap-eyebrow">{{ t('recap.eyebrow') }}</p>
-            <h1 class="recap-huge">{{ year }}</h1>
-            <p class="recap-lead">{{ t('recap.intro') }}</p>
+            <h1 class="recap-huge" :class="{ 'is-words': period !== 'year' }">{{ title }}</h1>
+            <p class="recap-lead">{{ period === 'year' ? t('recap.intro') : t(`story.intro.${period}`) }}</p>
             <div class="recap-ctas">
               <button class="recap-cta" @click.stop="go(1)">
                 {{ t('recap.start') }} <Icon icon="ph:arrow-right-bold" class="h-4 w-4" />
@@ -101,7 +116,7 @@
 
           <!-- How the year began -->
           <template v-else-if="slide.id === 'first'">
-            <p class="recap-eyebrow">{{ t('recap.firstEyebrow') }}</p>
+            <p class="recap-eyebrow">{{ period === 'year' ? t('recap.firstEyebrow') : t(`story.began.${period}`) }}</p>
             <button
               class="recap-cover is-tilted recap-play"
               :class="{ 'is-current': isPlayingRow(firstRow) }"
@@ -113,7 +128,9 @@
             </button>
             <h1 class="recap-big">{{ firstRow.title }}</h1>
             <p class="recap-lead">{{ firstRow.artistText }}</p>
-            <p class="recap-small">{{ t('recap.firstOn', { date: dateText(data.first.at) }) }}</p>
+            <p class="recap-small">
+              {{ period === 'day' ? t('story.firstAt', { time: timeText(data.first.at) }) : t('recap.firstOn', { date: dateText(data.first.at) }) }}
+            </p>
           </template>
 
           <!-- How much -->
@@ -126,6 +143,25 @@
               <Icon :icon="comparison.up ? 'ph:trend-up-bold' : 'ph:trend-down-bold'" class="h-4 w-4" />
               {{ comparison.text }}
             </p>
+          </template>
+
+          <!-- The moments worth saying, the strongest first (listens._insights) -->
+          <template v-else-if="slide.id === 'moments'">
+            <p class="recap-eyebrow">{{ t('story.moments') }}</p>
+            <ul class="recap-moments">
+              <li v-for="(m, i) in moments" :key="m.kind" class="recap-moment-item" :style="{ '--i': i }">
+                <component
+                  :is="momentGo(m) ? 'button' : 'div'"
+                  class="recap-moment"
+                  :class="{ 'is-playable': momentGo(m), 'is-current': momentPlaying(m), 'is-top': i === 0 }"
+                  @click="momentGo(m) && momentGo(m)()"
+                >
+                  <span class="recap-moment-icon"><Icon :icon="momentIcon(m)" class="h-5 w-5" /></span>
+                  <span class="recap-moment-text">{{ momentText(m, period, t, words) }}</span>
+                  <Icon v-if="momentGo(m)" :icon="momentPlaying(m) ? 'ph:pause-fill' : 'ph:play-fill'" class="recap-moment-go h-4 w-4" />
+                </component>
+              </li>
+            </ul>
           </template>
 
           <!-- The artist -->
@@ -177,7 +213,7 @@
 
           <!-- The song -->
           <template v-else-if="slide.id === 'song'">
-            <p class="recap-eyebrow">{{ t('recap.topSong') }}</p>
+            <p class="recap-eyebrow">{{ period === 'year' ? t('recap.topSong') : t(`story.topSong.${period}`) }}</p>
             <button
               class="recap-cover recap-play"
               :class="{ 'is-current': isPlayingRow(songRows[0]) }"
@@ -251,13 +287,14 @@
             </div>
           </template>
 
-          <!-- Month by month: each month's own favourite -->
+          <!-- Part by part (a year's months, a month's weeks, a week's days, a
+               day's mornings and evenings): each part's own favourite -->
           <template v-else-if="slide.id === 'months'">
-            <p class="recap-eyebrow">{{ t('recap.monthsTitle') }}</p>
-            <div class="recap-months-grid">
+            <p class="recap-eyebrow">{{ period === 'year' ? t('recap.monthsTitle') : t(`story.partsTitle.${period}`) }}</p>
+            <div class="recap-months-grid" :style="{ '--cols': data.parts.length <= 7 ? data.parts.length : 6 }">
               <component
                 :is="m ? 'button' : 'div'"
-                v-for="(m, i) in data.month_artists"
+                v-for="(m, i) in data.parts"
                 :key="i"
                 class="recap-month-tile"
                 :class="{ 'is-empty': !m, 'is-current': m && artistPlaying(m) }"
@@ -267,7 +304,7 @@
               >
                 <CoverImage v-if="m" :src="coverURL(m.cover)" radius="sm" :size="96" class="recap-month-art" />
                 <span v-else class="recap-month-art is-blank"><Icon icon="ph:music-note" class="h-5 w-5" /></span>
-                <span class="recap-month-name">{{ monthText(i, 'short') }}</span>
+                <span class="recap-month-name">{{ partText(i) }}</span>
                 <span class="recap-month-who">{{ m ? m.name : '—' }}</span>
               </component>
             </div>
@@ -295,7 +332,7 @@
                   {{ hourShort(h) }}
                 </text>
               </svg>
-              <div class="recap-week">
+              <div v-if="period !== 'day'" class="recap-week">
                 <div v-for="(secs, d) in weekBars" :key="d" class="recap-week-col" :class="{ 'is-peak': d === peakWeekday }">
                   <span class="recap-week-bar" :style="{ '--h': `${Math.max(6, secs * 100)}%`, '--i': d }" />
                   <span class="recap-week-day">{{ weekdayText(d) }}</span>
@@ -303,24 +340,24 @@
               </div>
             </div>
             <p class="recap-lead">{{ t('recap.clockPeak', { hour: peakText }) }}</p>
-            <p class="recap-small">{{ t('recap.dayPeak', { day: weekdayText(peakWeekday, 'long') }) }}</p>
+            <p v-if="period !== 'day'" class="recap-small">{{ t('recap.dayPeak', { day: weekdayText(peakWeekday, 'long') }) }}</p>
           </template>
 
           <!-- Habits -->
           <template v-else-if="slide.id === 'habits'">
             <p class="recap-eyebrow">{{ t('recap.habits') }}</p>
             <div class="recap-facts">
-              <div class="recap-fact" style="--i: 0">
+              <div v-if="period !== 'day'" class="recap-fact" style="--i: 0">
                 <Icon icon="ph:calendar-check" class="recap-fact-icon" />
                 <p class="recap-fact-value"><CountUp :value="data.days" :format="number" /></p>
                 <p class="recap-fact-label">{{ t('recap.daysListened') }}</p>
               </div>
-              <div class="recap-fact" style="--i: 1">
+              <div v-if="period !== 'day'" class="recap-fact" style="--i: 1">
                 <Icon icon="ph:flame" class="recap-fact-icon" />
                 <p class="recap-fact-value">{{ t('recap.daysValue', { count: data.longest_streak }) }}</p>
                 <p class="recap-fact-label">{{ t('recap.streak') }}</p>
               </div>
-              <div v-if="data.busiest_day" class="recap-fact" style="--i: 2">
+              <div v-if="data.busiest_day && period !== 'day'" class="recap-fact" style="--i: 2">
                 <Icon icon="ph:calendar-star" class="recap-fact-icon" />
                 <p class="recap-fact-value">{{ isoText(data.busiest_day.date) }}</p>
                 <p class="recap-fact-label">
@@ -349,13 +386,13 @@
             <p class="recap-eyebrow">{{ t('recap.discovery') }}</p>
             <h1 class="recap-huge"><CountUp :value="data.new_artists" :format="number" /></h1>
             <p class="recap-lead">{{ t('recap.newArtists', { count: data.new_artists }) }}</p>
-            <div class="recap-months" role="img" :aria-label="t('recap.monthsLabel')">
+            <div class="recap-months" role="img" :aria-label="period === 'year' ? t('recap.monthsLabel') : t('story.chart')">
               <span
-                v-for="(secs, m) in data.months"
+                v-for="(secs, m) in data.chart"
                 :key="m"
                 class="recap-month"
                 :style="{ '--h': `${Math.max(4, (secs / maxMonth) * 100)}%`, '--i': m }"
-                :title="monthText(m)"
+                :title="period === 'year' ? monthText(m) : undefined"
               />
             </div>
           </template>
@@ -373,7 +410,7 @@
             <article class="recap-card">
               <header class="recap-card-head">
                 <span class="recap-card-brand">Dannify</span>
-                <span class="recap-card-year">{{ t('recap.summaryTitle', { year }) }}</span>
+                <span class="recap-card-year">{{ summaryTitle }}</span>
               </header>
               <div class="recap-card-body">
                 <div v-if="topArtist" class="recap-card-artist">
@@ -453,20 +490,34 @@ import { hourText } from '/src/model/statsFormat'
 import { listensEpoch } from '/src/model/listens'
 import { syncSoon } from '/src/model/ytmSync'
 import { personaOf } from '/src/model/recapPersona'
+import { PERIODS, momentIcon, momentText } from '/src/model/moments'
+import { useAccount } from '/src/model/account'
 import { useI18n } from '/src/i18n'
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import CountUp from '/src/components/ui/CountUp.vue'
+import AnimatedName from '/src/components/ui/AnimatedName.vue'
 
-// "Your Soundtrack": the year's listening told as a story that plays by
-// itself (hold to pause, tap, swipe, scroll or click a bar to move), made from
-// the app's own history and what YouTube Music adds to it (Backend
-// listens.recap). Everything in it plays or opens what it shows.
+// "Your Soundtrack": today, this week, this month or a year of listening told
+// as a story that plays by itself (hold to pause, tap, swipe, scroll or click a
+// bar to move), made from the app's own history and what YouTube Music adds to
+// it (Backend listens.story). Everything in it plays or opens what it shows.
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
 const year = computed(() => Number(route.params.year) || new Date().getFullYear())
+// Which stretch: ?period=day|week|month, the year when none is named.
+const period = computed(() => (PERIODS.includes(route.query.period) ? route.query.period : 'year'))
+function pickPeriod(p) {
+  if (p === period.value) return
+  router.replace(p === 'year' ? { name: 'Recap' } : { name: 'Recap', query: { period: p } })
+}
+const account = useAccount()
+// The first name of whoever is signed in to YouTube, for saying hello.
+const firstName = computed(() =>
+  account.signedIn.value ? String(account.displayName.value || '').trim().split(/\s+/)[0].slice(0, 24) : ''
+)
 const data = shallowRef(null)
 const state = ref('loading')
 const at = ref(0)
@@ -477,7 +528,7 @@ async function load() {
   const mine = ++asked
   if (!data.value) state.value = 'loading'
   try {
-    const res = await API.getRecap(year.value)
+    const res = await API.getStory(period.value, period.value === 'year' ? year.value : 0)
     if (mine !== asked) return
     const first = !data.value
     data.value = res.data
@@ -490,7 +541,7 @@ async function load() {
     if (mine === asked && !data.value) state.value = 'error'
   }
 }
-watch(year, () => {
+watch([year, period], () => {
   data.value = null
   at.value = 0
   load()
@@ -513,21 +564,43 @@ const songRows = computed(() => ((data.value && data.value.top_songs) || []).map
 const firstRow = computed(() => (data.value && data.value.first ? entryRow(data.value.first) : null))
 const repeatRow = computed(() => (data.value && data.value.repeat ? entryRow(data.value.repeat) : null))
 const minutes = computed(() => Math.round(((data.value && data.value.seconds) || 0) / 60))
-const maxMonth = computed(() => Math.max(1, ...((data.value && data.value.months) || [0])))
+const maxMonth = computed(() => Math.max(1, ...((data.value && data.value.chart) || [0])))
 const artistShare = computed(() =>
   topArtist.value && data.value.seconds ? topArtist.value.seconds / data.value.seconds : 0
 )
 const comparison = computed(() => {
   const d = data.value
-  const before = d && d.last_year && d.last_year.seconds
+  const before = d && d.before && d.before.seconds
   if (!before || !d.seconds) return null
   const pct = Math.round(((d.seconds - before) / before) * 100)
   if (!pct) return null
-  return {
-    up: pct > 0,
-    text: t(pct > 0 ? 'recap.moreThanLast' : 'recap.lessThanLast', { percent: number(Math.abs(pct)), year: year.value - 1 }),
+  const percent = number(Math.abs(pct))
+  if (period.value === 'year') {
+    return { up: pct > 0, text: t(pct > 0 ? 'recap.moreThanLast' : 'recap.lessThanLast', { percent, year: year.value - 1 }) }
   }
+  return { up: pct > 0, text: t(`story.${pct > 0 ? 'more' : 'less'}.${period.value}`, { percent }) }
 })
+// What the story is of: the year, or today, this week, this month by name.
+const startDate = computed(() => {
+  const [y, m, d] = String((data.value && data.value.start) || '').split('-').map(Number)
+  return y ? new Date(y, m - 1, d) : new Date()
+})
+const title = computed(() => {
+  if (period.value === 'year') return String(year.value)
+  if (period.value === 'month') {
+    // "octobre", "octubre": a month starts its own page with a capital.
+    const name = startDate.value.toLocaleDateString(locale.value || 'en', { month: 'long' })
+    return name.charAt(0).toLocaleUpperCase(locale.value || 'en') + name.slice(1)
+  }
+  return t(`story.period.${period.value}`)
+})
+const summaryTitle = computed(() => {
+  if (period.value === 'year') return t('recap.summaryTitle', { year: year.value })
+  return t(`story.summary.${period.value}`, { month: title.value })
+})
+// The moments, but the minutes: the story has a page of its own for those.
+const moments = computed(() => ((data.value && data.value.insights) || []).filter((m) => m.kind !== 'minutes').slice(0, 5))
+const words = { number: (n) => number(n), dateText: (iso) => isoText(iso) }
 // A few covers of the year, behind it all.
 const mosaic = computed(() => {
   const d = data.value
@@ -561,23 +634,27 @@ const slides = computed(() => {
   const out = [{ id: 'intro', ms: Infinity }]
   if (d.first) out.push({ id: 'first' })
   out.push({ id: 'minutes' })
+  if (moments.value.length) out.push({ id: 'moments', ms: 4000 + moments.value.length * 1500 })
   if (topArtist.value) out.push({ id: 'artist' })
   if (d.top_artists.length > 1) out.push({ id: 'artists', ms: 8000 })
   if (d.top_songs.length) out.push({ id: 'song' })
   if (d.top_songs.length > 1) out.push({ id: 'songs', ms: 8000 })
   if (d.top_albums.length) out.push({ id: 'albums', ms: 8000 })
-  if ((d.month_artists || []).filter(Boolean).length > 1) out.push({ id: 'months', ms: 9000 })
+  if ((d.parts || []).filter(Boolean).length > 1) out.push({ id: 'months', ms: 9000 })
   if (d.peak_hour != null && d.hours) out.push({ id: 'clock', ms: 8000 })
-  out.push({ id: 'habits', ms: 8000 })
+  if (period.value !== 'day' || d.repeat) out.push({ id: 'habits', ms: 8000 })
   if (d.new_artists) out.push({ id: 'discovery' })
-  out.push({ id: 'persona' })
+  // Who someone is as a listener takes a year to say.
+  if (period.value === 'year') out.push({ id: 'persona' })
   out.push({ id: 'summary', ms: Infinity })
   return out
 })
 const slide = computed(() => slides.value[Math.min(at.value, slides.value.length - 1)] || { id: 'intro' })
-// Each slide in a colour of its own: the background turns as the story goes.
+// Each slide in a colour of its own: the background turns as the story goes,
+// from where each stretch's own colour starts (Home's tiles share them).
 const HUES = [0, -30, 25, 55, 90, 140, 175, 210, 245, 280, 315, 340, 20, 0]
-const hue = computed(() => HUES[at.value % HUES.length])
+const PERIOD_HUE = { day: 30, week: 190, month: -70, year: 0 }
+const hue = computed(() => HUES[at.value % HUES.length] + PERIOD_HUE[period.value])
 
 function go(step) {
   jump(at.value + step)
@@ -683,7 +760,7 @@ const PLACE_KEY = 'dn.recapPlace'
 let closing = false
 function remember() {
   try {
-    sessionStorage.setItem(PLACE_KEY, JSON.stringify({ year: year.value, at: at.value, when: Date.now() }))
+    sessionStorage.setItem(PLACE_KEY, JSON.stringify({ year: year.value, period: period.value, at: at.value, when: Date.now() }))
   } catch {
     // storage blocked: the story starts at its beginning
   }
@@ -691,7 +768,8 @@ function remember() {
 function recalled() {
   try {
     const place = JSON.parse(sessionStorage.getItem(PLACE_KEY) || 'null')
-    if (place && place.year === year.value && Date.now() - place.when < 30 * 60 * 1000) return place.at || 0
+    const same = place && place.year === year.value && (place.period || 'year') === period.value
+    if (same && Date.now() - place.when < 30 * 60 * 1000) return place.at || 0
   } catch {
     // nothing kept
   }
@@ -761,6 +839,17 @@ function openAlbum(a) {
   else router.push({ name: 'Search', params: { query: `${a.artist || ''} ${a.name}`.trim() } })
 }
 
+// A moment about a song plays it; one about an artist plays them.
+function momentGo(m) {
+  if (m.song) return () => playOne(entryRow(m.song))
+  if (m.artist) return () => playArtist({ name: m.artist, id: m.id || '' })
+  return null
+}
+function momentPlaying(m) {
+  if (m.song) return isPlayingRow(entryRow(m.song))
+  return m.artist ? artistPlaying({ name: m.artist }) : false
+}
+
 // The music following the story: the year's first song on its page, the top
 // artist's song on theirs, the song of the year on its own.
 const FOLLOW_KEY = 'dn.recapFollow'
@@ -782,6 +871,10 @@ const slideTrack = computed(() => {
       return songRows.value[0] || null
     case 'habits':
       return repeatRow.value
+    case 'moments': {
+      const m = moments.value.find((x) => x.song)
+      return m ? entryRow(m.song) : null
+    }
     default:
       return null
   }
@@ -818,7 +911,11 @@ function startWithMusic() {
 const playlists = usePlaylists()
 function saveTop() {
   if (!songRows.value.length) return
-  playlists.createPlaylist(songRows.value, { name: t('recap.playlistName', { year: year.value }) })
+  const name =
+    period.value === 'year'
+      ? t('recap.playlistName', { year: year.value })
+      : t(`story.playlist.${period.value}`, { date: isoText(data.value.start), month: title.value })
+  playlists.createPlaylist(songRows.value, { name })
 }
 
 // --- Words ---------------------------------------------------------------------------
@@ -835,6 +932,17 @@ function dateText(seconds) {
 }
 function monthText(m, month = 'long') {
   return new Date(year.value, m, 1).toLocaleDateString(locale.value || 'en', { month })
+}
+function timeText(seconds) {
+  return new Date(seconds * 1000).toLocaleTimeString(locale.value || 'en', { hour: 'numeric', minute: '2-digit' })
+}
+// The name of each part of the stretch.
+const DAY_PARTS = ['night', 'morning', 'afternoon', 'evening']
+function partText(i) {
+  if (period.value === 'year') return monthText(i, 'short')
+  if (period.value === 'month') return t('story.weekN', { n: i + 1 })
+  if (period.value === 'week') return weekdayText(i)
+  return t(`story.part.${DAY_PARTS[i]}`)
 }
 function weekdayText(d, weekday = 'short') {
   // 5 January 2026 was a Monday: Monday first, as the week is counted.
@@ -972,6 +1080,52 @@ function hourShort(h) {
 }
 .recap-btn {
   color: rgb(255 255 255 / 0.85);
+}
+/* Today, this week, this month, the year: glass pills under the bars. */
+.recap-periods {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-self: center;
+  gap: 2px;
+  margin-top: 12px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.22);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  backdrop-filter: blur(10px);
+}
+.recap-period {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgb(255 255 255 / 0.78);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+.recap-period:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 0.12);
+}
+.recap-period.is-on {
+  color: #2b0d4a;
+  background: #fff;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+}
+.recap-period:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+/* Hello, by name. */
+.recap-hey {
+  font-size: clamp(1.3rem, 3.4vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  --an-ink: #fff;
+  --an-shine: #ffe08a;
 }
 .recap-btn:hover:not(:disabled) {
   color: #fff;
@@ -1127,6 +1281,10 @@ function hourShort(h) {
   letter-spacing: -0.05em;
   font-variant-numeric: tabular-nums;
   animation: recap-pop 0.6s cubic-bezier(0.2, 0.9, 0.2, 1.2) both;
+}
+.recap-huge.is-words {
+  font-size: clamp(3rem, 10vw, 6.5rem);
+  letter-spacing: -0.04em;
 }
 .recap-big {
   font-size: clamp(2rem, 6vw, 3.6rem);
@@ -1383,7 +1541,7 @@ function hourShort(h) {
 /* Month by month */
 .recap-months-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--cols, 6), minmax(0, 1fr));
   gap: 12px;
   width: min(820px, 100%);
 }
@@ -1567,6 +1725,85 @@ button.recap-month-tile:hover,
   transform-origin: bottom;
   animation: recap-grow 0.6s ease both;
   animation-delay: calc(var(--i) * 40ms);
+}
+/* The moments */
+.recap-moments {
+  display: grid;
+  gap: 10px;
+  width: min(620px, 100%);
+}
+.recap-moment-item {
+  animation: recap-in 0.5s cubic-bezier(0.2, 0.9, 0.2, 1.1) both;
+  animation-delay: calc(var(--i) * 140ms + 120ms);
+}
+.recap-moment {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 18px 14px 14px;
+  border-radius: 18px;
+  background: rgb(0 0 0 / 0.2);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
+  text-align: left;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+.recap-moment.is-top {
+  background: linear-gradient(120deg, rgb(255 255 255 / 0.26), rgb(255 255 255 / 0.1));
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.35),
+    0 18px 40px rgb(0 0 0 / 0.25);
+}
+.recap-moment.is-playable {
+  cursor: pointer;
+}
+.recap-moment.is-playable:hover,
+.recap-moment.is-current {
+  background: rgb(255 255 255 / 0.2);
+  transform: translateY(-2px);
+}
+.recap-moment:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+.recap-moment-icon {
+  display: grid;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.18);
+}
+.recap-moment.is-top .recap-moment-icon {
+  background: #fff;
+  color: #2b0d4a;
+  animation: recap-beat 1.6s ease-in-out 0.8s 2;
+}
+.recap-moment-text {
+  flex: 1;
+  min-width: 0;
+  font-size: clamp(0.98rem, 2vw, 1.15rem);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.recap-moment-go {
+  flex: none;
+  opacity: 0.7;
+}
+@keyframes recap-beat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.14) rotate(-6deg);
+  }
+  60% {
+    transform: scale(0.96);
+  }
 }
 /* Personality */
 .recap-persona-mark {
@@ -1755,8 +1992,10 @@ button.recap-month-tile:hover,
   .recap-fact,
   .recap-month,
   .recap-persona-mark,
+  .recap-moment-item,
+  .recap-moment-icon,
   .recap-card {
-    animation: none;
+    animation: none !important;
   }
   .recap-bg {
     transition: none;

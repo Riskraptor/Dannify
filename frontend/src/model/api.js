@@ -294,6 +294,14 @@ function getMixes() {
 function getRecap(year = 0) {
   return API.get('/api/listens/recap', { params: { year } })
 }
+// Today, this week, this month or a year, told as a story (Backend listens.story).
+function getStory(period = 'year', year = 0) {
+  return API.get('/api/listens/story', { params: { period, year } })
+}
+// All four at a glance, for Home's "Your music lately".
+function getGlance() {
+  return API.get('/api/listens/glance')
+}
 function getListenHistory(limit = 100, before = 0) {
   return API.get('/api/listens/history', { params: { limit, before } })
 }
@@ -584,6 +592,8 @@ export default {
   getListenHistory,
   getMixes,
   getRecap,
+  getStory,
+  getGlance,
   forgetListen,
   clearListens,
   getArtistLinks,
