@@ -2,7 +2,7 @@ import { reactive, computed, ref } from 'vue'
 import API from '/src/model/api'
 import { desktop } from '/src/desktop/bridge'
 
-// Supporting the app: Ko-fi, M-Pesa and PayPal (see Backend/dannify/
+// Supporting the app: GitHub Sponsors, M-Pesa in Kenya (see Backend/dannify/
 // support.py), on a page of their own in Settings, reachable from a small
 // button in the side bar at any time, and mentioned once in a while on Home,
 // never as a pop-up. Only after someone has really used the app (a week, and
@@ -18,7 +18,7 @@ const AFTER_PLAYS = 40
 const NOT_NOW_DAYS = 60
 const AFTER_GIVING_DAYS = 180
 
-const config = reactive({ configured: false, link: '', message: '', mpesa: {}, paypal_link: '' })
+const config = reactive({ configured: false, link: '', message: '', mpesa: {}, paypal_link: '', sponsors_link: '' })
 /** PayPal's checkout is open in its window (the button says so). */
 export const checkingOut = ref(false)
 /** When someone last gave through the app: the page says thank you. */
@@ -93,8 +93,17 @@ export async function openSupport() {
 
 // Each way out to give, and the nudge on Home rests a good while after.
 export function giveByKofi() {
-  if (!config.configured || !config.link) return
+  if (!config.link) return
   desktop.openExternal(config.link)
+  snooze(AFTER_GIVING_DAYS)
+}
+/**
+ * GitHub Sponsors, in the browser: sponsoring needs a GitHub sign-in, and the
+ * browser is where people are already signed in.
+ */
+export function giveBySponsors() {
+  if (!config.sponsors_link) return
+  desktop.openExternal(config.sponsors_link)
   snooze(AFTER_GIVING_DAYS)
 }
 /**

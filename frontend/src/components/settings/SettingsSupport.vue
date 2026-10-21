@@ -18,7 +18,30 @@
       </div>
     </article>
 
-    <!-- PayPal, the way to give from anywhere: first, and inside the app. -->
+    <!-- GitHub Sponsors, the way to give from anywhere: monthly or one time,
+         any amount, by card; GitHub keeps no fee. -->
+    <article v-if="support.sponsors_link" class="sp-gh">
+      <div class="sp-gh-main">
+        <span class="sp-gh-mark"><Icon icon="ph:github-logo-fill" class="h-5 w-5" /> GitHub Sponsors</span>
+        <h3 class="sp-gh-title">{{ t('support.sponsorsTitle') }}</h3>
+        <p class="sp-gh-text">{{ t('support.sponsorsLead') }}</p>
+        <ul class="sp-gh-points">
+          <li><Icon icon="ph:check-bold" class="h-3.5 w-3.5" />{{ t('support.sponsorsMonthly') }}</li>
+          <li><Icon icon="ph:check-bold" class="h-3.5 w-3.5" />{{ t('support.sponsorsCard') }}</li>
+          <li><Icon icon="ph:check-bold" class="h-3.5 w-3.5" />{{ t('support.sponsorsFee') }}</li>
+        </ul>
+      </div>
+      <div class="sp-gh-side">
+        <button class="sp-gh-btn press" @click="giveBySponsors()">
+          <Icon icon="ph:heart-fill" class="sp-gh-heart h-5 w-5" />
+          {{ t('support.sponsorsGive') }}
+          <Icon icon="ph:arrow-up-right-bold" class="h-3.5 w-3.5 opacity-70" />
+        </button>
+        <p class="sp-gh-note"><Icon icon="ph:info" class="h-3.5 w-3.5" />{{ t('support.sponsorsNote') }}</p>
+      </div>
+    </article>
+
+    <!-- PayPal, when it is set: inside the app. -->
     <article v-if="support.paypal_link" class="sp-paypal">
       <div class="sp-paypal-main">
         <span class="sp-paypal-mark" aria-label="PayPal"><b>Pay</b><i>Pal</i></span>
@@ -46,8 +69,8 @@
     </article>
 
     <!-- The other ways, side by side: M-PESA in Kenya only (where it is the
-         way to pay), Ko-fi everywhere. PayPal above stays the headline. -->
-    <div class="sp-ways">
+         way to pay), and a page to give on when one is set. -->
+    <div v-if="(mpesa && inKenya) || support.link" class="sp-ways">
       <div v-if="mpesa && inKenya" class="sp-way is-mpesa">
         <span class="sp-way-mark is-mpesa-mark">M-PESA</span>
         <p class="sp-way-name">Lipa na M-PESA</p>
@@ -67,7 +90,7 @@
         </button>
       </div>
 
-      <div v-if="support.configured" class="sp-way is-kofi">
+      <div v-if="support.link" class="sp-way is-kofi">
         <span class="sp-way-mark"><Icon icon="ph:coffee-fill" class="h-6 w-6" /></span>
         <p class="sp-way-name">Ko-fi</p>
         <p class="sp-way-text">{{ t('support.kofiText') }}</p>
@@ -108,7 +131,7 @@
 <script setup>
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
-import { checkingOut, refreshSupport, thankedAt, useSupport } from '/src/model/support'
+import { checkingOut, giveBySponsors, refreshSupport, thankedAt, useSupport } from '/src/model/support'
 import { region } from '/src/model/occasions'
 import { useReporting } from '/src/model/problems'
 import { useUpdates } from '/src/model/updates'
@@ -195,7 +218,120 @@ async function copyLink() {
   box-shadow: 0 6px 16px rgb(225 29 72 / 0.35);
   animation: sp-beat 2.4s ease-in-out 3;
 }
-/* PayPal, first: its blues, its two-tone name, the amounts it offers. */
+/* GitHub Sponsors: GitHub's own dark, and its pink heart. */
+.sp-gh {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px 28px;
+  margin-bottom: 14px;
+  padding: 24px;
+  border-radius: 18px;
+  color: #f0f6fc;
+  background:
+    radial-gradient(70% 120% at 100% 0%, rgb(219 97 162 / 0.28), transparent 60%),
+    linear-gradient(135deg, #161b22, #0d1117);
+  box-shadow:
+    inset 0 0 0 1px rgb(240 246 252 / 0.1),
+    0 16px 36px rgb(0 0 0 / 0.35);
+}
+.sp-gh-main {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+.sp-gh-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 9px;
+  border-radius: 999px;
+  background: rgb(240 246 252 / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(240 246 252 / 0.15);
+  font-size: 13px;
+  font-weight: 800;
+}
+.sp-gh-title {
+  margin-top: 6px;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.sp-gh-text {
+  max-width: 56ch;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: rgb(240 246 252 / 0.82);
+}
+.sp-gh-points {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgb(240 246 252 / 0.9);
+}
+.sp-gh-points li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sp-gh-points :deep(svg) {
+  color: #3fb950;
+}
+.sp-gh-side {
+  display: grid;
+  align-content: center;
+  justify-items: stretch;
+  gap: 10px;
+  min-width: 220px;
+}
+.sp-gh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: #f0f6fc;
+  color: #0d1117;
+  font-size: 15px;
+  font-weight: 800;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.3);
+  transition:
+    transform 0.15s ease,
+    filter 0.15s ease;
+}
+.sp-gh-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+.sp-gh-heart {
+  color: #db61a2;
+}
+.sp-gh-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 260px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgb(240 246 252 / 0.7);
+}
+.sp-gh-note :deep(svg) {
+  flex: none;
+  margin-top: 1px;
+}
+@container (max-width: 760px) {
+  .sp-gh {
+    grid-template-columns: 1fr;
+  }
+  .sp-gh-side {
+    justify-items: start;
+    min-width: 0;
+  }
+}
+/* PayPal, when set: its blues, its two-tone name, the amounts it offers. */
 .sp-paypal {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

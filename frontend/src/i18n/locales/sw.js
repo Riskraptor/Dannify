@@ -936,6 +936,13 @@ export default {
     rolledBack: 'Dannify {version} haikuanza kwenye kompyuta hii, kwa hiyo umerudi kwenye {running}. Haitatolewa tena; toleo linalofuata litatolewa.',
   },
   support: {
+    sponsorsTitle: 'Dhamini Dannify kwenye GitHub',
+    sponsorsLead: 'GitHub Sponsors ndiyo njia watengenezaji programu wanavyosaidiwa duniani kote. Toa mara moja, au kidogo kila mwezi.',
+    sponsorsMonthly: 'Kila mwezi au mara moja, kiasi chochote',
+    sponsorsCard: 'Kwa kadi, kutoka popote duniani',
+    sponsorsFee: 'GitHub haichukui ada: yote yanamfikia mtengenezaji',
+    sponsorsGive: 'Dhamini kwenye GitHub',
+    sponsorsNote: 'Inafungua GitHub kwenye kivinjari chako. Akaunti ya bure ya GitHub inahitajika.',
     title: 'Msaada',
     give: 'Fungua Ko-fi',
     sidebar: 'Saidia Dannify',

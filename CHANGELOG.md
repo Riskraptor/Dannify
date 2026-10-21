@@ -4,6 +4,13 @@ What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
 page](https://github.com/Riskraptor/Dannify/releases).
 
+## 4.14.1
+
+- **Support Dannify on GitHub Sponsors.** Monthly or one time, any amount,
+  by card from anywhere in the world, and GitHub keeps no fee. It's the new
+  way to give, at the top of Settings, Support Dannify. M-Pesa stays for
+  Kenya; PayPal and Ko-fi are no longer offered.
+
 ## 4.14.0
 
 Your Soundtrack for every day, week, month and year, a kinder update, and a

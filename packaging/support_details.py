@@ -4,7 +4,8 @@
         What copies are told now (config/support-live.json), and whether its
         signature is good.
 
-    python packaging/support_details.py [--paypal LINK] [--no-paypal]
+    python packaging/support_details.py [--github LOGIN] [--no-github]
+                                        [--paypal LINK] [--no-paypal]
                                         [--till NUMBER | --paybill NUMBER --account ACCOUNT]
                                         [--mpesa-name NAME] [--no-mpesa]
                                         [--kofi LINK] [--message TEXT]
@@ -73,6 +74,7 @@ def describe(shown: dict, version: int) -> str:
     return '\n'.join(
         [
             f'  version  {version}',
+            f"  GitHub   {shown.get('sponsors_link') or '(not shown)'}",
             f"  PayPal   {shown.get('paypal_link') or '(not shown)'}",
             f'  M-PESA   {m}  (shown in Kenya only)',
             f"  Ko-fi    {shown.get('link') or '(not shown)'}",
@@ -83,6 +85,8 @@ def describe(shown: dict, version: int) -> str:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--github')
+    ap.add_argument('--no-github', action='store_true')
     ap.add_argument('--paypal')
     ap.add_argument('--no-paypal', action='store_true')
     ap.add_argument('--till')
@@ -98,7 +102,7 @@ def main(argv: list[str]) -> int:
     sig_path = FILE.with_name(FILE.name + signing.SIGNATURE_SUFFIX)
     changing = any(
         v not in (None, False)
-        for v in (args.paypal, args.no_paypal, args.till, args.paybill, args.mpesa_name, args.no_mpesa, args.kofi, args.message)
+        for v in (args.github, args.no_github, args.paypal, args.no_paypal, args.till, args.paybill, args.mpesa_name, args.no_mpesa, args.kofi, args.message)
     )
     if not changing:
         if not FILE.is_file():
@@ -114,6 +118,10 @@ def main(argv: list[str]) -> int:
 
     if args.till and args.paybill:
         raise SystemExit('a till or a paybill, not both')
+    if args.github is not None:
+        details['github'] = args.github.strip()
+    if args.no_github:
+        details['github'] = ''
     if args.paypal is not None:
         details['paypal'] = args.paypal.strip()
     if args.no_paypal:

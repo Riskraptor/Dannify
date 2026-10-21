@@ -131,7 +131,7 @@ def test_the_ko_fi_page_can_change_too_but_only_to_an_https_page(tmp_path):
     (tmp_path / support.LIVE_NAME).write_bytes(raw)
     (tmp_path / (support.LIVE_NAME + signing.SIGNATURE_SUFFIX)).write_text(sig)
     support.init(tmp_path)
-    assert support.config()['link'] == '' and not support.config()['configured']
+    assert support.config()['link'] == ''
 
 
 def test_a_way_to_give_can_be_taken_away(tmp_path):
@@ -141,4 +141,17 @@ def test_a_way_to_give_can_be_taken_away(tmp_path):
     support.init(tmp_path)
     out = support.config()
     assert out['mpesa'] == {} and out['paypal_link'] == ''
-    assert out['link'] == 'https://ko-fi.com/dkavangi'
+    assert out['sponsors_link'] == 'https://github.com/sponsors/Riskraptor'
+
+
+def test_sponsors_can_be_named_and_taken_away(tmp_path):
+    raw, sig = signed({'version': 8, 'github': 'another-dev'})
+    (tmp_path / support.LIVE_NAME).write_bytes(raw)
+    (tmp_path / (support.LIVE_NAME + signing.SIGNATURE_SUFFIX)).write_text(sig)
+    support.init(tmp_path)
+    assert support.config()['sponsors_link'] == 'https://github.com/sponsors/another-dev'
+    raw, sig = signed({'version': 9, 'github': ''})
+    (tmp_path / support.LIVE_NAME).write_bytes(raw)
+    (tmp_path / (support.LIVE_NAME + signing.SIGNATURE_SUFFIX)).write_text(sig)
+    support.init(tmp_path)
+    assert support.config()['sponsors_link'] == ''

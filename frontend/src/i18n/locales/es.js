@@ -936,6 +936,13 @@ export default {
     rolledBack: 'Dannify {version} no arrancó en este ordenador, así que vuelves a tener la {running}. No se volverá a ofrecer; la siguiente versión sí.',
   },
   support: {
+    sponsorsTitle: 'Patrocina Dannify en GitHub',
+    sponsorsLead: 'GitHub Sponsors es como se apoya a los desarrolladores en todo el mundo. Da una vez, o un poco cada mes.',
+    sponsorsMonthly: 'Cada mes o una sola vez, la cantidad que quieras',
+    sponsorsCard: 'Con tarjeta, desde cualquier lugar',
+    sponsorsFee: 'GitHub no se queda con nada: todo llega al desarrollador',
+    sponsorsGive: 'Patrocinar en GitHub',
+    sponsorsNote: 'Abre GitHub en tu navegador. Hace falta una cuenta gratuita de GitHub.',
     title: 'Apoyo',
     give: 'Abrir Ko-fi',
     sidebar: 'Apoyar a Dannify',

@@ -157,9 +157,9 @@ use it:
   right.
 - **Lyrics missing or out of time?** Add or improve them right in the lyrics
   panel; everyone who plays the song gets them.
-- **Enjoying it?** Star the repository, tell a friend, or support Dannify
-  from Settings, Support Dannify (PayPal right inside the app, Ko-fi, or
-  M-Pesa in Kenya), or [buy me a coffee](https://ko-fi.com/dkavangi).
+- **Enjoying it?** Star the repository, tell a friend, or
+  [sponsor Dannify on GitHub](https://github.com/sponsors/Riskraptor),
+  monthly or one time. It's also in the app: Settings, Support Dannify.
 
 How to do each is in [CONTRIBUTING.md](CONTRIBUTING.md).
 

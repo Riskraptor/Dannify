@@ -824,6 +824,13 @@ export default {
       'Dannify {version} would not start on this computer, so you are back on {running}. It will not be offered again; the next version will be.',
   },
   support: {
+    sponsorsTitle: 'Sponsor Dannify on GitHub',
+    sponsorsLead: 'GitHub Sponsors is how developers are supported around the world. Give once, or a little every month.',
+    sponsorsMonthly: 'Monthly or one time, any amount',
+    sponsorsCard: 'By card, from anywhere in the world',
+    sponsorsFee: 'GitHub keeps no fee: all of it reaches the developer',
+    sponsorsGive: 'Sponsor on GitHub',
+    sponsorsNote: 'Opens GitHub in your browser. A free GitHub account is needed.',
     title: 'Support',
     give: 'Open Ko-fi',
     sidebar: 'Support Dannify',
