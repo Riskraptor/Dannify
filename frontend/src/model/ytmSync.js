@@ -2,17 +2,20 @@ import { ref, watch } from 'vue'
 import API from './api'
 import { keeping, listensEpoch } from './listens'
 import { useAccount } from './account'
-import { currentLocale } from '/src/i18n'
 
 // YouTube Music's history in Dannify's (Backend/dannify/ytm_history.py): for
 // anyone signed in with Google, what they played there, on their phone or on
 // the web, counts in History, Your stats and Your year in music. A copy
-// installed today starts from all of it, and keeps up: a little after start,
-// every few hours, and as soon as someone signs in. Nothing for anyone whose
-// history is paused, or who turned this off in Settings, Accounts.
+// installed today starts from all of it, and keeps up by itself: a little
+// after start, every few hours, as soon as someone signs in, and whenever a
+// page that shows listening is opened (Your stats, History, Your year in
+// music). There is nothing to press. Nothing for anyone whose history is
+// paused, or who turned this off in Settings, Accounts.
 
 const KEY = 'dn.ytmSync'
 const EVERY = 3 * 3600 * 1000
+// A page opened again within this long does not ask again.
+const FRESH = 2 * 60 * 1000
 
 function read() {
   try {
@@ -47,6 +50,19 @@ export async function syncFromYouTube() {
   }
 }
 
+let lastAsked = 0
+
+/**
+ * A page that shows listening was opened: bring in what YouTube Music has
+ * that Dannify has not, unless that was done a moment ago. The page redraws
+ * by itself when anything new arrives (listensEpoch).
+ */
+export function syncSoon(now = Date.now()) {
+  if (now - lastAsked < FRESH) return null
+  lastAsked = now
+  return syncFromYouTube()
+}
+
 export async function loadYtmStatus() {
   try {
     const res = await API.youTubeHistoryStatus()
@@ -66,26 +82,13 @@ export function setYtmSync(on) {
   if (on) syncFromYouTube()
 }
 
-/** "a few minutes ago", in the language Dannify speaks. */
-export function syncedAgo(last, now = Date.now()) {
-  if (!last) return ''
-  const minutes = Math.round((last * 1000 - now) / 60000)
-  const rtf = new Intl.RelativeTimeFormat(currentLocale.value, { numeric: 'auto' })
-  // "now", not "this minute".
-  if (minutes > -1) return rtf.format(0, 'second')
-  if (minutes > -60) return rtf.format(minutes, 'minute')
-  const hours = Math.round(minutes / 60)
-  if (hours > -24) return rtf.format(hours, 'hour')
-  return rtf.format(Math.round(hours / 24), 'day')
-}
-
 let started = false
 /** Once, from App.vue. */
 export function startYtmSync() {
   if (started || typeof window === 'undefined') return
   started = true
   loadYtmStatus()
-  setTimeout(syncFromYouTube, 20000)
+  setTimeout(syncSoon, 20000)
   setInterval(syncFromYouTube, EVERY)
   watch(
     () => account.signedIn.value,

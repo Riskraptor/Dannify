@@ -79,12 +79,12 @@ describe('bringing in YouTube Music’s history', () => {
     expect(S.ytmSyncing.value).toBe(false)
   })
 
-  it('says when, in words', () => {
-    const now = 1792000000 * 1000
-    expect(S.syncedAgo(0, now)).toBe('')
-    expect(S.syncedAgo(1792000000, now)).toBe('now')
-    expect(S.syncedAgo(1792000000 - 5 * 60, now)).toBe('5 minutes ago')
-    expect(S.syncedAgo(1792000000 - 3 * 3600, now)).toBe('3 hours ago')
-    expect(S.syncedAgo(1792000000 - 2 * 86400, now)).toBe('2 days ago')
+  it('opening a page brings it in, but not again a moment later', async () => {
+    const now = Date.now()
+    await S.syncSoon(now)
+    await S.syncSoon(now + 30 * 1000)
+    expect(api.syncYouTubeHistory).toHaveBeenCalledTimes(1)
+    await S.syncSoon(now + 3 * 60 * 1000)
+    expect(api.syncYouTubeHistory).toHaveBeenCalledTimes(2)
   })
 })

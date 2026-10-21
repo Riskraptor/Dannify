@@ -88,6 +88,7 @@ import { useI18n } from '/src/i18n'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
 import TrackTable from '/src/components/ui/TrackTable.vue'
+import { syncSoon } from '/src/model/ytmSync'
 
 // Everything that was listened to, newest first, a day at a time. "Jump back
 // in" on Home is the last few of these; this is all of them.
@@ -145,12 +146,15 @@ async function loadMore() {
 }
 
 reload()
+// What was played on YouTube Music meanwhile comes in as the page opens.
+syncSoon()
 let active = true
 watch(listens.listensEpoch, () => {
   if (active) reload()
 })
 onActivated(() => {
   active = true
+  syncSoon()
   if (seenEpoch !== listens.listensEpoch.value) reload()
 })
 onDeactivated(() => {
