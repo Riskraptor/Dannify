@@ -137,17 +137,6 @@
         </button>
       </div>
     </div>
-    <div class="row">
-      <Icon icon="ph:translate" class="row-icon" />
-      <div class="row-text">
-        <p class="row-label">{{ t('settings.language') }}</p>
-        <p class="row-hint">{{ t('settings.languageHint') }}</p>
-      </div>
-      <select class="field-select w-48" :value="choice" @change="setLocale($event.target.value)">
-        <option value="auto">{{ t('settings.languageAuto', { language: systemName }) }}</option>
-        <option v-for="l in locales" :key="l.code" :value="l.code">{{ l.name }}</option>
-      </select>
-    </div>
   </section>
 </template>
 
@@ -162,10 +151,7 @@ import { restyle, resize } from '/src/model/smoothChange'
 import { useI18n } from '/src/i18n'
 import { tp } from '/src/i18n/platform'
 
-const { t, choice, setLocale, locales, systemLocale } = useI18n()
-// Each language under its own name, so whoever cannot read the one on screen
-// still finds theirs.
-const systemName = computed(() => locales.find((l) => l.code === systemLocale())?.name || 'English')
+const { t } = useI18n()
 const theme = useTheme()
 const fonts = useFonts()
 

@@ -10,8 +10,8 @@
       <input
         type="checkbox"
         class="switch"
-        :checked="tray.closeToTray"
-        @change="setTray({ closeToTray: $event.target.checked })"
+        :checked="desktop.state.closeToTray"
+        @change="setCloseToTray($event.target.checked)"
       />
     </label>
     <label v-if="desktop.state.autostart && desktop.state.autostart.available" class="row">
@@ -47,7 +47,6 @@
 </template>
 
 <script setup>
-import { reactive, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
@@ -55,17 +54,11 @@ import { tp } from '/src/i18n/platform'
 
 const { t } = useI18n()
 
-// Tray behaviour lives in the native shell's config.
-const tray = reactive({ closeToTray: false })
-
-onMounted(async () => {
-  if (!desktop.isDesktop) return
-  await desktop.whenReady()
-  tray.closeToTray = !!desktop.state.closeToTray
-})
-
-async function setTray(patch) {
-  Object.assign(tray, patch)
-  await desktop.setTray(patch)
+// Tray behaviour lives in the native shell's config, read from the shell's
+// own state: a copy taken when the section appeared was taken too early when
+// Settings was the first page open, and showed the switch off while it was on.
+async function setCloseToTray(on) {
+  desktop.state.closeToTray = on
+  await desktop.setTray({ closeToTray: on })
 }
 </script>

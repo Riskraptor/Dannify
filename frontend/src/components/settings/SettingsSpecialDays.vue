@@ -288,12 +288,13 @@ function listen(o) {
 }
 .sd-flag {
   display: flex;
-  width: 26px;
-  height: 18px;
+  align-self: flex-start;
+  width: 36px;
+  height: 26px;
   flex: none;
   overflow: hidden;
-  margin-top: 2px;
-  border-radius: 4px;
+  margin: 5px 0;
+  border-radius: 7px;
   box-shadow: 0 0 0 1px rgb(var(--c-tint) / 0.18);
 }
 .sd-flag i {

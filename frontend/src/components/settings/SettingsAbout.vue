@@ -2,7 +2,7 @@
   <section>
     <h2 class="group-title">{{ t('settings.about') }}</h2>
     <div class="row">
-      <img src="../../assets/dannify.svg" alt="" class="row-icon h-6 w-6 drag-none" />
+      <img src="../../assets/dannify.svg" alt="" class="row-icon drag-none" />
       <div class="row-text">
         <p class="row-label">Dannify</p>
         <p class="row-hint">{{ t('settings.version', { version }) }}</p>
