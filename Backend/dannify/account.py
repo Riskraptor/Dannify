@@ -364,12 +364,39 @@ def sign_out() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Normalizers: every item the UI sees uses the same song/card shapes
 # ---------------------------------------------------------------------------
+def _thumbs_of(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """The pictures of an item, under either name YouTube Music uses.
+
+    A watch list (a song's radio, autoplay) calls them ``thumbnail``, where a
+    search or a shelf says ``thumbnails``. Read as the second only, every song
+    of a radio came with no picture, and the queue showed blank squares for
+    all but the song about to play.
+    """
+
+    thumbs = item.get('thumbnails') or item.get('thumbnail') or []
+    if isinstance(thumbs, dict):
+        thumbs = thumbs.get('thumbnails') or []
+    return [t for t in thumbs if isinstance(t, dict) and t.get('url')]
+
+
 def _thumb(item: dict[str, Any], size: int = 544) -> str:
-    thumbs = item.get('thumbnails') or []
+    thumbs = _thumbs_of(item)
     if not thumbs:
         return ''
     url = thumbs[-1].get('url', '')
     return _resize_thumb(url, size)
+
+
+def _seconds_of(text: Any) -> int:
+    """'3:45' or '1:02:03' as seconds; 0 for anything else."""
+
+    parts = [p for p in str(text or '').strip().split(':')]
+    if not parts or not all(p.isdigit() for p in parts) or len(parts) > 3:
+        return 0
+    total = 0
+    for p in parts:
+        total = total * 60 + int(p)
+    return total
 
 
 def _resize_thumb(url: str, size: int = 544) -> str:
@@ -402,13 +429,10 @@ def song_from_item(item: dict[str, Any]) -> Optional[dict[str, Any]]:
         return None
     album = item.get('album') or {}
     artists = _artists(item)
+    # A watch list gives the length as ``length``, the rest as ``duration``.
     duration = item.get('duration_seconds') or 0
-    if not duration and isinstance(item.get('duration'), str):
-        parts = [p for p in item['duration'].split(':') if p.isdigit()]
-        if len(parts) == 2:
-            duration = int(parts[0]) * 60 + int(parts[1])
-        elif len(parts) == 3:
-            duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    if not duration:
+        duration = _seconds_of(item.get('duration')) or _seconds_of(item.get('length'))
     return {
         'song_id': video_id,
         'video_id': video_id,

@@ -54,6 +54,9 @@ language, and lyrics done right.
 
 Fixed:
 
+- Songs a radio or "Keep the music playing" added to the queue came without
+  their pictures and lengths; only the song about to play got them. Every
+  song in "Next up" has them now.
 - Sharing lyrics could fail with a message from the lyrics service itself;
   a passing fault is now tried again for you, and anything else is said
   plainly in your language.

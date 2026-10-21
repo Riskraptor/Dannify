@@ -115,7 +115,11 @@ def home(limit: int = 6) -> list[dict[str, Any]]:
 
 
 def _thumb(item: dict[str, Any]) -> str:
-    thumbs = item.get('thumbnails') or []
+    # Either name YouTube Music uses for them (see account._thumbs_of).
+    thumbs = item.get('thumbnails') or item.get('thumbnail') or []
+    if isinstance(thumbs, dict):
+        thumbs = thumbs.get('thumbnails') or []
+    thumbs = [t for t in thumbs if isinstance(t, dict) and t.get('url')]
     if not thumbs:
         return ''
     return _upgrade_thumbnail(thumbs[-1].get('url', ''))

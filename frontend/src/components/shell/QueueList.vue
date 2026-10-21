@@ -57,10 +57,11 @@
 </template>
 
 <script setup>
-import { computed, h, ref } from 'vue'
+import { computed, h, ref, onMounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { usePlayer, formatTime } from '/src/model/player'
 import { queueRow, trackMenu } from '/src/model/tracks'
+import { fillMissingDetails, needsDetails } from '/src/model/player/recovery'
 import { usePlaylists } from '/src/model/playlists'
 import { openContextMenu } from '/src/model/contextMenu'
 import { useI18n } from '/src/i18n'
@@ -134,6 +135,14 @@ const QueueItem = {
   props: { row: Object, active: Boolean, pos: { type: Number, default: -1 } },
   emits: ['play', 'remove', 'menu'],
   setup(props, { emit }) {
+    // A row in view without its picture or names asks for them. The list
+    // draws only the rows in view, so scrolling asks for more as they come.
+    const ask = () => {
+      const tr = props.row && props.row.track
+      if (tr && needsDetails(tr)) fillMissingDetails(tr, { soon: false })
+    }
+    onMounted(ask)
+    watch(() => props.row && props.row.track, ask)
     return () => {
       const r = props.row
       const playing = props.active && player.isPlaying.value
