@@ -1088,6 +1088,12 @@ export default {
     reference: 'Rejea {id}',
     notOpen: 'Kuripoti bado hakujafunguliwa.',
     failed: 'Ripoti haikuweza kutumwa. Jaribu tena baada ya muda mfupi.',
+    kindIdea: 'Wazo',
+    slideToSend: 'Telezesha noti kutuma',
+    slideLabel: 'Telezesha hadi mwisho kutuma',
+    tooMany: 'Inatosha kwa leo, asante! Unaweza kutuma zaidi kesho.',
+    ideaTitle: 'Shiriki wazo',
+    yourIdea: 'Nini kingefanya Dannify iwe bora zaidi?',
   },
   sound: {
     tabEq: 'Kisawazishi',

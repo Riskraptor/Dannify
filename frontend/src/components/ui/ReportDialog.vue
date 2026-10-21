@@ -7,7 +7,7 @@
           class="rp menu-surface"
           role="dialog"
           aria-modal="true"
-          :aria-label="t('problems.title')"
+          :aria-label="category === 'idea' ? t('problems.ideaTitle') : t('problems.title')"
           @keydown="onKey"
         >
           <!-- Sent, or kept to send later -->
@@ -30,7 +30,7 @@
           <template v-else>
             <header class="rp-head">
               <div class="min-w-0">
-                <h2 class="rp-title">{{ t('problems.title') }}</h2>
+                <h2 class="rp-title">{{ category === 'idea' ? t('problems.ideaTitle') : t('problems.title') }}</h2>
                 <p class="rp-sub">{{ t('problems.intro') }}</p>
               </div>
               <button class="icon-btn h-8 w-8" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
@@ -55,7 +55,7 @@
                 </button>
               </div>
 
-              <label class="rp-label" for="rp-what">{{ t('problems.whatHappened') }}</label>
+              <label class="rp-label" for="rp-what">{{ category === 'idea' ? t('problems.yourIdea') : t('problems.whatHappened') }}</label>
               <textarea
                 id="rp-what"
                 ref="what"
@@ -78,6 +78,9 @@
                 autocomplete="email"
                 :placeholder="t('problems.contactHint')"
               />
+
+              <!-- No person sees this, so no person fills it in (report.py). -->
+              <input v-model="website" class="rp-trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
 
               <label class="rp-check">
                 <input v-model="includeDiagnostics" type="checkbox" class="check" />
@@ -102,11 +105,31 @@
 
             <footer class="rp-foot">
               <button class="btn min-w-[88px]" @click="close">{{ t('common.cancel') }}</button>
-              <button class="btn-accent min-w-[120px]" :disabled="!canSend" @click="submit">
-                <span v-if="sending" class="spinner h-4 w-4" />
-                <Icon v-else icon="ph:paper-plane-tilt" class="h-4 w-4" />
-                {{ sending ? t('problems.sending') : t('problems.send') }}
-              </button>
+              <!-- Sending is a slide of the note to the end: a person does it
+                   in a moment, and nothing sends by a stray click. -->
+              <div
+                ref="track"
+                class="rp-slide"
+                :class="{ 'is-ready': canSend, 'is-sending': sending, 'is-dragging': dragging }"
+              >
+                <span class="rp-slide-fill" :style="{ width: `${knobX + KNOB}px` }" />
+                <span class="rp-slide-text">{{ sending ? t('problems.sending') : t('problems.slideToSend') }}</span>
+                <button
+                  class="rp-slide-knob"
+                  :style="{ transform: `translateX(${knobX}px)` }"
+                  :disabled="!canSend"
+                  role="slider"
+                  :aria-label="t('problems.slideLabel')"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-valuenow="Math.round((knobX / Math.max(1, travel)) * 100)"
+                  @pointerdown="grab"
+                  @keydown="knobKey"
+                >
+                  <span v-if="sending" class="spinner h-4 w-4" />
+                  <Icon v-else icon="ph:music-note-fill" class="h-5 w-5" />
+                </button>
+              </div>
             </footer>
           </template>
         </div>
@@ -128,6 +151,7 @@ const reporting = useReporting()
 const open = reporting.dialogOpen
 
 const kinds = [
+  { id: 'idea', icon: 'ph:lightbulb', label: 'problems.kindIdea' },
   { id: 'playback', icon: 'ph:play-circle', label: 'problems.kindPlayback' },
   { id: 'downloads', icon: 'ph:download-simple', label: 'problems.kindDownloads' },
   { id: 'lyrics', icon: 'ph:microphone-stage', label: 'problems.kindLyrics' },
@@ -137,6 +161,7 @@ const kinds = [
 ]
 
 const category = ref('playback')
+const website = ref('')
 const description = ref('')
 const contact = ref('')
 const includeDiagnostics = ref(true)
@@ -148,6 +173,13 @@ const box = ref(null)
 const what = ref(null)
 const doneBtn = ref(null)
 let giveBack = null
+
+// Slide to send: where the note is on its track (the handlers are below).
+const KNOB = 40
+const track = ref(null)
+const knobX = ref(0)
+const dragging = ref(false)
+const travel = computed(() => (track.value ? track.value.clientWidth - KNOB - 8 : 200))
 
 const longEnough = computed(() => description.value.trim().length >= 10)
 const contactOk = computed(
@@ -164,6 +196,8 @@ watch(
     giveBack = rememberFocus()
     result.value = null
     error.value = ''
+    knobX.value = 0
+    if (reporting.kind.value) category.value = reporting.kind.value
     await nextTick()
     what.value && what.value.focus()
   },
@@ -196,14 +230,61 @@ async function submit() {
       description: description.value,
       contact: contact.value.trim(),
       include_diagnostics: includeDiagnostics.value,
+      website: website.value,
     })
     await nextTick()
     doneBtn.value && doneBtn.value.focus()
   } catch (err) {
     const code = err && err.response && err.response.status
-    error.value = code === 503 ? t('problems.notOpen') : t('problems.failed')
+    error.value = code === 503 ? t('problems.notOpen') : code === 429 ? t('problems.tooMany') : t('problems.failed')
+    knobBack()
   } finally {
     sending.value = false
+  }
+}
+
+// --- Slide to send ----------------------------------------------------------
+let grabbedAt = 0
+let grabbedKnob = 0
+function grab(e) {
+  if (!canSend.value) return
+  e.preventDefault()
+  dragging.value = true
+  grabbedAt = e.clientX
+  grabbedKnob = knobX.value
+  e.currentTarget.setPointerCapture(e.pointerId)
+  e.currentTarget.addEventListener('pointermove', drag)
+  e.currentTarget.addEventListener('pointerup', letGo, { once: true })
+  e.currentTarget.addEventListener('pointercancel', letGo, { once: true })
+}
+function drag(e) {
+  knobX.value = Math.max(0, Math.min(travel.value, grabbedKnob + e.clientX - grabbedAt))
+}
+function letGo(e) {
+  e.currentTarget.removeEventListener('pointermove', drag)
+  dragging.value = false
+  if (knobX.value >= travel.value - 6) slidHome()
+  else knobBack()
+}
+function slidHome() {
+  knobX.value = travel.value
+  submit()
+}
+function knobBack() {
+  knobX.value = 0
+}
+function knobKey(e) {
+  if (!canSend.value) return
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+    e.preventDefault()
+    knobX.value = Math.min(travel.value, knobX.value + travel.value / 4)
+    if (knobX.value >= travel.value - 1) slidHome()
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    knobBack()
+  } else if (e.key === 'End' || e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    slidHome()
   }
 }
 
@@ -214,7 +295,7 @@ function onKey(e) {
     close()
   } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !result.value) {
     e.preventDefault()
-    submit()
+    if (canSend.value) slidHome()
   } else if (e.key === 'Tab' && box.value) {
     // Keep focus inside the dialog.
     const stops = [...box.value.querySelectorAll('button, textarea, input')].filter((el) => !el.disabled)
@@ -377,6 +458,98 @@ function onKey(e) {
   padding: 12px 20px;
   background: rgb(var(--c-tint) / 0.03);
   border-top: 1px solid rgb(var(--c-tint) / 0.07);
+}
+.rp-trap {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.rp-slide {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 250px;
+  height: 48px;
+  padding: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(var(--c-tint) / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(var(--c-tint) / 0.1);
+  user-select: none;
+  touch-action: none;
+}
+.rp-slide-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  background: rgb(var(--c-accent) / 0.22);
+  transition: width 0.25s ease;
+}
+.rp-slide.is-dragging .rp-slide-fill,
+.rp-slide.is-dragging .rp-slide-knob {
+  transition: none;
+}
+.rp-slide-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-left: 40px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: rgb(var(--c-fg) / 0.45);
+  pointer-events: none;
+}
+.rp-slide.is-ready .rp-slide-text {
+  color: rgb(var(--c-fg) / 0.85);
+  background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.5) 50%, transparent 100%) -200% 0 / 50% 100% no-repeat;
+  background-clip: text;
+  animation: rp-shine 2.4s ease-in-out infinite;
+}
+.rp-slide-knob {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  border-radius: 999px;
+  color: rgb(var(--c-fg) / 0.5);
+  background: rgb(var(--c-tint) / 0.12);
+  cursor: grab;
+  transition:
+    transform 0.3s cubic-bezier(0.2, 0.9, 0.2, 1.1),
+    background-color 0.15s ease;
+}
+.rp-slide.is-ready .rp-slide-knob {
+  color: rgb(var(--c-accent-fg));
+  background: rgb(var(--c-accent));
+  box-shadow: 0 6px 16px rgb(var(--c-accent) / 0.4);
+}
+.rp-slide.is-dragging .rp-slide-knob {
+  cursor: grabbing;
+}
+.rp-slide-knob:focus-visible {
+  outline: 2px solid rgb(var(--c-fg));
+  outline-offset: 2px;
+}
+.rp-slide-knob:disabled {
+  cursor: not-allowed;
+}
+@keyframes rp-shine {
+  to {
+    background-position: 300% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rp-slide.is-ready .rp-slide-text {
+    animation: none;
+  }
 }
 .rp-done {
   display: flex;

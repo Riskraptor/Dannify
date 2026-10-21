@@ -328,6 +328,11 @@ async def support_report_send_endpoint(payload: dict[str, Any] = Body(default={}
         raise HTTPException(status_code=503, detail='Reporting is not open yet')
     if not state.data_dir:
         raise HTTPException(status_code=503, detail='No data folder')
+    # A field no person sees, so no person fills it: what does is a bot, and
+    # is told all went well, and nothing goes anywhere.
+    if str(payload.get('website') or '').strip():
+        logger.info('problem report dropped: the hidden field was filled')
+        return {'id': report_mod.new_id(), 'status': 'sent'}
     try:
         fields = report_mod.clean_fields(
             payload.get('description'), payload.get('category'), payload.get('contact')
@@ -351,6 +356,8 @@ async def support_report_send_endpoint(payload: dict[str, Any] = Body(default={}
         status = await asyncio.to_thread(report_mod.send, data, report)
     except report_mod.NotOpen as exc:
         raise HTTPException(status_code=503, detail='Reporting is not open yet') from exc
+    except report_mod.TooMany as exc:
+        raise HTTPException(status_code=429, detail='Enough reports for today') from exc
     logger.info('problem report {} {}', report['id'], status)
     return {'id': report['id'], 'status': status}
 

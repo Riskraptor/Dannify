@@ -1119,6 +1119,12 @@ export default {
     reference: 'Reference {id}',
     notOpen: 'Reporting is not open yet.',
     failed: 'The report could not be sent. Try again in a moment.',
+    kindIdea: 'An idea',
+    slideToSend: 'Slide the note to send',
+    slideLabel: 'Slide to the end to send',
+    tooMany: 'That is plenty for today, thank you! You can send more tomorrow.',
+    ideaTitle: 'Share an idea',
+    yourIdea: 'What would make Dannify better?',
   },
   sound: {
     tabEq: 'Equalizer',

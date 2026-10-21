@@ -1123,6 +1123,12 @@ export default {
     reference: 'Référence {id}',
     notOpen: 'Les rapports ne sont pas encore ouverts.',
     failed: 'Le rapport n\u2019a pas pu être envoyé. Réessayez dans un instant.',
+    kindIdea: 'Une idée',
+    slideToSend: 'Glissez la note pour envoyer',
+    slideLabel: 'Glissez jusqu’au bout pour envoyer',
+    tooMany: 'C’est bien assez pour aujourd’hui, merci ! Vous pourrez en envoyer d’autres demain.',
+    ideaTitle: 'Partager une idée',
+    yourIdea: 'Qu’est-ce qui rendrait Dannify meilleur ?',
   },
   sound: {
     tabEq: 'Égaliseur',

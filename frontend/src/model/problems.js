@@ -71,6 +71,7 @@ export function installErrorReporting(app) {
 
 const status = reactive({ loaded: false, enabled: false, pending: 0 })
 const dialogOpen = ref(false)
+const kind = ref('') // what the dialog opens on: 'idea' from "Share an idea"
 let loading = null
 
 function loadStatus() {
@@ -87,10 +88,11 @@ function loadStatus() {
   return loading
 }
 
-async function openReport() {
+async function openReport(on = '') {
   await loadStatus()
   if (!status.enabled) return false
   await ensureFullWindow()
+  kind.value = on
   dialogOpen.value = true
   return true
 }
@@ -104,5 +106,5 @@ async function send(payload) {
 
 export function useReporting() {
   if (!status.loaded) loadStatus()
-  return { status, dialogOpen, loadStatus, openReport, send }
+  return { status, dialogOpen, kind, loadStatus, openReport, send }
 }

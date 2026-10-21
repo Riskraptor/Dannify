@@ -1088,6 +1088,12 @@ export default {
     reference: 'Referenz {id}',
     notOpen: 'Berichte sind noch nicht geöffnet.',
     failed: 'Der Bericht konnte nicht gesendet werden. Versuchen Sie es gleich noch einmal.',
+    kindIdea: 'Eine Idee',
+    slideToSend: 'Note zum Senden schieben',
+    slideLabel: 'Bis zum Ende schieben, um zu senden',
+    tooMany: 'Das ist genug für heute, danke! Morgen können Sie mehr senden.',
+    ideaTitle: 'Eine Idee teilen',
+    yourIdea: 'Was würde Dannify besser machen?',
   },
   sound: {
     tabEq: 'Equalizer',

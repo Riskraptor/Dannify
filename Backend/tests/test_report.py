@@ -146,7 +146,8 @@ def test_one_that_cannot_go_waits_and_goes_later(receiver, tmp_path):
     assert _Receiver.got[-1]['diagnostics'] == b'PK-zip-bytes'
 
 
-def test_only_a_few_wait(receiver, tmp_path):
+def test_only_a_few_wait(receiver, tmp_path, monkeypatch):
+    monkeypatch.setattr(report, 'DAILY_LIMIT', 100)
     _Receiver.status = 500
     for _ in range(report.OUTBOX_KEEP + 3):
         report.send(tmp_path, _a_report(diag=None))
@@ -155,7 +156,9 @@ def test_only_a_few_wait(receiver, tmp_path):
 
 def test_closed_until_there_is_a_server(monkeypatch, tmp_path):
     monkeypatch.delenv('DANNIFY_REPORT_URL', raising=False)
+    monkeypatch.delenv('DANNIFY_WEB3FORMS_KEY', raising=False)
     monkeypatch.setattr(report, 'REPORT_ENDPOINT', '')
+    monkeypatch.setattr(report, 'WEB3FORMS_KEY', '')
     assert not report.enabled()
     with pytest.raises(report.NotOpen):
         report.send(tmp_path, _a_report())
@@ -226,3 +229,87 @@ def test_two_logs_with_one_name_are_both_kept(tmp_path):
     names = zipfile.ZipFile(io.BytesIO(data)).namelist()
     logs = sorted(n for n in names if n.startswith('logs/'))
     assert logs == ['logs/dannify-2.log', 'logs/dannify.log']
+
+
+# --- By email, through Web3Forms --------------------------------------------------
+
+
+class _Answer:
+    def __init__(self, status=200, body=None):
+        self.status_code = status
+        self._body = body if body is not None else {'success': True}
+
+    def json(self):
+        return self._body
+
+
+@pytest.fixture
+def emailed(monkeypatch):
+    """Web3Forms stood in for: what it was sent, and what it answers."""
+
+    import requests
+
+    sent = []
+    answer = {'value': _Answer()}
+
+    def fake_post(url, json=None, **kw):
+        sent.append({'url': url, 'json': json, **kw})
+        return answer['value']
+
+    monkeypatch.delenv('DANNIFY_REPORT_URL', raising=False)
+    monkeypatch.setattr(report, 'REPORT_ENDPOINT', '')
+    monkeypatch.setenv('DANNIFY_WEB3FORMS_KEY', 'test-access-key')
+    monkeypatch.setattr(requests, 'post', fake_post)
+    return sent, answer
+
+
+def test_a_report_is_emailed_with_its_diagnostics_written_in(emailed, tmp_path):
+    sent, _ = emailed
+    (tmp_path / 'dannify.log').write_text('started\ncookie=SECRET123 here\nthe last line\n', encoding='utf-8')
+    zipped = report.pack(tmp_path, '4.14.0', settings={'theme': 'dark', 'yt_cookie': 'x'})
+    r = {**_a_report(diag=zipped), 'contact': 'listener@example.com'}
+    assert report.send(tmp_path, r) == 'sent'
+    body = sent[-1]['json']
+    assert sent[-1]['url'] == report.WEB3FORMS_URL
+    assert body['access_key'] == 'test-access-key' and body['botcheck'] is False
+    assert body['email'] == 'listener@example.com'
+    assert r['id'] in body['subject'] and 'playback' in body['subject']
+    text = body['message']
+    assert text.startswith('It stops after a minute')
+    assert 'Dannify 4.14.0' in text and 'theme' in text and 'the last line' in text
+    assert 'SECRET123' not in text and 'yt_cookie' not in text
+
+
+def test_an_email_that_did_not_go_waits(emailed, tmp_path):
+    sent, answer = emailed
+    answer['value'] = _Answer(200, {'success': False, 'message': 'Invalid access key'})
+    assert report.send(tmp_path, _a_report(diag=None)) == 'queued'
+    answer['value'] = _Answer()
+    assert report.flush(tmp_path) == (1, 0)
+
+
+def test_a_long_log_keeps_its_newest_end(tmp_path):
+    lines = ''.join(f'line {i}\n' for i in range(20000))
+    (tmp_path / 'dannify.log').write_text(lines, encoding='utf-8')
+    text = report._diagnostics_text(report.pack(tmp_path, '4.14.0'), 5000)
+    assert len(text) <= 5000 and 'line 19999' in text and 'line 0\n' not in text
+
+
+def test_five_a_day_and_no_more(emailed, tmp_path):
+    for _ in range(report.DAILY_LIMIT):
+        report.send(tmp_path, _a_report(diag=None))
+    with pytest.raises(report.TooMany):
+        report.send(tmp_path, _a_report(diag=None))
+
+
+def test_what_fills_the_hidden_field_is_thanked_and_sends_nothing(emailed, tmp_path, monkeypatch):
+    sent, _ = emailed
+    monkeypatch.setattr(api.state, 'data_dir', tmp_path)
+    out = asyncio.run(api.support_report_send_endpoint({
+        'description': 'Buy cheap things at my shop now', 'category': 'other', 'website': 'http://spam.example',
+    }))
+    assert out['status'] == 'sent' and sent == []
+
+
+def test_an_idea_is_a_kind_of_its_own():
+    assert report.clean_fields('Could it have a sleep timer?', 'idea', '')['category'] == 'idea'

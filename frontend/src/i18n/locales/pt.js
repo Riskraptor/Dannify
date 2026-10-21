@@ -1088,6 +1088,12 @@ export default {
     reference: 'Referência {id}',
     notOpen: 'Os relatórios ainda não estão abertos.',
     failed: 'Não foi possível enviar o relatório. Tente de novo em instantes.',
+    kindIdea: 'Uma ideia',
+    slideToSend: 'Deslize a nota para enviar',
+    slideLabel: 'Deslize até o fim para enviar',
+    tooMany: 'Já é bastante por hoje, obrigado! Você pode mandar mais amanhã.',
+    ideaTitle: 'Compartilhar uma ideia',
+    yourIdea: 'O que deixaria o Dannify melhor?',
   },
   sound: {
     tabEq: 'Equalizador',

@@ -61,7 +61,7 @@
         <p class="row-label">{{ t('support.ideaTitle') }}</p>
         <p class="row-hint">{{ t('support.ideaText') }}</p>
       </div>
-      <button class="btn" @click="reporting.openReport()">
+      <button class="btn" @click="reporting.openReport('idea')">
         <Icon icon="ph:pencil-simple-line" class="h-4 w-4" />
         {{ t('support.ideaButton') }}
       </button>
