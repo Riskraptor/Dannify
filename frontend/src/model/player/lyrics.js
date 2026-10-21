@@ -237,6 +237,15 @@ export async function chooseLyricVersion(index) {
   lyricsPlain.value = v.plain || null
   lyricVersionCount.value = n
   updateActiveLyric()
+  const track = currentTrack.value
+  if (track && track.type === 'local' && track.file) {
+    // A saved song keeps it beside its file, offline and after a restart.
+    const { file, ...hints } = _lyricsParams(track)
+    API.keepLyricVersion(file, at, hints).catch(() => {})
+    // The timing correction is kept for the song as before.
+    if (lyricsOffset.value) saveLyricsOffset()
+    return
+  }
   // Kept with the song's timing, so it is the one shown next time too.
   saveLyricsOffset()
 }

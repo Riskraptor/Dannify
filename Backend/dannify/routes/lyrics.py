@@ -65,6 +65,32 @@ def _read_existing_lyrics(full: Path, artist: str, title: str) -> str:
     return central or ''
 
 
+def _song_of_file(full: Path, hints: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """The song a saved file is: its own tags, filled in from what the player
+    knows where the download wrote them thinly."""
+
+    meta = library_mod._read_tags(full)
+    song = {
+        'name': meta.get('title') or '',
+        'artists': meta.get('artists') or ([meta['artist']] if meta.get('artist') else []),
+        'album_name': meta.get('album') or '',
+        'duration': meta.get('duration') or 0,
+    }
+    hint = hints or {}
+    if not song['name']:
+        song['name'] = str(hint.get('title') or '')
+    if not song['artists']:
+        song['artists'] = [a.strip() for a in str(hint.get('artist') or '').split(',') if a.strip()]
+    if not song['album_name']:
+        song['album_name'] = str(hint.get('album') or '')
+    if not song['duration']:
+        try:
+            song['duration'] = int(hint.get('duration') or 0)
+        except (TypeError, ValueError):
+            song['duration'] = 0
+    return song
+
+
 def _lyrics_from_file(
     file: str,
     refresh: bool = False,
@@ -145,9 +171,17 @@ def _lyrics_from_file(
             song['duration'] = int(hint.get('duration') or 0)
 
         if song['name'] and song['artists']:
-            raw = lyrics_mod.fetch(
-                song, _effective_lyrics_providers(state.settings) or ['lrclib']
-            )
+            raw = None
+            # A version chosen for this song stays chosen through a reload.
+            chosen = lyrics_offsets.get_prefs(song['name'], song['artists'][0])['version']
+            if chosen > 0:
+                text = lyrics_mod.version_text(song, chosen)
+                if text:
+                    raw = lyrics_mod.Lyrics(plain=None, synced=text)
+            if raw is None:
+                raw = lyrics_mod.fetch(
+                    song, _effective_lyrics_providers(state.settings) or ['lrclib']
+                )
             # Tags and the player can disagree about how a track is named.
             # If the file's own version found nothing, try the player's.
             if (raw is None or not raw.has_any()) and hint.get('title'):
@@ -229,6 +263,9 @@ async def lyrics_endpoint(
                 'duration': duration,
             },
         )
+        # Versions are offered for a saved song too, as long as it is timed:
+        # "unknown, ask when the picker opens" (-1), as for a streamed one.
+        result['version_count'] = -1 if result.get('synced') else 0
         # Attach the crowd-sourced prefs using the file's own tags.
         try:
             where = _library_file(file)
@@ -329,16 +366,14 @@ async def lyrics_versions_endpoint(
 
     song: dict[str, Any]
     where = _library_file(file) if file else None
+    kept = ''
     if where is not None:
         try:
-            meta = library_mod._read_tags(where)
-            song = {
-                'name': meta.get('title') or '',
-                'artists': meta.get('artists')
-                or ([meta['artist']] if meta.get('artist') else []),
-                'album_name': meta.get('album') or '',
-                'duration': meta.get('duration') or 0,
-            }
+            song = _song_of_file(
+                where, {'title': title, 'artist': artist, 'album': album, 'duration': duration}
+            )
+            artists = song.get('artists') or ['']
+            kept = _read_existing_lyrics(where, artists[0], song.get('name', ''))
         except Exception:
             song = {'name': title, 'artists': [artist] if artist else []}
     elif url:
@@ -363,13 +398,56 @@ async def lyrics_versions_endpoint(
     song_artists = song.get('artists') or []
     primary = song_artists[0] if song_artists else ''
     prefs = lyrics_offsets.get_prefs(song.get('name', ''), primary)
+    current = prefs['version'] if prefs['version'] < len(versions) else 0
+    if kept:
+        # A saved song shows what is kept beside it: that is the version it is.
+        for i in range(len(versions)):
+            if lyrics_mod.same_words(kept, lyrics_mod.version_text(song, i)):
+                current = i
+                break
     return {
         'versions': versions,
-        'version': prefs['version'] if prefs['version'] < len(versions) else 0,
+        'version': current,
         'offset': prefs['offset'],
         'title': song.get('name', ''),
         'artist': primary,
     }
+
+
+@router.post('/api/lyrics/keep')
+async def lyrics_keep_endpoint(request: Request) -> dict[str, Any]:
+    """Keep version *version* of a saved song's lyrics beside it.
+
+    Body: ``{file, version, title?, artist?, album?, duration?}``. The chosen
+    version is written where the song's lyrics live, so it is the one shown
+    offline and after a restart, and is remembered for the song.
+    """
+
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail='Invalid JSON')
+    where = _library_file(str(payload.get('file') or ''))
+    if where is None or not where.is_file():
+        raise HTTPException(status_code=400, detail='Invalid path')
+    try:
+        version = int(payload.get('version'))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail='version must be an int')
+
+    def keep() -> bool:
+        song = _song_of_file(where, payload)
+        artists = song.get('artists') or []
+        if not song.get('name') or not artists:
+            return False
+        text = lyrics_mod.version_text(song, version)
+        if not text:
+            return False
+        _persist_lyrics(where, artists[0], song['name'], text)
+        lyrics_offsets.set(song['name'], artists[0], None, version)
+        return True
+
+    return {'kept': await asyncio.to_thread(keep)}
 
 
 @router.post('/api/lyrics/offset')

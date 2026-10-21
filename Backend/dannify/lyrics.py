@@ -782,11 +782,8 @@ def fetch_structured(
 _versions_cache: "_OrderedDict[str, list[Lyrics]]" = _OrderedDict()
 
 
-def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return all synced versions as ``[{synced:[...], plain, has}, ...]``.
-
-    Cached in memory so the multi-query lrclib sweep is paid once per song.
-    """
+def _versions_of(song: dict[str, Any]) -> list[Lyrics]:
+    """Every synced version of *song*, best first; one lookup per song."""
 
     key = _cache_key(song)
     named = bool(_base_key(song).strip('|'))
@@ -800,7 +797,35 @@ def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
                 _versions_cache.move_to_end(key)
                 while len(_versions_cache) > 512:
                     _versions_cache.popitem(last=False)
+    return cached
 
+
+def version_text(song: dict[str, Any], index: int) -> Optional[str]:
+    """Version *index*'s own LRC text, to keep beside a saved song."""
+
+    versions = [v for v in _versions_of(song) if parse_lrc(v.synced)]
+    if 0 <= index < len(versions):
+        return versions[index].synced
+    return None
+
+
+def same_words(a: Optional[str], b: Optional[str]) -> bool:
+    """Whether two LRC texts are the same lyrics, timed the same way."""
+
+    def norm(text: Optional[str]) -> list[tuple[float, str]]:
+        return [(round(l['time'], 1), _norm(l['text'])) for l in parse_lrc(text)]
+
+    na, nb = norm(a), norm(b)
+    return bool(na) and na == nb
+
+
+def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return all synced versions as ``[{synced:[...], plain, has}, ...]``.
+
+    Cached in memory so the multi-query lrclib sweep is paid once per song.
+    """
+
+    cached = _versions_of(song)
     out: list[dict[str, Any]] = []
     for ver in cached:
         lines = parse_lrc(ver.synced)

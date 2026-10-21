@@ -193,6 +193,12 @@ function getLyricVersions(params) {
   return API.get('/api/lyrics/versions', { params })
 }
 
+// A saved song's chosen version, written beside it, so it is the one shown
+// offline and after a restart. `hints` are what the player knows of the song.
+function keepLyricVersion(file, version, hints = {}) {
+  return API.post('/api/lyrics/keep', { file, version, ...hints })
+}
+
 function saveLyricsOffset(title, artist, offset, version) {
   const body = { title, artist }
   if (offset !== undefined && offset !== null) body.offset = offset
@@ -543,6 +549,7 @@ export default {
   getLyrics,
   getLyricVersions,
   saveLyricsOffset,
+  keepLyricVersion,
   publishLyrics,
   getLibrary,
   searchLibrary,
