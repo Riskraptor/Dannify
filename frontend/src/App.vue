@@ -261,6 +261,8 @@ onMounted(() => {
   welcomeBack()
   // Problem reports that could not go before (offline) go now, quietly.
   setTimeout(() => import('./model/problems').then((m) => m.sendHeldReports()), 20000)
+  // Early in a new week or month: its story, said once (model/storyNudge.js).
+  setTimeout(() => import('./model/storyNudge').then((m) => m.nudgeStories()), 15000)
 })
 onUnmounted(() => {
   window.removeEventListener('popstate', onPopState)

@@ -39,11 +39,14 @@ function todayISO() {
  * @param {Function} t the app's words
  * @param {{number?: Function, dateText?: Function}} how numbers and dates are written
  */
-export function momentText(m, period, t, { number = String, dateText = (iso) => iso } = {}) {
+export function momentText(m, period, t, { number = String, dateText = (iso) => iso, ago = 0 } = {}) {
   const title = (m.song && m.song.title) || ''
   switch (m.kind) {
     case 'more':
-      return t(`story.moment.more.${period}`, { percent: number(m.percent) })
+      // Last week against the week before it, not against last week.
+      return ago && period !== 'year'
+        ? t(`story.moment.morePrev.${period}`, { percent: number(m.percent) })
+        : t(`story.moment.more.${period}`, { percent: number(m.percent) })
     case 'record_day':
       return m.date === todayISO()
         ? t('story.moment.recordToday', { minutes: number(m.minutes) })

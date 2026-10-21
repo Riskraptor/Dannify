@@ -58,7 +58,8 @@ year month by month, the hours and weekdays you listen most, your longest
 streak, the song you could not stop repeating, what you discovered and the
 kind of listener you are. Everything in it plays at a click, the music can
 follow the story page by page, and it ends on a card you can play or save
-as a playlist. Today, this week and this month get stories of their own,
+as a playlist, or share as a picture. Today, this week and this month (and
+the ones just gone) get stories of their own,
 and Home's Your music lately shows all four at a glance: the minutes, the
 shape of your listening, and the moments worth telling, like your biggest
 music day ever, days in a row, an artist climbing to number one or a song

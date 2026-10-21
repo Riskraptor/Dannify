@@ -26,6 +26,17 @@ export const AVAILABLE_LOCALES = [
 const loaded = shallowRef({ en })
 const loading = new Map()
 
+// English for the pages opened later (the lyrics editor, the stories, the
+// first-run setup, reports) is a file of its own, fetched beside the start
+// instead of inside it. It is joined to the rest when it arrives, and the
+// window is not drawn before it has (localeReady, below).
+const englishMore = import('./locales/en-more.js')
+  .then((mod) => {
+    loaded.value = { ...loaded.value, en: { ...loaded.value.en, ...mod.default } }
+    return true
+  })
+  .catch(() => false)
+
 function loadLocale(code) {
   if (loaded.value[code]) return Promise.resolve(true)
   const entry = AVAILABLE_LOCALES.find((l) => l.code === code)
@@ -211,7 +222,7 @@ export function useI18n() {
 applyLang(currentLocale.value)
 
 /** Resolves once the language the app starts in can be drawn. */
-export const localeReady = loadLocale(currentLocale.value).then((ok) => {
+export const localeReady = Promise.all([loadLocale(currentLocale.value), englishMore]).then(([ok]) => {
   // A language file that cannot be read: English, rather than English words
   // in a page that says it is something else.
   if (!ok && currentLocale.value !== DEFAULT_LOCALE) {

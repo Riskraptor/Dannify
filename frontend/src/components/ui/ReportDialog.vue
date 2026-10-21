@@ -19,7 +19,13 @@
               {{ result.status === 'queued' ? t('problems.queuedTitle') : t('problems.sentTitle') }}
             </h2>
             <p class="rp-sub">
-              {{ result.status === 'queued' ? t('problems.queuedText') : t('problems.sentText') }}
+              {{
+                result.status === 'queued'
+                  ? result.needsYou
+                    ? t('problems.queuedAskText')
+                    : t('problems.queuedText')
+                  : t('problems.sentText')
+              }}
             </p>
             <p class="rp-ref">{{ t('problems.reference', { id: result.id }) }}</p>
             <button ref="doneBtn" class="btn-accent btn-pill mt-5 px-6" @click="close">
@@ -28,6 +34,27 @@
           </div>
 
           <template v-else>
+            <!-- Written while offline: sent now, with one slide. -->
+            <template v-if="keptEmail">
+              <header class="rp-head">
+                <div class="min-w-0">
+                  <h2 class="rp-title">{{ t('problems.heldTitle') }}</h2>
+                  <p class="rp-sub">{{ t('problems.heldText', { date: keptDate }) }}</p>
+                </div>
+                <button class="icon-btn h-8 w-8" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
+                  <Icon icon="ph:x" class="h-4 w-4" />
+                </button>
+              </header>
+              <div class="rp-body">
+                <blockquote v-if="keptEmail.held_preview" class="rp-kept">{{ keptEmail.held_preview }}</blockquote>
+                <HCaptchaBox v-if="captchaKey" ref="captchaBox" :sitekey="captchaKey" />
+                <p v-if="error" class="rp-error">
+                  <Icon icon="ph:warning" class="h-4 w-4" />
+                  {{ error }}
+                </p>
+              </div>
+            </template>
+            <template v-else>
             <header class="rp-head">
               <div class="min-w-0">
                 <h2 class="rp-title">{{ category === 'idea' ? t('problems.ideaTitle') : t('problems.title') }}</h2>
@@ -106,6 +133,7 @@
               </p>
             </div>
 
+            </template>
             <footer class="rp-foot">
               <button class="btn min-w-[88px]" @click="close">{{ t('common.cancel') }}</button>
               <!-- Sending is a slide of the note to the end: a person does it
@@ -150,9 +178,15 @@ import { rememberFocus } from '/src/model/focusTrap'
 import { useI18n } from '/src/i18n'
 import { tp } from '/src/i18n/platform'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const reporting = useReporting()
 const open = reporting.dialogOpen
+// A report written while offline, opened from "Your report is ready to send".
+const keptEmail = computed(() => (reporting.held.value && reporting.held.value.email) || null)
+const keptDate = computed(() => {
+  const at = keptEmail.value && Number(keptEmail.value.held_at)
+  return at ? new Date(at).toLocaleString(locale.value || 'en', { dateStyle: 'medium', timeStyle: 'short' }) : ''
+})
 
 const kinds = [
   { id: 'idea', icon: 'ph:lightbulb', label: 'problems.kindIdea' },
@@ -193,9 +227,7 @@ const contactOk = computed(
 // challenge (when there is one) in the middle of the window.
 const captchaKey = computed(() => (reporting.status.captcha && reporting.status.captcha.sitekey) || '')
 const captchaBox = ref(null)
-const canSend = computed(
-  () => longEnough.value && contactOk.value && !sending.value
-)
+const canSend = computed(() => !sending.value && (keptEmail.value ? true : longEnough.value && contactOk.value))
 
 // Immediate as well: the dialog is loaded the first time it is opened, by
 // which time it is already open (App.vue).
@@ -209,7 +241,8 @@ watch(
     knobX.value = 0
     if (reporting.kind.value) category.value = reporting.kind.value
     await nextTick()
-    what.value && what.value.focus()
+    if (keptEmail.value) box.value && box.value.querySelector('.rp-slide-knob') && box.value.querySelector('.rp-slide-knob').focus()
+    else what.value && what.value.focus()
   },
   { immediate: true }
 )
@@ -217,6 +250,8 @@ watch(
 function close() {
   if (sending.value) return
   open.value = false
+  // A kept report not sent now stays kept, for the next time it is offered.
+  reporting.held.value = null
   // Written and not sent is kept for next time; sent is cleared.
   if (result.value) {
     description.value = ''
@@ -228,7 +263,7 @@ function close() {
 
 async function submit() {
   if (!canSend.value) return
-  if (!contactOk.value) {
+  if (!keptEmail.value && !contactOk.value) {
     error.value = t('problems.badContact')
     return
   }
@@ -250,7 +285,9 @@ async function submit() {
     }
   }
   try {
-    result.value = await reporting.send(
+    result.value = keptEmail.value
+      ? await reporting.sendHeld(captcha)
+      : await reporting.send(
       {
         category: category.value,
         description: description.value,
@@ -453,6 +490,21 @@ function onKey(e) {
 }
 .rp-count.is-short {
   color: rgb(var(--c-fg) / var(--fg-60));
+}
+/* What was written while offline, as it will go. */
+.rp-kept {
+  max-height: 180px;
+  overflow-y: auto;
+  margin: 4px 0 6px;
+  padding: 12px 14px;
+  border-left: 3px solid rgb(var(--c-accent));
+  border-radius: 8px;
+  background: rgb(var(--c-tint) / 0.05);
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: rgb(var(--c-fg) / 0.88);
 }
 .rp-check {
   display: flex;

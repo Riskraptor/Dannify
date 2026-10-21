@@ -64,11 +64,16 @@
         v-for="p in PERIODS"
         :key="p"
         class="recap-period"
-        :class="{ 'is-on': p === period }"
-        :aria-pressed="p === period"
+        :class="{ 'is-on': p === period && !ago }"
+        :aria-pressed="p === period && !ago"
         @click="pickPeriod(p)"
       >
         {{ t(`story.period.${p}`) }}
+      </button>
+      <!-- Yesterday, last week, last month: and back to now. -->
+      <button v-if="period !== 'year'" class="recap-period is-back" :aria-pressed="ago > 0" @click="setAgo(ago ? 0 : 1)">
+        <Icon :icon="ago ? 'ph:arrow-right-bold' : 'ph:clock-counter-clockwise'" class="h-3.5 w-3.5" />
+        {{ ago ? t(`story.period.${period}`) : t(`story.last.${period}`) }}
       </button>
     </nav>
 
@@ -83,8 +88,8 @@
 
     <div v-else-if="!data || !data.plays" class="recap-center">
       <p class="recap-eyebrow">{{ title }}</p>
-      <h1 class="recap-big">{{ period === 'year' ? t('recap.emptyTitle') : t(`story.empty.${period}`) }}</h1>
-      <p class="recap-small">{{ period === 'year' ? t('recap.emptyText') : t(`story.startNow.${period}`) }}</p>
+      <h1 class="recap-big">{{ period === 'year' ? t('recap.emptyTitle') : t(`story.${ago ? 'emptyPast' : 'empty'}.${period}`) }}</h1>
+      <p class="recap-small">{{ period === 'year' || ago ? t('recap.emptyText') : t(`story.startNow.${period}`) }}</p>
     </div>
 
     <template v-else>
@@ -103,7 +108,7 @@
             <p v-if="firstName" class="recap-hey"><AnimatedName :text="t('story.hey', { name: firstName })" /></p>
             <p class="recap-eyebrow">{{ t('recap.eyebrow') }}</p>
             <h1 class="recap-huge" :class="{ 'is-words': period !== 'year' }">{{ title }}</h1>
-            <p class="recap-lead">{{ period === 'year' ? t('recap.intro') : t(`story.intro.${period}`) }}</p>
+            <p class="recap-lead">{{ period === 'year' ? t('recap.intro') : t(`story.${ago ? 'introPast' : 'intro'}.${period}`) }}</p>
             <div class="recap-ctas">
               <button class="recap-cta" @click.stop="go(1)">
                 {{ t('recap.start') }} <Icon icon="ph:arrow-right-bold" class="h-4 w-4" />
@@ -157,7 +162,7 @@
                   @click="momentGo(m) && momentGo(m)()"
                 >
                   <span class="recap-moment-icon"><Icon :icon="momentIcon(m)" class="h-5 w-5" /></span>
-                  <span class="recap-moment-text">{{ momentText(m, period, t, words) }}</span>
+                  <span class="recap-moment-text">{{ momentText(m, period, t, { ...words, ago }) }}</span>
                   <Icon v-if="momentGo(m)" :icon="momentPlaying(m) ? 'ph:pause-fill' : 'ph:play-fill'" class="recap-moment-go h-4 w-4" />
                 </component>
               </li>
@@ -333,8 +338,8 @@
                 </text>
               </svg>
               <div v-if="period !== 'day'" class="recap-week">
-                <div v-for="(secs, d) in weekBars" :key="d" class="recap-week-col" :class="{ 'is-peak': d === peakWeekday }">
-                  <span class="recap-week-bar" :style="{ '--h': `${Math.max(6, secs * 100)}%`, '--i': d }" />
+                <div v-for="(d, k) in weekOrder" :key="d" class="recap-week-col" :class="{ 'is-peak': d === peakWeekday }">
+                  <span class="recap-week-bar" :style="{ '--h': `${Math.max(6, weekBars[d] * 100)}%`, '--i': k }" />
                   <span class="recap-week-day">{{ weekdayText(d) }}</span>
                 </div>
               </div>
@@ -459,6 +464,27 @@
               <button class="recap-cta is-ghost" :disabled="!songRows.length" @click.stop="saveTop">
                 <Icon icon="ph:playlist" class="h-4 w-4" /> {{ t('recap.saveTop') }}
               </button>
+              <!-- The card as a picture: to paste into a chat, or keep. -->
+              <button
+                class="recap-cta is-ghost is-icon"
+                :disabled="!!sharing"
+                :title="t('recap.shareCopy')"
+                :aria-label="t('recap.shareCopy')"
+                @click.stop="shareCard('copy')"
+              >
+                <span v-if="sharing === 'copy'" class="spinner h-4 w-4" />
+                <Icon v-else icon="ph:copy" class="h-[18px] w-[18px]" />
+              </button>
+              <button
+                class="recap-cta is-ghost is-icon"
+                :disabled="!!sharing"
+                :title="t('recap.shareSave')"
+                :aria-label="t('recap.shareSave')"
+                @click.stop="shareCard('save')"
+              >
+                <span v-if="sharing === 'save'" class="spinner h-4 w-4" />
+                <Icon v-else icon="ph:download-simple" class="h-[18px] w-[18px]" />
+              </button>
             </div>
             <p class="recap-small">{{ t('recap.outro') }}</p>
           </template>
@@ -491,7 +517,9 @@ import { listensEpoch } from '/src/model/listens'
 import { syncSoon } from '/src/model/ytmSync'
 import { personaOf } from '/src/model/recapPersona'
 import { PERIODS, momentIcon, momentText } from '/src/model/moments'
+import { weekStart } from '/src/model/weekStart'
 import { useAccount } from '/src/model/account'
+import { toast } from '/src/model/toast'
 import { useI18n } from '/src/i18n'
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import CountUp from '/src/components/ui/CountUp.vue'
@@ -507,12 +535,19 @@ const route = useRoute()
 const router = useRouter()
 
 const year = computed(() => Number(route.params.year) || new Date().getFullYear())
-// Which stretch: ?period=day|week|month, the year when none is named.
+// Which stretch: ?period=day|week|month, the year when none is named, and
+// ?ago=1 for the one before (yesterday, last week, last month).
 const period = computed(() => (PERIODS.includes(route.query.period) ? route.query.period : 'year'))
+const ago = computed(() => (period.value === 'year' ? 0 : Math.max(0, Math.min(1, Number(route.query.ago) || 0))))
 function pickPeriod(p) {
-  if (p === period.value) return
+  if (p === period.value && !ago.value) return
   router.replace(p === 'year' ? { name: 'Recap' } : { name: 'Recap', query: { period: p } })
 }
+function setAgo(n) {
+  router.replace({ name: 'Recap', query: n ? { period: period.value, ago: n } : { period: period.value } })
+}
+// The day weeks start on where the listener is.
+const firstDay = weekStart
 const account = useAccount()
 // The first name of whoever is signed in to YouTube, for saying hello.
 const firstName = computed(() =>
@@ -528,7 +563,7 @@ async function load() {
   const mine = ++asked
   if (!data.value) state.value = 'loading'
   try {
-    const res = await API.getStory(period.value, period.value === 'year' ? year.value : 0)
+    const res = await API.getStory(period.value, period.value === 'year' ? year.value : 0, ago.value, firstDay.value)
     if (mine !== asked) return
     const first = !data.value
     data.value = res.data
@@ -541,7 +576,7 @@ async function load() {
     if (mine === asked && !data.value) state.value = 'error'
   }
 }
-watch([year, period], () => {
+watch([year, period, ago, firstDay], () => {
   data.value = null
   at.value = 0
   load()
@@ -578,7 +613,9 @@ const comparison = computed(() => {
   if (period.value === 'year') {
     return { up: pct > 0, text: t(pct > 0 ? 'recap.moreThanLast' : 'recap.lessThanLast', { percent, year: year.value - 1 }) }
   }
-  return { up: pct > 0, text: t(`story.${pct > 0 ? 'more' : 'less'}.${period.value}`, { percent }) }
+  // Last week is compared with the week before it.
+  const which = ago.value ? (pct > 0 ? 'morePrev' : 'lessPrev') : pct > 0 ? 'more' : 'less'
+  return { up: pct > 0, text: t(`story.${which}.${period.value}`, { percent }) }
 })
 // What the story is of: the year, or today, this week, this month by name.
 const startDate = computed(() => {
@@ -592,11 +629,11 @@ const title = computed(() => {
     const name = startDate.value.toLocaleDateString(locale.value || 'en', { month: 'long' })
     return name.charAt(0).toLocaleUpperCase(locale.value || 'en') + name.slice(1)
   }
-  return t(`story.period.${period.value}`)
+  return ago.value ? t(`story.last.${period.value}`) : t(`story.period.${period.value}`)
 })
 const summaryTitle = computed(() => {
   if (period.value === 'year') return t('recap.summaryTitle', { year: year.value })
-  return t(`story.summary.${period.value}`, { month: title.value })
+  return t(`story.${ago.value ? 'summaryPast' : 'summary'}.${period.value}`, { month: title.value })
 })
 // The moments, but the minutes: the story has a page of its own for those.
 const moments = computed(() => ((data.value && data.value.insights) || []).filter((m) => m.kind !== 'minutes').slice(0, 5))
@@ -620,6 +657,8 @@ const weekBars = computed(() => {
   const top = Math.max(1, ...days)
   return Array.from({ length: 7 }, (_, d) => (days[d] || 0) / top)
 })
+// The week's days in the order a week runs where the listener is.
+const weekOrder = computed(() => Array.from({ length: 7 }, (_, k) => (firstDay.value + k) % 7))
 const peakWeekday = computed(() => {
   const days = (data.value && data.value.weekdays) || []
   return days.length ? days.indexOf(Math.max(...days)) : 0
@@ -786,7 +825,7 @@ const PLACE_KEY = 'dn.recapPlace'
 let closing = false
 function remember() {
   try {
-    sessionStorage.setItem(PLACE_KEY, JSON.stringify({ year: year.value, period: period.value, at: at.value, when: Date.now() }))
+    sessionStorage.setItem(PLACE_KEY, JSON.stringify({ year: year.value, period: period.value, ago: ago.value, at: at.value, when: Date.now() }))
   } catch {
     // storage blocked: the story starts at its beginning
   }
@@ -794,7 +833,7 @@ function remember() {
 function recalled() {
   try {
     const place = JSON.parse(sessionStorage.getItem(PLACE_KEY) || 'null')
-    const same = place && place.year === year.value && (place.period || 'year') === period.value
+    const same = place && place.year === year.value && (place.period || 'year') === period.value && (place.ago || 0) === ago.value
     if (same && Date.now() - place.when < 30 * 60 * 1000) return place.at || 0
   } catch {
     // nothing kept
@@ -934,6 +973,43 @@ function startWithMusic() {
   go(1)
   followSlide(true)
 }
+// The summary as a picture (model/shareCard.js, fetched when first asked).
+const sharing = ref('')
+async function shareCard(how) {
+  if (sharing.value || !data.value) return
+  sharing.value = how
+  try {
+    const { drawCard, copyCard, toBase64 } = await import('/src/model/shareCard')
+    const blob = await drawCard({
+      title: summaryTitle.value,
+      eyebrow: t('recap.eyebrow'),
+      hue: PERIOD_HUE[period.value],
+      minutes: number(minutes.value),
+      minutesUnit: t('recap.minutesUnit'),
+      artist: topArtist.value ? { name: topArtist.value.name, picture: artistPicture(topArtist.value, 600) } : null,
+      songs: songRows.value.slice(0, 5).map((r) => r.title),
+      artists: (data.value.top_artists || []).map((a) => a.name),
+      words: {
+        topArtist: t('recap.topArtist'),
+        topSongs: t('recap.topSongs'),
+        topArtists: t('recap.topArtists'),
+        footer: t('recap.cardFooter'),
+      },
+    })
+    if (how === 'copy') {
+      await copyCard(blob)
+      toast(t('recap.shareCopied'), { icon: 'ph:check-circle-fill', tone: 'success' })
+    } else {
+      await API.saveShareImage(summaryTitle.value, await toBase64(blob))
+      toast(t('recap.shareSaved'), { icon: 'ph:check-circle-fill', tone: 'success' })
+    }
+  } catch {
+    toast(t('recap.shareFailed'), { tone: 'error' })
+  } finally {
+    sharing.value = ''
+  }
+}
+
 const playlists = usePlaylists()
 function saveTop() {
   if (!songRows.value.length) return
@@ -967,7 +1043,7 @@ const DAY_PARTS = ['night', 'morning', 'afternoon', 'evening']
 function partText(i) {
   if (period.value === 'year') return monthText(i, 'short')
   if (period.value === 'month') return t('story.weekN', { n: i + 1 })
-  if (period.value === 'week') return weekdayText(i)
+  if (period.value === 'week') return weekdayText((i + firstDay.value) % 7)
   return t(`story.part.${DAY_PARTS[i]}`)
 }
 function weekdayText(d, weekday = 'short') {
@@ -1126,6 +1202,19 @@ function hourShort(h) {
 .recap-period:hover {
   color: #fff;
   background: rgb(255 255 255 / 0.12);
+}
+.recap-period.is-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 4px;
+  box-shadow: inset 1px 0 0 rgb(255 255 255 / 0.18);
+  border-radius: 0 999px 999px 0;
+}
+.recap-period.is-back[aria-pressed='true'] {
+  color: #2b0d4a;
+  background: #fff;
+  border-radius: 999px;
 }
 .recap-period.is-on {
   color: #2b0d4a;
@@ -1758,6 +1847,15 @@ button.recap-month-tile:hover,
   transform-origin: bottom;
   animation: recap-grow 0.6s ease both;
   animation-delay: calc(var(--i) * 40ms);
+}
+/* The card as a picture: round buttons beside the others. */
+.recap-cta.is-icon {
+  width: 46px;
+  padding: 0;
+  justify-content: center;
+}
+.recap-cta:disabled {
+  cursor: progress;
 }
 /* The moments */
 .recap-moments {

@@ -56,6 +56,12 @@ export function loadSupport() {
   return loading
 }
 
+/** Read again: the details can change between releases (support.py). */
+export function refreshSupport() {
+  loading = null
+  return loadSupport()
+}
+
 /**
  * A song listened to for long enough to count: the same rule as History and
  * Stats (see listenMeter.js). Counting every song that started counted every

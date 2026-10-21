@@ -294,13 +294,19 @@ function getMixes() {
 function getRecap(year = 0) {
   return API.get('/api/listens/recap', { params: { year } })
 }
-// Today, this week, this month or a year, told as a story (Backend listens.story).
-function getStory(period = 'year', year = 0) {
-  return API.get('/api/listens/story', { params: { period, year } })
+// Today, this week, this month or a year, or one before (ago: yesterday, last
+// week, last month), told as a story (Backend listens.story). Weeks start on
+// weekStart, Monday 0 to Sunday 6.
+function getStory(period = 'year', year = 0, ago = 0, weekStart = 0) {
+  return API.get('/api/listens/story', { params: { period, year, ago, week_start: weekStart } })
 }
 // All four at a glance, for Home's "Your music lately".
-function getGlance() {
-  return API.get('/api/listens/glance')
+function getGlance(weekStart = 0) {
+  return API.get('/api/listens/glance', { params: { week_start: weekStart } })
+}
+// A picture the window drew (Your Soundtrack's card), saved in Pictures.
+function saveShareImage(name, data) {
+  return API.post('/api/share/image', { name, data })
 }
 function getListenHistory(limit = 100, before = 0) {
   return API.get('/api/listens/history', { params: { limit, before } })
@@ -594,6 +600,7 @@ export default {
   getRecap,
   getStory,
   getGlance,
+  saveShareImage,
   forgetListen,
   clearListens,
   getArtistLinks,

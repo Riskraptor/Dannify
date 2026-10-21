@@ -106,9 +106,9 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
-import { checkingOut, thankedAt, useSupport } from '/src/model/support'
+import { checkingOut, refreshSupport, thankedAt, useSupport } from '/src/model/support'
 import { region } from '/src/model/occasions'
 import { useReporting } from '/src/model/problems'
 import { useUpdates } from '/src/model/updates'
@@ -122,6 +122,8 @@ const { t, locale } = useI18n()
 const Particles = defineAsyncComponent(() => import('/src/components/ui/Particles.vue'))
 const { config: support, giveByKofi, giveByPaypal, gaveByMpesa } = useSupport()
 const reporting = useReporting()
+// The details as they are now: they can change between releases.
+onMounted(refreshSupport)
 const updates = useUpdates()
 
 const mpesa = computed(() => (support.mpesa && support.mpesa.number ? support.mpesa : null))

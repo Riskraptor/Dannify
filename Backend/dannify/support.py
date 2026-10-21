@@ -7,15 +7,23 @@ Set them in one of these, last one wins:
 * ``config/support.json`` next to the exe, shipped with the build;
 * ``support.json`` in the data folder, per user;
 * ``DANNIFY_SUPPORT_LINK`` / ``DANNIFY_SUPPORT_DISABLED`` in the environment.
+
+The PayPal link, the M-Pesa number and the message can also change between
+releases: ``config/support-live.json`` on the repository's main branch, signed
+with the release key (see ``accept_live``).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import threading
+import time
+import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -33,6 +41,137 @@ _DEFAULTS: dict[str, Any] = {
 }
 
 _config: dict[str, Any] = dict(_DEFAULTS)
+
+# ---------------------------------------------------------------------------
+# Changed without a release
+# ---------------------------------------------------------------------------
+# A signed file on the repository's main branch says what the PayPal link,
+# the M-Pesa number and the message are now. It is believed only when it
+# verifies against the release key's public half (updates.PUBLIC_KEY) and is
+# no older than the one already kept: neither a changed file nor an old one
+# put back can send anyone's money somewhere else. Kept in the data folder,
+# signature and all, so it holds offline and is checked again at every start.
+LIVE_NAME = 'support-live.json'
+LIVE_KIND = 'support'
+LIVE_FIELDS = ('paypal', 'mpesa', 'message')
+LIVE_EVERY = 12 * 3600
+_live: dict[str, Any] = {}
+_live_dir: Optional[Path] = None
+_live_lock = threading.Lock()
+
+
+def accept_live(raw: bytes, signature: str, public_hex: str, newer_than: int = 0) -> Optional[dict[str, Any]]:
+    """The details in *raw*, if *signature* is the release key's over them and
+    their version is not older than *newer_than*; else None."""
+
+    from . import signing
+
+    try:
+        data = json.loads(raw.decode('utf-8'))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    version = data.get('version')
+    if not isinstance(version, int) or isinstance(version, bool) or version < max(1, newer_than):
+        return None
+    digest = hashlib.sha256(raw).hexdigest()
+    if not signing.verify_release(public_hex, LIVE_KIND, str(version), digest, signature):
+        return None
+    out = {k: data[k] for k in LIVE_FIELDS if k in data}
+    out['version'] = version
+    return out
+
+
+def _live_files() -> tuple[Optional[Path], Optional[Path]]:
+    if _live_dir is None:
+        return None, None
+    from . import signing
+
+    path = _live_dir / LIVE_NAME
+    return path, path.with_name(path.name + signing.SIGNATURE_SUFFIX)
+
+
+def _load_kept_live() -> None:
+    from . import updates
+
+    path, sig = _live_files()
+    if path is None:
+        return
+    try:
+        raw, signature = path.read_bytes(), sig.read_text(encoding='utf-8')
+    except OSError:
+        return
+    found = accept_live(raw, signature, updates.PUBLIC_KEY)
+    with _live_lock:
+        _live.clear()
+        if found:
+            _live.update(found)
+
+
+def refresh_live() -> bool:
+    """Fetch the signed details from the repository; keep them if they are
+    good and at least as new as what is kept. Whether they changed."""
+
+    from . import signing, updates
+
+    path, sig = _live_files()
+    if path is None or not updates.PUBLIC_KEY:
+        return False
+    base = f'https://raw.githubusercontent.com/{updates.repo()}/main/config/{LIVE_NAME}'
+
+    def get(url: str) -> bytes:
+        request = urllib.request.Request(url, headers={'User-Agent': 'Dannify', 'Cache-Control': 'no-cache'})
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return response.read(64 * 1024)
+
+    try:
+        raw = get(base)
+        signature = get(base + signing.SIGNATURE_SUFFIX).decode('utf-8', 'replace')
+    except Exception as exc:
+        logger.debug('support details not fetched: {}', exc)
+        return False
+    with _live_lock:
+        kept = int(_live.get('version') or 0)
+    found = accept_live(raw, signature, updates.PUBLIC_KEY, newer_than=kept)
+    if not found:
+        logger.warning('support details on {} were not accepted', base)
+        return False
+    if found == {k: v for k, v in _live.items()}:
+        return False
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+        sig.write_text(signature, encoding='utf-8')
+    except OSError:
+        logger.opt(exception=True).debug('support details not kept')
+    with _live_lock:
+        _live.clear()
+        _live.update(found)
+    logger.info('support details {} in use', found['version'])
+    return True
+
+
+def start_live_refresh() -> None:
+    """Look for new details now and twice a day, in the background."""
+
+    def loop() -> None:
+        while True:
+            try:
+                refresh_live()
+            except Exception:
+                logger.opt(exception=True).debug('support details check failed')
+            time.sleep(LIVE_EVERY)
+
+    threading.Thread(target=loop, name='support-live', daemon=True).start()
+
+
+def _current() -> dict[str, Any]:
+    """The settings in force: the built-in ones, the signed details over them."""
+
+    with _live_lock:
+        live = {k: v for k, v in _live.items() if k in LIVE_FIELDS}
+    return {**_config, **live}
 
 
 def config_paths(data_dir: Path, name: str) -> list[Path]:
@@ -78,6 +217,9 @@ def init(data_dir: Path) -> None:
 
     _config.clear()
     _config.update(config)
+    global _live_dir
+    _live_dir = Path(data_dir)
+    _load_kept_live()
 
 
 def configured() -> bool:
@@ -88,8 +230,9 @@ def configured() -> bool:
 def _mpesa() -> dict[str, str]:
     """The M-Pesa way to pay, checked: digits only, a kind M-Pesa has."""
 
-    raw = _config.get('mpesa') or {}
-    if not isinstance(raw, dict) or not _config.get('enabled'):
+    current = _current()
+    raw = current.get('mpesa') or {}
+    if not isinstance(raw, dict) or not current.get('enabled'):
         return {}
     kind = str(raw.get('kind') or '').strip().lower()
     number = re.sub(r'\D', '', str(raw.get('number') or ''))
@@ -102,8 +245,9 @@ def _mpesa() -> dict[str, str]:
 
 
 def _paypal_link() -> str:
-    raw = str(_config.get('paypal') or '').strip()
-    if not _config.get('enabled') or not raw:
+    current = _current()
+    raw = str(current.get('paypal') or '').strip()
+    if not current.get('enabled') or not raw:
         return ''
     # A payment link made in PayPal: a checkout of its own, kept as it is.
     link = re.fullmatch(r'https://www\.paypal\.com/ncp/payment/([A-Z0-9][A-Z0-9-]{5,40})/?', raw)
@@ -123,7 +267,7 @@ def config() -> dict[str, Any]:
         'enabled': bool(_config.get('enabled')),
         'configured': configured(),
         'link': _config.get('link', ''),
-        'message': _config.get('message', ''),
+        'message': str(_current().get('message') or '')[:300],
         'mpesa': _mpesa(),
         'paypal_link': _paypal_link(),
     }

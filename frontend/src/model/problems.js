@@ -2,6 +2,9 @@ import { reactive, ref } from 'vue'
 import API from '/src/model/api'
 import router from '/src/router'
 import { ensureFullWindow } from '/src/desktop/fullWindow'
+import { t } from '/src/i18n'
+import { toast } from '/src/model/toast'
+import { useConnectivity, whenOnline } from '/src/model/connectivity'
 
 // Errors nobody caught, in the page: written to the app's log, where a
 // problem report picks them up. They used to go to a console nobody can open
@@ -72,6 +75,8 @@ export function installErrorReporting(app) {
 const status = reactive({ loaded: false, enabled: false, pending: 0, captcha: null })
 const dialogOpen = ref(false)
 const kind = ref('') // what the dialog opens on: 'idea' from "Share an idea"
+// A report written while offline, opened again to be sent: {email, url}.
+const held = ref(null)
 let loading = null
 
 function loadStatus() {
@@ -131,32 +136,92 @@ async function send(payload, captcha = '') {
       await emailIt(email, data.url)
       return { id: data.id, status: 'sent' }
     } catch (err) {
-      // A solved check lasts minutes, so a report that carries one cannot
-      // wait for later: the dialog keeps what was written and says why.
-      if (captcha || err.status) throw err
-      // Offline, most likely: kept, and sent when Dannify next starts.
+      // Refused by the form: the dialog says so, and keeps what was written.
+      if (err.status) throw err
+      // Offline, most likely: kept. A solved check lasts minutes, so one the
+      // form asks for is passed again then: Dannify asks once it is back
+      // online, and the person sends it with a slide (offerHeld).
       console.warn('[report] not sent now, kept for later', err)
-      await API.holdReport(data.email).catch(() => {})
+      const preview = String(payload.description || '').trim().slice(0, 400)
+      await API.holdReport({ ...data.email, held_preview: preview, held_at: Date.now() }).catch(() => {})
       status.pending += 1
-      return { id: data.id, status: 'queued' }
+      if (captcha) offerWhenBack()
+      return { id: data.id, status: 'queued', needsYou: !!captcha }
     }
   }
   if (data.status === 'queued') status.pending += 1
   return data
 }
 
-/** What could not go before, sent now: once, a little after the app starts. */
+// What a kept email carries for Dannify's own use, not for the inbox.
+function forInbox(email) {
+  return Object.fromEntries(Object.entries(email || {}).filter(([k]) => !k.startsWith('held_')))
+}
+
+// Back online after a report was kept: asked about once the connection is.
+let waitingToOffer = false
+async function offerWhenBack() {
+  if (waitingToOffer) return
+  waitingToOffer = true
+  const online = await useConnectivity().probe().catch(() => false)
+  if (online) {
+    // The connection is there and the send still failed: asked again at the
+    // next start rather than at once.
+    waitingToOffer = false
+    return
+  }
+  whenOnline(() => {
+    waitingToOffer = false
+    sendHeldReports()
+  })
+}
+
+/** "Your report is ready to send": a toast that opens it, for one slide. */
+function offerHeld(list) {
+  const email = list.emails[0]
+  toast(t('problems.heldReady', { count: list.emails.length }), {
+    icon: 'ph:paper-plane-tilt',
+    timeout: 20000,
+    key: 'held-report',
+    action: {
+      label: t('problems.heldSend'),
+      run: () => {
+        held.value = { email, url: list.url }
+        openReport()
+      },
+    },
+  })
+}
+
+/** Send the kept report the dialog has open, with the check just passed. */
+async function sendHeld(captcha = '') {
+  const { email, url } = held.value || {}
+  if (!email) throw new Error('nothing kept')
+  await emailIt(captcha ? { ...forInbox(email), 'h-captcha-response': captcha } : forInbox(email), url)
+  await API.reportDone(email.report_id).catch(() => {})
+  status.pending = Math.max(0, status.pending - 1)
+  return { id: email.report_id, status: 'sent' }
+}
+
+/** What could not go before, sent now: once, a little after the app starts.
+ * When the form asks for a check, they cannot go by themselves: Dannify asks. */
 export async function sendHeldReports() {
   let list
   try {
+    await loadStatus()
     list = (await API.heldReports()).data || {}
   } catch {
+    return 0
+  }
+  if (!(list.emails || []).length) return 0
+  if (status.captcha) {
+    offerHeld(list)
     return 0
   }
   let sent = 0
   for (const email of list.emails || []) {
     try {
-      await emailIt(email, list.url)
+      await emailIt(forInbox(email), list.url)
     } catch (err) {
       // Refused (the form now wants a check it does not carry): let go,
       // or it would be tried at every start. Offline: the rest can wait too.
@@ -175,5 +240,5 @@ export async function sendHeldReports() {
 
 export function useReporting() {
   if (!status.loaded) loadStatus()
-  return { status, dialogOpen, kind, loadStatus, openReport, send }
+  return { status, dialogOpen, kind, held, loadStatus, openReport, send, sendHeld }
 }

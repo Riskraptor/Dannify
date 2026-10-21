@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import en from '../i18n/locales/en.js'
+import enCore from '../i18n/locales/en.js'
+import enMore from '../i18n/locales/en-more.js'
+
+// English is in two files (i18n/locales/en-more.js): whole here.
+const en = { ...enCore, ...enMore }
 
 // Every t('key', { ... }) in the app gives each {placeholder} its English text
 // has. One given under another name ({ n } for "{count} s") showed "{count} s"

@@ -655,17 +655,25 @@ def _next_month(day: date) -> date:
     return date(day.year + 1, 1, 1) if day.month == 12 else date(day.year, day.month + 1, 1)
 
 
-def _bounds(period: str, today: date, year: Optional[int] = None) -> tuple[date, date, date]:
+def _bounds(
+    period: str, today: date, year: Optional[int] = None, ago: int = 0, week_start: int = 0
+) -> tuple[date, date, date]:
     """Where a stretch starts and ends (end not included), and where the one
-    before it starts: today; this week, Monday first; this month; a year."""
+    before it starts: today; this week, from the day weeks start where the
+    listener is (``week_start``, Monday 0 to Sunday 6); this month; a year.
+    ``ago`` steps back that many stretches: yesterday, last week, last month."""
 
+    ago = max(0, int(ago or 0))
     if period == 'day':
-        return today, today + timedelta(days=1), today - timedelta(days=1)
+        day = today - timedelta(days=ago)
+        return day, day + timedelta(days=1), day - timedelta(days=1)
     if period == 'week':
-        start = today - timedelta(days=today.weekday())
+        start = today - timedelta(days=(today.weekday() - week_start) % 7) - timedelta(days=7 * ago)
         return start, start + timedelta(days=7), start - timedelta(days=7)
     if period == 'month':
         start = _month_start(today)
+        for _ in range(ago):
+            start = _month_start(start - timedelta(days=1))
         return start, _next_month(start), _month_start(start - timedelta(days=1))
     y = year or today.year
     return date(y, 1, 1), date(y + 1, 1, 1), date(y - 1, 1, 1)
@@ -704,10 +712,17 @@ def _chart_size(period: str, start: date, end: date) -> int:
     return {'year': 12, 'week': 7, 'day': 24}.get(period, (end - start).days)
 
 
-def story(period: str = 'year', year: Optional[int] = None, now: Optional[float] = None) -> dict[str, Any]:
+def story(
+    period: str = 'year',
+    year: Optional[int] = None,
+    now: Optional[float] = None,
+    ago: int = 0,
+    week_start: int = 0,
+) -> dict[str, Any]:
     """A stretch of listening told as a story: today, this week, this month,
-    or a year. What was played most, when, how it compares with the stretch
-    before, and the moments worth saying (``insights``), the strongest first."""
+    or a year, or one before (``ago``: yesterday, last week, last month).
+    What was played most, when, how it compares with the stretch before, and
+    the moments worth saying (``insights``), the strongest first."""
 
     if period not in PERIODS:
         period = 'year'
@@ -716,12 +731,16 @@ def story(period: str = 'year', year: Optional[int] = None, now: Optional[float]
         _load()
         plays = list(_plays)
         songs = dict(_songs)
-    return _story(plays, songs, period, year, now)
+    return _story(plays, songs, period, year, now, ago, week_start)
 
 
-def _story(plays, songs, period: str, year: Optional[int], now: float) -> dict[str, Any]:
+def _story(
+    plays, songs, period: str, year: Optional[int], now: float, ago: int = 0, week_start: int = 0
+) -> dict[str, Any]:
     today = date.fromtimestamp(now)
-    start_day, end_day, prev_day = _bounds(period, today, year)
+    week_start = int(week_start or 0) % 7
+    ago = 0 if period == 'year' else max(0, min(int(ago or 0), 60))
+    start_day, end_day, prev_day = _bounds(period, today, year, ago, week_start)
     start, end, prev_start = _day_start(start_day), _day_start(end_day), _day_start(prev_day)
     years = sorted({date.fromtimestamp(p[0]).year for p in plays}, reverse=True)
     lo = bisect.bisect_left(plays, (start, -1, ''))
@@ -787,6 +806,8 @@ def _story(plays, songs, period: str, year: Optional[int], now: float) -> dict[s
     before = {'seconds': sum(sec for _at, sec, _k in previous), 'plays': len(previous)}
     out = {
         'period': period,
+        'ago': ago,
+        'week_start': week_start,
         'start': start_day.isoformat(),
         'end': end_day.isoformat(),
         'year': start_day.year,
@@ -967,7 +988,7 @@ def _insights(plays, songs, period, d, chosen, previous, history, by_artist, by_
     return found[:8]
 
 
-def glance(now: Optional[float] = None) -> dict[str, Any]:
+def glance(now: Optional[float] = None, week_start: int = 0) -> dict[str, Any]:
     """Today, this week, this month and this year at a glance: for Home's
     "Your music lately", each with its minutes, its bars and its best moments."""
 
@@ -983,7 +1004,7 @@ def glance(now: Optional[float] = None) -> dict[str, Any]:
     said: set[str] = set()
     once = {'streak', 'record_day', 'every_day', 'comeback', 'repeat', 'milestone_hours', 'milestone_plays'}
     for period in PERIODS:
-        d = _story(plays, songs, period, None, now)
+        d = _story(plays, songs, period, None, now, 0, week_start)
         moments = [f for f in d['insights'] if f['kind'] not in said]
         said |= {f['kind'] for f in moments[:3] if f['kind'] in once}
         out[period] = {

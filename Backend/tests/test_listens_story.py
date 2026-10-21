@@ -257,3 +257,36 @@ def test_glance_tells_a_record_once():
     g = listens.glance(now=NOW)
     told = [p for p in g if any(f['kind'] == 'record_day' for f in g[p]['insights'])]
     assert told == ['day']
+
+
+def test_last_week_and_yesterday_and_last_month():
+    play(1, when(2026, 10, 14, 12))  # last week, Wednesday
+    play(2, when(2026, 10, 19, 12))  # yesterday (Monday)
+    play(3, when(2026, 9, 3, 12))  # last month
+    week = listens.story('week', now=NOW, ago=1)
+    assert (week['start'], week['end'], week['plays'], week['ago']) == ('2026-10-12', '2026-10-19', 1, 1)
+    day = listens.story('day', now=NOW, ago=1)
+    assert (day['start'], day['plays']) == ('2026-10-19', 1)
+    month = listens.story('month', now=NOW, ago=1)
+    assert (month['start'], month['end'], month['plays']) == ('2026-09-01', '2026-10-01', 1)
+
+
+def test_a_finished_stretch_has_no_running_streak():
+    for day in range(12, 19):
+        play(day, when(2026, 10, day, 9))
+    week = listens.story('week', now=NOW, ago=1)
+    assert 'streak' not in kinds(week)
+    assert find(week, 'every_day')['days'] == 7
+
+
+def test_weeks_start_where_the_listener_is():
+    # Sunday the 18th: in a Sunday-first week with the 20th, not in a Monday one.
+    play(1, when(2026, 10, 18, 12))
+    monday_first = listens.story('week', now=NOW)
+    sunday_first = listens.story('week', now=NOW, week_start=6)
+    assert monday_first['start'] == '2026-10-19' and monday_first['plays'] == 0
+    assert sunday_first['start'] == '2026-10-18' and sunday_first['plays'] == 1
+    assert sunday_first['week_start'] == 6
+    # Each part of the week is a day from the week's own first day.
+    assert sunday_first['parts'][0]['name'] == 'Sauti Sol'
+    assert listens.glance(now=NOW, week_start=6)['week']['plays'] == 1

@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { PERIODS, momentIcon, momentText } from '../model/moments.js'
-import en from '../i18n/locales/en.js'
+import enCore from '../i18n/locales/en.js'
+import enMore from '../i18n/locales/en-more.js'
 import fr from '../i18n/locales/fr.js'
 import es from '../i18n/locales/es.js'
 import pt from '../i18n/locales/pt.js'
 import de from '../i18n/locales/de.js'
 import sw from '../i18n/locales/sw.js'
+
+// English is in two files (i18n/locales/en-more.js): whole here.
+const en = { ...enCore, ...enMore }
 
 // Every moment Backend listens._insights can find, said in every language:
 // a sentence with its numbers and names in it, never a key or a {gap}.
@@ -56,6 +60,14 @@ describe.each(Object.entries({ en, fr, es, pt, de, sw }))('moments in %s', (_cod
       expect(text.length, m.kind).toBeGreaterThan(8)
     }
   })
+  it('says last week against the week before it', () => {
+    for (const period of ['day', 'week', 'month']) {
+      const text = momentText({ kind: 'more', percent: 40 }, period, t, { ago: 1 })
+      expect(text).not.toMatch(/[{}]|^story\./)
+      expect(text).not.toBe(momentText({ kind: 'more', percent: 40 }, period, t))
+    }
+  })
+
   it('names the song, the artist and the numbers', () => {
     expect(momentText({ kind: 'repeat', song: SONG, plays: 5 }, 'day', t)).toContain('Calm Down')
     expect(momentText({ kind: 'climber', artist: 'Bensoul', from: 9, rank: 1 }, 'week', t)).toContain('Bensoul')

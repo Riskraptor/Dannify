@@ -13,8 +13,9 @@ Settings worth opening.
   each with its minutes and its best moments, and each opening its own
   story.
 - **Your Soundtrack.** Your year in music, renamed and alive, now with
-  stories for today, this week and this month too. Everything in it plays
-  at a click.
+  stories for today, this week and this month too, and the ones just gone.
+  Everything in it plays at a click, and its card can be shared as a
+  picture.
 - **Hello, by name.** Signed in to YouTube, Dannify greets you by your first
   name.
 - **Updating, kindly.** Dannify comes back from an update playing right

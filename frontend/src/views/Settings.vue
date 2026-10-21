@@ -100,47 +100,47 @@
         </p>
 
         <!-- Accounts: what Dannify is connected to -->
-        <SettingsAccount v-show="showPane('accounts')" :style="paneStyle('accounts')" @vue:updated="onSectionUpdated" />
-        <SettingsListenBrainz v-show="showPane('accounts')" :style="paneStyle('accounts')" @vue:updated="onSectionUpdated" />
+        <SettingsAccount v-if="has('accounts')" v-show="showPane('accounts')" :style="paneStyle('accounts')" @vue:updated="onSectionUpdated" />
+        <SettingsListenBrainz v-if="has('accounts')" v-show="showPane('accounts')" :style="paneStyle('accounts')" @vue:updated="onSectionUpdated" />
 
         <!-- General: the language, then the system (closing to the tray,
              starting at login, shortcuts) -->
-        <SettingsLanguage v-show="showPane('general')" :style="paneStyle('general')" @vue:updated="onSectionUpdated" />
-        <SettingsSystem v-if="desktop.isDesktop" v-show="showPane('general')" :style="paneStyle('general')" @vue:updated="onSectionUpdated" />
+        <SettingsLanguage v-if="has('general')" v-show="showPane('general')" :style="paneStyle('general')" @vue:updated="onSectionUpdated" />
+        <SettingsSystem v-if="desktop.isDesktop && has('general')" v-show="showPane('general')" :style="paneStyle('general')" @vue:updated="onSectionUpdated" />
 
         <!-- Appearance -->
-        <SettingsAppearance v-show="showPane('appearance')" class="is-pane-named" :style="paneStyle('appearance')" @vue:updated="onSectionUpdated" />
+        <SettingsAppearance v-if="has('appearance')" v-show="showPane('appearance')" class="is-pane-named" :style="paneStyle('appearance')" @vue:updated="onSectionUpdated" />
         <!-- Special days -->
-        <SettingsSpecialDays v-show="showPane('days')" class="is-pane-named" :style="paneStyle('days')" @vue:updated="onSectionUpdated" />
+        <SettingsSpecialDays v-if="has('days')" v-show="showPane('days')" class="is-pane-named" :style="paneStyle('days')" @vue:updated="onSectionUpdated" />
 
         <!-- Playback -->
-        <SettingsPlayback v-show="showPane('playback')" class="is-pane-named" :style="paneStyle('playback')" @vue:updated="onSectionUpdated" />
+        <SettingsPlayback v-if="has('playback')" v-show="showPane('playback')" class="is-pane-named" :style="paneStyle('playback')" @vue:updated="onSectionUpdated" />
 
         <!-- Sound: loudness, equalizer, balance, output -->
-        <SettingsSound v-show="showPane('sound')" class="is-pane-named" :style="paneStyle('sound')" @vue:updated="onSectionUpdated" />
+        <SettingsSound v-if="has('sound')" v-show="showPane('sound')" class="is-pane-named" :style="paneStyle('sound')" @vue:updated="onSectionUpdated" />
 
         <!-- What the app remembers of what was played -->
-        <SettingsHistory v-show="showPane('playback')" :style="paneStyle('playback')" @vue:updated="onSectionUpdated" />
+        <SettingsHistory v-if="has('playback')" v-show="showPane('playback')" :style="paneStyle('playback')" @vue:updated="onSectionUpdated" />
 
         <!-- Library -->
-        <SettingsLibrary v-show="showPane('library')" :style="paneStyle('library')" @vue:updated="onSectionUpdated" />
+        <SettingsLibrary v-if="has('library')" v-show="showPane('library')" :style="paneStyle('library')" @vue:updated="onSectionUpdated" />
 
         <!-- Downloads. How a saved song is kept is the app's business, not a
              setting or something to explain: format, quality and playlist
              files are not offered. -->
-        <SettingsDownloads v-show="showPane('library')" :style="paneStyle('library')" @vue:updated="onSectionUpdated" />
+        <SettingsDownloads v-if="has('library')" v-show="showPane('library')" :style="paneStyle('library')" @vue:updated="onSectionUpdated" />
 
         <!-- Storage -->
-        <SettingsStorage v-show="showPane('library')" :style="paneStyle('library')" @vue:updated="onSectionUpdated" />
+        <SettingsStorage v-if="has('library')" v-show="showPane('library')" :style="paneStyle('library')" @vue:updated="onSectionUpdated" />
 
         <!-- Lyrics -->
-        <SettingsLyrics v-show="showPane('lyrics')" class="is-pane-named" :style="paneStyle('lyrics')" @vue:updated="onSectionUpdated" />
+        <SettingsLyrics v-if="has('lyrics')" v-show="showPane('lyrics')" class="is-pane-named" :style="paneStyle('lyrics')" @vue:updated="onSectionUpdated" />
 
         <!-- Support -->
-        <SettingsSupport v-show="showPane('support')" class="is-pane-named" :style="paneStyle('support')" @vue:updated="onSectionUpdated" />
+        <SettingsSupport v-if="has('support')" v-show="showPane('support')" class="is-pane-named" :style="paneStyle('support')" @vue:updated="onSectionUpdated" />
 
         <!-- About -->
-        <SettingsAbout v-show="showPane('about')" class="is-pane-named" :style="paneStyle('about')" @vue:updated="onSectionUpdated" />
+        <SettingsAbout v-if="has('about')" v-show="showPane('about')" class="is-pane-named" :style="paneStyle('about')" @vue:updated="onSectionUpdated" />
       </div>
     </div>
   </div>
@@ -148,7 +148,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUpdated, onBeforeUnmount, nextTick, provide } from 'vue'
+import { ref, computed, watch, onUpdated, onBeforeUnmount, nextTick, provide, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useSettingsManager } from '/src/model/settings'
@@ -249,6 +249,37 @@ watch(
   }
 )
 const current = computed(() => panes.value.find((p) => p.id === pane.value) || panes.value[0])
+
+// Only the pane on screen is built when Settings opens; the others follow in
+// the moments the computer has nothing else to do, one at a time, and a
+// search builds them all at once. Building all fifteen up front held a slow
+// laptop for the best part of half a second.
+const built = reactive(new Set([pane.value]))
+function has(id) {
+  return searching.value || built.has(id)
+}
+watch(pane, (id) => built.add(id))
+let idleId = 0
+const idle = typeof requestIdleCallback === 'function' ? requestIdleCallback : (fn) => setTimeout(fn, 120)
+const unidle = typeof cancelIdleCallback === 'function' ? cancelIdleCallback : clearTimeout
+function buildRest() {
+  const next = panes.value.map((p) => p.id).find((id) => !built.has(id))
+  if (!next) return
+  idleId = idle(
+    () => {
+      built.add(next)
+      buildRest()
+    },
+    { timeout: 2000 }
+  )
+}
+onMounted(() => {
+  idleId = setTimeout(buildRest, 400)
+})
+onBeforeUnmount(() => {
+  clearTimeout(idleId)
+  unidle(idleId)
+})
 
 // ----- Search -------------------------------------------------------------
 // Typing looks through every pane at once and keeps only the rows that

@@ -55,6 +55,7 @@ import API from '/src/model/api'
 import { coverURL } from '/src/model/playlists'
 import { listensEpoch } from '/src/model/listens'
 import { PERIODS, momentIcon, momentText } from '/src/model/moments'
+import { dayOfWeek, weekStart } from '/src/model/weekStart'
 import { away } from '/src/model/power'
 import { useI18n } from '/src/i18n'
 import CoverImage from '/src/components/ui/CoverImage.vue'
@@ -73,14 +74,14 @@ let asked = 0
 async function load() {
   const mine = ++asked
   try {
-    const res = await API.getGlance()
+    const res = await API.getGlance(weekStart.value)
     if (mine === asked) data.value = res.data
   } catch {
     // Not now: the tiles just are not there.
   }
 }
 load()
-watch(listensEpoch, load)
+watch([listensEpoch, weekStart], load)
 onActivated(load)
 
 // Each tile's moments take turns, from a different one each visit, and stay
@@ -149,7 +150,7 @@ function bars(p) {
 function nowIndex(p) {
   const d = new Date()
   if (p === 'day') return d.getHours()
-  if (p === 'week') return (d.getDay() + 6) % 7
+  if (p === 'week') return dayOfWeek(d)
   if (p === 'month') return d.getDate() - 1
   return d.getMonth()
 }
