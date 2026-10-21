@@ -20,12 +20,12 @@ def _load(*names: str) -> dict:
 
 def test_only_paypal_checkouts_open_in_the_window():
     allowed = _load('_ALLOWED', 'allowed')['allowed']
-    assert allowed('https://www.paypal.com/ncp/payment/PLB-LCYXAHFS4UA3')
+    assert allowed('https://www.paypal.com/ncp/payment/PLB-WVTSZMLQNTLQ')
     assert allowed('https://www.paypal.com/paypalme/dkavangi')
     for url in (
-        'http://www.paypal.com/ncp/payment/PLB-LCYXAHFS4UA3',
-        'https://www.paypal.com.evil.example/ncp/payment/PLB-LCYXAHFS4UA3',
-        'https://evil.example/?https://www.paypal.com/ncp/payment/PLB-LCYXAHFS4UA3',
+        'http://www.paypal.com/ncp/payment/PLB-WVTSZMLQNTLQ',
+        'https://www.paypal.com.evil.example/ncp/payment/PLB-WVTSZMLQNTLQ',
+        'https://evil.example/?https://www.paypal.com/ncp/payment/PLB-WVTSZMLQNTLQ',
         'https://www.paypal.com/signin',
         'javascript:alert(1)',
         '',
@@ -37,7 +37,7 @@ def test_paying_is_seen_by_the_thank_you_address():
     prefixes = _load('RETURN_PREFIXES')['RETURN_PREFIXES']
     assert 'https://riskraptor.github.io/Dannify/thanks/'.startswith(prefixes)
     assert 'https://github.com/Riskraptor/Dannify'.startswith(prefixes)
-    assert not 'https://www.paypal.com/ncp/payment/PLB-LCYXAHFS4UA3'.startswith(prefixes)
+    assert not 'https://www.paypal.com/ncp/payment/PLB-WVTSZMLQNTLQ'.startswith(prefixes)
     assert not 'https://riskraptor.github.io/Dannify/'.startswith(prefixes)
 
 
