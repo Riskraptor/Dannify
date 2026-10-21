@@ -869,6 +869,15 @@ export default {
     doneTitle: 'Tudo pronto',
     doneText: 'Busque uma música, um artista ou uma playlist para começar.',
   },
+  brb: {
+    title: 'Já volto!',
+    text: 'Desculpe a espera. O Dannify está vestindo a versão nova; leva só um instante.',
+    textPlaying: 'Desculpe a pausinha. O Dannify está vestindo a versão nova, e {title} continua exatamente de onde parou.',
+    welcomeA: 'Tcharam! Um Dannify novinho, e {title} continua tocando.',
+    welcomeB: 'De volta, de cara nova. {title} nunca parou de verdade.',
+    welcomeC: 'Recém-atualizado e ainda afinado: aqui está {title} de novo.',
+    welcomeIdle: 'Tcharam! Um Dannify novinho, pronto quando você estiver.',
+  },
   update: {
     welcomeEyebrow: 'Um novo Dannify',
     welcomeTitle: 'Boas-vindas ao Dannify {version}',
@@ -918,15 +927,6 @@ export default {
     fixedHeading: 'Corrigido',
     gotIt: 'Entendi',
     rolledBack: 'O Dannify {version} não abriu neste computador, então você voltou para a {running}. Ela não será oferecida de novo; a próxima versão será.',
-  },
-  restart: {
-    title: 'Reiniciar o Dannify?',
-    detail: 'A reprodução para por um instante. Sua fila e sua biblioteca não são tocadas.',
-    now: 'Reiniciar agora',
-    later: 'Depois',
-    deferred: 'A mudança vale na próxima vez que o Dannify iniciar.',
-    failed: 'Não foi possível reiniciar automaticamente. Feche e abra o Dannify de novo.',
-    reloadInstead: 'Recarregue a página para aplicar esta mudança.',
   },
   support: {
     title: 'Apoio',

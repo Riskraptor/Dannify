@@ -869,6 +869,15 @@ export default {
     doneTitle: 'Alles bereit',
     doneText: 'Suchen Sie einen Song, einen Künstler oder eine Playlist, um anzufangen.',
   },
+  brb: {
+    title: 'Bin gleich zurück!',
+    text: 'Entschuldigen Sie das Warten. Dannify schlüpft in seine neue Version; das dauert nur einen Moment.',
+    textPlaying: 'Entschuldigen Sie die kurze Pause. Dannify schlüpft in seine neue Version, und {title} spielt genau dort weiter, wo es aufgehört hat.',
+    welcomeA: 'Tada! Ein brandneues Dannify, und {title} spielt weiter.',
+    welcomeB: 'Zurück, frisch herausgeputzt. {title} hat nie wirklich aufgehört.',
+    welcomeC: 'Frisch aktualisiert und noch immer im Takt: Hier ist wieder {title}.',
+    welcomeIdle: 'Tada! Ein brandneues Dannify, bereit, wenn Sie es sind.',
+  },
   update: {
     welcomeEyebrow: 'Ein neues Dannify',
     welcomeTitle: 'Willkommen bei Dannify {version}',
@@ -918,15 +927,6 @@ export default {
     fixedHeading: 'Behoben',
     gotIt: 'Verstanden',
     rolledBack: 'Dannify {version} hat auf diesem Computer nicht geöffnet, deshalb sind Sie wieder auf {running}. Diese Version wird nicht erneut angeboten, die nächste schon.',
-  },
-  restart: {
-    title: 'Dannify neu starten?',
-    detail: 'Die Wiedergabe stoppt kurz. Ihre Warteschlange und Bibliothek bleiben unberührt.',
-    now: 'Jetzt neu starten',
-    later: 'Später',
-    deferred: 'Die Änderung gilt ab dem nächsten Start von Dannify.',
-    failed: 'Der automatische Neustart hat nicht geklappt. Schließen Sie Dannify und öffnen Sie es neu.',
-    reloadInstead: 'Laden Sie die Seite neu, um diese Änderung anzuwenden.',
   },
   support: {
     title: 'Unterstützen',

@@ -903,6 +903,15 @@ export default {
     doneTitle: 'Tout est prêt',
     doneText: 'Cherchez un titre, un artiste ou une playlist pour commencer.',
   },
+  brb: {
+    title: 'Je reviens tout de suite !',
+    text: 'Désolé pour l’attente. Dannify enfile sa nouvelle version ; c’est l’affaire d’un instant.',
+    textPlaying: 'Désolé pour la petite pause. Dannify enfile sa nouvelle version, et {title} reprend là où il s’est arrêté.',
+    welcomeA: 'Et voilà ! Un tout nouveau Dannify, et {title} continue.',
+    welcomeB: 'De retour, avec un coup de neuf. {title} ne s’est jamais vraiment arrêté.',
+    welcomeC: 'Tout juste mis à jour et toujours dans le ton : revoici {title}.',
+    welcomeIdle: 'Et voilà ! Un tout nouveau Dannify, prêt quand vous l’êtes.',
+  },
   update: {
     welcomeEyebrow: 'Un nouveau Dannify',
     welcomeTitle: 'Bienvenue dans Dannify {version}',
@@ -953,15 +962,6 @@ export default {
     rolledBack:
       "Dannify {version} n'a pas pu démarrer sur cet ordinateur : vous êtes revenu à la version {running}. Elle ne sera plus proposée ; la suivante le sera.",
     gotIt: 'Compris',
-  },
-  restart: {
-    title: 'Redémarrer Dannify ?',
-    detail: "La lecture s'interrompt un instant. Votre file d'attente et votre bibliothèque sont intactes.",
-    now: 'Redémarrer',
-    later: 'Plus tard',
-    deferred: 'Le changement sera appliqué au prochain démarrage de Dannify.',
-    failed: 'Redémarrage automatique impossible. Fermez puis rouvrez Dannify.',
-    reloadInstead: 'Rechargez la page pour appliquer ce changement.',
   },
   support: {
     title: 'Soutien',

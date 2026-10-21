@@ -869,6 +869,15 @@ export default {
     doneTitle: 'Uko tayari',
     doneText: 'Tafuta wimbo, msanii au orodha ya nyimbo ili kuanza.',
   },
+  brb: {
+    title: 'Narudi sasa hivi!',
+    text: 'Samahani kwa kusubiri. Dannify inavaa toleo lake jipya; ni kwa muda mfupi tu.',
+    textPlaying: 'Samahani kwa kusimama kidogo. Dannify inavaa toleo lake jipya, na {title} itaendelea pale pale ilipoishia.',
+    welcomeA: 'Ta-da! Dannify mpya kabisa, na {title} inaendelea kucheza.',
+    welcomeB: 'Tumerudi, tukiwa wapya. {title} haikuwahi kusimama kweli.',
+    welcomeC: 'Imesasishwa na bado iko kwenye mdundo: hii hapa {title} tena.',
+    welcomeIdle: 'Ta-da! Dannify mpya kabisa, iko tayari ukiwa tayari.',
+  },
   update: {
     welcomeEyebrow: 'Dannify mpya',
     welcomeTitle: 'Karibu Dannify {version}',
@@ -918,15 +927,6 @@ export default {
     fixedHeading: 'Kilichorekebishwa',
     gotIt: 'Nimeelewa',
     rolledBack: 'Dannify {version} haikuanza kwenye kompyuta hii, kwa hiyo umerudi kwenye {running}. Haitatolewa tena; toleo linalofuata litatolewa.',
-  },
-  restart: {
-    title: 'Anzisha Dannify upya?',
-    detail: 'Uchezaji unasimama kwa muda mfupi. Foleni yako na maktaba yako haviguswi.',
-    now: 'Anzisha upya sasa',
-    later: 'Baadaye',
-    deferred: 'Badiliko litaanza kufanya kazi mara inayofuata Dannify inapoanza.',
-    failed: 'Imeshindwa kuanza upya yenyewe. Tafadhali funga kisha ufungue Dannify tena.',
-    reloadInstead: 'Pakia ukurasa upya ili kutumia badiliko hili.',
   },
   support: {
     title: 'Msaada',

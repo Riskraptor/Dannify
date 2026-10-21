@@ -899,6 +899,15 @@ export default {
     doneTitle: "You're all set",
     doneText: 'Search for a song, an artist or a playlist to begin.',
   },
+  brb: {
+    title: 'Be right back!',
+    text: 'Sorry for the wait. Dannify is slipping into its new version; it only takes a moment.',
+    textPlaying: 'Sorry for the little pause. Dannify is slipping into its new version, and {title} carries on right where it stopped.',
+    welcomeA: 'Ta-da! A brand new Dannify, and {title} plays on.',
+    welcomeB: 'Back, with a fresh coat of paint. {title} never really stopped.',
+    welcomeC: 'Freshly updated and still in tune: here is {title} again.',
+    welcomeIdle: 'Ta-da! A brand new Dannify, ready when you are.',
+  },
   update: {
     welcomeEyebrow: 'A new Dannify',
     welcomeTitle: 'Welcome to Dannify {version}',
@@ -949,15 +958,6 @@ export default {
     gotIt: 'Got it',
     rolledBack:
       'Dannify {version} would not start on this computer, so you are back on {running}. It will not be offered again; the next version will be.',
-  },
-  restart: {
-    title: 'Restart Dannify?',
-    detail: 'Playback stops for a moment. Your queue and library are untouched.',
-    now: 'Restart now',
-    later: 'Later',
-    deferred: 'The change applies the next time Dannify starts.',
-    failed: 'Could not restart automatically. Please close and reopen Dannify.',
-    reloadInstead: 'Reload the page to apply this change.',
   },
   support: {
     title: 'Support',

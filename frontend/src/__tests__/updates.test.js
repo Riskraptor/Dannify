@@ -31,6 +31,8 @@ vi.mock('/src/i18n', async () => {
   }
 })
 vi.mock('/src/model/player', () => ({ usePlayer: () => ({ isPlaying: { value: false } }) }))
+// The kind restart (a screen, the music fading) has tests of its own.
+vi.mock('/src/model/restart', () => ({ restartKindly: (run) => run() }))
 
 // The tests run in Node: no window, no localStorage. The model only starts
 // its timers when there is a window, which is what the restart tests need.
