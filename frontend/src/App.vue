@@ -259,6 +259,8 @@ onMounted(() => {
   // the music it interrupted plays on.
   player.restoreSession()
   welcomeBack()
+  // Problem reports that could not go before (offline) go now, quietly.
+  setTimeout(() => import('./model/problems').then((m) => m.sendHeldReports()), 20000)
 })
 onUnmounted(() => {
   window.removeEventListener('popstate', onPopState)

@@ -17,7 +17,10 @@ and nothing is sent.
 
 By email, the diagnostics are written into the message (a free form has no
 attachments): what ``about.txt`` says, the window's errors, and the newest end
-of the log, all scrubbed like the zip.
+of the log, all scrubbed like the zip. A free Web3Forms form takes
+submissions from a browser only, so the app puts the email together here and
+its window sends it (``prepare``); one that cannot go yet waits in the outbox
+(``hold``) and the window sends it later.
 
 The server's side, for whoever writes it: an HTTPS ``POST`` of
 ``multipart/form-data`` with the fields ``id``, ``version``, ``category``,
@@ -118,6 +121,15 @@ def web3forms_key() -> str:
 
 def enabled() -> bool:
     return bool(endpoint() or web3forms_key())
+
+
+def mode() -> str:
+    """'server' when reports go to a server of their own, 'email' when the
+    window emails them, '' while reporting is closed."""
+
+    if endpoint():
+        return 'server'
+    return 'email' if web3forms_key() else ''
 
 
 # ---------------------------------------------------------------------------
@@ -300,10 +312,8 @@ def _diagnostics_text(zipped: bytes, limit: int) -> str:
     return '\n\n'.join([head, *tail_parts])
 
 
-def post_email(report: dict[str, Any], key: str, timeout: float = 30.0) -> None:
-    """Email one report through Web3Forms. Raises when it did not arrive."""
-
-    import requests
+def email_body(report: dict[str, Any], key: str) -> dict[str, Any]:
+    """What Web3Forms is sent for one report."""
 
     body = {
         'access_key': key,
@@ -317,6 +327,15 @@ def post_email(report: dict[str, Any], key: str, timeout: float = 30.0) -> None:
     }
     if report.get('contact'):
         body['email'] = str(report['contact'])  # the inbox's Reply goes to them
+    return body
+
+
+def post_email(report: dict[str, Any], key: str, timeout: float = 30.0) -> None:
+    """Email one report through Web3Forms. Raises when it did not arrive."""
+
+    import requests
+
+    body = email_body(report, key)
     response = requests.post(
         WEB3FORMS_URL,
         json=body,
@@ -390,7 +409,10 @@ def _drop(meta: Path) -> None:
 
 def pending(data_dir: Path) -> int:
     box = _outbox(data_dir)
-    return len(list(box.glob('*.json'))) if box.is_dir() else 0
+    if not box.is_dir():
+        return 0
+    emails = _held(data_dir)
+    return len(list(box.glob('*.json'))) + (len(list(emails.glob('*.json'))) if emails.is_dir() else 0)
 
 
 def flush(data_dir: Path) -> tuple[int, int]:
@@ -443,6 +465,67 @@ def _note_sent(data_dir: Path) -> None:
         path.write_text(json.dumps(times[-DAILY_LIMIT * 2:]), encoding='utf-8')
     except OSError:
         pass
+
+
+def prepare(data_dir: Path, report: dict[str, Any]) -> dict[str, Any]:
+    """The email for one report, for the window to send (see the module
+    notes). Counts towards the day's reports like a send."""
+
+    key = web3forms_key()
+    if not key:
+        raise NotOpen('reporting is not open yet')
+    if len(_sent_today(data_dir)) >= DAILY_LIMIT:
+        raise TooMany('enough reports for today')
+    _note_sent(data_dir)
+    return email_body(report, key)
+
+
+def _held(data_dir: Path) -> Path:
+    return _outbox(data_dir) / 'email'
+
+
+def hold(data_dir: Path, email: dict[str, Any]) -> None:
+    """Keep an email the window could not send, for it to send later."""
+
+    rid = re.sub(r'[^A-Z0-9]', '', str(email.get('report_id') or ''))[:16]
+    if not rid or not email.get('message'):
+        return
+    box = _held(data_dir)
+    box.mkdir(parents=True, exist_ok=True)
+    (box / f'{rid}.json').write_text(json.dumps({**email, 'held': time.time()}, ensure_ascii=False), encoding='utf-8')
+    waiting = sorted(box.glob('*.json'), key=lambda p: p.stat().st_mtime)
+    for old in waiting[:-OUTBOX_KEEP]:
+        old.unlink(missing_ok=True)
+
+
+def held(data_dir: Path) -> list[dict[str, Any]]:
+    """The emails waiting for the window to send, oldest first. Each gets
+    the access key the app has now, which may be newer than when it was kept."""
+
+    box = _held(data_dir)
+    out: list[dict[str, Any]] = []
+    key = web3forms_key()
+    for path in sorted(box.glob('*.json'), key=lambda p: p.stat().st_mtime) if box.is_dir() else ():
+        try:
+            email = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            path.unlink(missing_ok=True)
+            continue
+        if time.time() - float(email.pop('held', 0) or 0) > OUTBOX_DAYS * 86400:
+            path.unlink(missing_ok=True)
+            continue
+        if key:
+            email['access_key'] = key
+        out.append(email)
+    return out
+
+
+def done(data_dir: Path, report_id: str) -> None:
+    """The window sent it: it waits no more."""
+
+    rid = re.sub(r'[^A-Z0-9]', '', str(report_id or ''))[:16]
+    if rid:
+        (_held(data_dir) / f'{rid}.json').unlink(missing_ok=True)
 
 
 def send(data_dir: Path, report: dict[str, Any]) -> str:

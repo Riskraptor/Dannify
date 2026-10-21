@@ -8,7 +8,35 @@
       <span><b>{{ t('support.heroTitle') }}.</b> {{ support.message || t('support.heroText') }}</span>
     </p>
 
-    <!-- The ways to give, side by side: each says who it suits. -->
+    <!-- M-PESA first, and plain to see: the number large, and how to pay it
+         from a phone, step by step. -->
+    <article v-if="mpesa" class="sp-mpesa">
+      <div class="sp-mpesa-brand">
+        <span class="sp-mpesa-lipa">Lipa na</span>
+        <span class="sp-mpesa-mark"><Icon icon="ph:device-mobile-fill" class="h-5 w-5" />M-PESA</span>
+        <span class="sp-mpesa-lead">{{ t('support.mpesaLead') }}</span>
+      </div>
+      <div class="sp-mpesa-number">
+        <span class="sp-mpesa-label">{{ mpesa.kind === 'paybill' ? t('support.mpesaBusinessLabel') : t('support.mpesaTillLabel') }}</span>
+        <span class="sp-mpesa-digits" :aria-label="mpesa.number">{{ grouped(mpesa.number) }}</span>
+        <span v-if="mpesa.kind === 'paybill' && mpesa.account" class="sp-mpesa-account">{{ t('support.mpesaAccountLabel') }} {{ mpesa.account }}</span>
+        <span v-if="mpesa.name" class="sp-mpesa-name">{{ t('support.mpesaName', { name: mpesa.name }) }}</span>
+        <button class="sp-mpesa-copy press" @click="copyNumber">
+          <Icon :icon="copied ? 'ph:check-bold' : 'ph:copy-bold'" class="h-4 w-4" />
+          {{ copied ? t('support.copied') : t('support.copyNumber') }}
+        </button>
+      </div>
+      <ol class="sp-mpesa-steps">
+        <li>{{ t('support.mpesaStep1') }}</li>
+        <li>{{ mpesa.kind === 'paybill' ? t('support.mpesaStep2Paybill') : t('support.mpesaStep2') }}</li>
+        <li>
+          {{ mpesa.kind === 'paybill' ? t('support.mpesaStep3Paybill', { number: mpesa.number, account: mpesa.account || '' }) : t('support.mpesaStep3', { number: mpesa.number }) }}
+        </li>
+        <li>{{ t('support.mpesaStep4') }}</li>
+      </ol>
+    </article>
+
+    <!-- The ways to give from anywhere, side by side. -->
     <div class="sp-ways">
       <div v-if="support.configured" class="sp-way is-kofi">
         <span class="sp-way-mark"><Icon icon="ph:coffee-fill" class="h-6 w-6" /></span>
@@ -19,18 +47,6 @@
         </button>
       </div>
 
-      <div v-if="mpesa" class="sp-way is-mpesa">
-        <span class="sp-way-mark"><Icon icon="ph:device-mobile-fill" class="h-6 w-6" /></span>
-        <p class="sp-way-name">M-Pesa</p>
-        <p class="sp-way-text">
-          {{ mpesa.kind === 'paybill' ? t('support.mpesaPaybill', { number: mpesa.number, account: mpesa.account || '—' }) : t('support.mpesaTill', { number: mpesa.number }) }}
-        </p>
-        <p v-if="mpesa.name" class="sp-way-note">{{ t('support.mpesaName', { name: mpesa.name }) }}</p>
-        <button class="sp-way-btn press" @click="copyNumber">
-          <Icon :icon="copied ? 'ph:check-bold' : 'ph:copy'" class="h-3.5 w-3.5" />
-          {{ copied ? t('support.copied') : t('support.copyNumber') }}
-        </button>
-      </div>
 
       <div v-if="support.paypal_link" class="sp-way is-paypal">
         <span class="sp-way-mark"><Icon icon="ph:paypal-logo-fill" class="h-6 w-6" /></span>
@@ -88,6 +104,12 @@ const updates = useUpdates()
 
 const mpesa = computed(() => (support.mpesa && support.mpesa.number ? support.mpesa : null))
 
+// 8496746 reads as 849 6746, the way a number is read out and typed in.
+function grouped(number) {
+  const n = String(number || '')
+  return n.length > 4 ? `${n.slice(0, n.length - 4)} ${n.slice(-4)}` : n
+}
+
 const copied = ref(false)
 async function copyNumber() {
   if (!mpesa.value) return
@@ -131,9 +153,139 @@ async function copyLink() {
   box-shadow: 0 6px 16px rgb(225 29 72 / 0.35);
   animation: sp-beat 2.4s ease-in-out infinite;
 }
+.sp-mpesa {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px 24px;
+  margin-bottom: 14px;
+  padding: 22px 24px;
+  border-radius: 18px;
+  color: #fff;
+  background:
+    radial-gradient(80% 120% at 100% 0%, rgb(255 255 255 / 0.14), transparent 60%),
+    linear-gradient(135deg, #00a651, #007a3d);
+  box-shadow: 0 16px 36px rgb(0 122 61 / 0.35);
+}
+.sp-mpesa-brand {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 2px;
+}
+.sp-mpesa-lipa {
+  font-size: 13px;
+  font-weight: 700;
+  font-style: italic;
+  opacity: 0.9;
+}
+.sp-mpesa-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 10px;
+  background: #fff;
+  color: #00a651;
+  font-size: 22px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+}
+.sp-mpesa-mark :deep(svg) {
+  color: #e2231a;
+}
+.sp-mpesa-lead {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.95;
+}
+.sp-mpesa-number {
+  display: grid;
+  justify-items: end;
+  align-content: start;
+  gap: 4px;
+  text-align: right;
+}
+.sp-mpesa-label {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.sp-mpesa-digits {
+  font-size: 40px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.2);
+}
+.sp-mpesa-account,
+.sp-mpesa-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.sp-mpesa-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: #fff;
+  color: #007a3d;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.18);
+}
+.sp-mpesa-steps {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  counter-reset: step;
+}
+.sp-mpesa-steps li {
+  position: relative;
+  padding: 10px 12px 10px 40px;
+  border-radius: 12px;
+  background: rgb(0 0 0 / 0.16);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  counter-increment: step;
+}
+.sp-mpesa-steps li::before {
+  content: counter(step);
+  position: absolute;
+  top: 9px;
+  left: 10px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: #fff;
+  color: #007a3d;
+  font-size: 12px;
+  font-weight: 900;
+}
+@container (max-width: 760px) {
+  .sp-mpesa {
+    grid-template-columns: 1fr;
+  }
+  .sp-mpesa-number {
+    justify-items: start;
+    text-align: left;
+  }
+}
 .sp-ways {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
   margin-bottom: 22px;
 }
@@ -161,9 +313,6 @@ async function copyLink() {
 }
 .sp-way.is-kofi {
   --way: 255 94 91;
-}
-.sp-way.is-mpesa {
-  --way: 22 163 74;
 }
 .sp-way.is-paypal {
   --way: 0 112 224;

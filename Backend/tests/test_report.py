@@ -313,3 +313,33 @@ def test_what_fills_the_hidden_field_is_thanked_and_sends_nothing(emailed, tmp_p
 
 def test_an_idea_is_a_kind_of_its_own():
     assert report.clean_fields('Could it have a sleep timer?', 'idea', '')['category'] == 'idea'
+
+
+# --- Sent by the window (a free form takes browser submissions only) ---------------
+
+
+def test_by_email_the_app_prepares_and_the_window_sends(emailed, tmp_path, monkeypatch):
+    sent, _ = emailed
+    monkeypatch.setattr(api.state, 'data_dir', tmp_path)
+    assert asyncio.run(api.support_report_status_endpoint())['mode'] == 'email'
+    out = asyncio.run(api.support_report_send_endpoint({
+        'description': 'The lyrics panel stays empty on every song', 'category': 'lyrics',
+        'contact': 'me@example.com', 'include_diagnostics': False,
+    }))
+    assert out['status'] == 'prepared' and sent == []  # nothing left the app
+    email = out['email']
+    assert email['access_key'] == 'test-access-key' and email['email'] == 'me@example.com'
+    assert email['report_id'] == out['id'] and out['url'] == report.WEB3FORMS_URL
+    assert email['message'].startswith('The lyrics panel stays empty')
+
+
+def test_an_email_the_window_could_not_send_waits_for_it(emailed, tmp_path, monkeypatch):
+    monkeypatch.setattr(api.state, 'data_dir', tmp_path)
+    email = report.email_body({**_a_report(diag=None), 'id': 'AB12CD34'}, 'old-key')
+    asyncio.run(api.support_report_hold_endpoint({'email': email}))
+    assert report.pending(tmp_path) == 1
+    held = asyncio.run(api.support_report_held_endpoint())['emails']
+    assert [e['report_id'] for e in held] == ['AB12CD34']
+    assert held[0]['access_key'] == 'test-access-key'  # the key the app has now
+    asyncio.run(api.support_report_done_endpoint({'id': 'AB12CD34'}))
+    assert report.pending(tmp_path) == 0

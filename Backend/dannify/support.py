@@ -26,8 +26,9 @@ _DEFAULTS: dict[str, Any] = {
     # Lipa na M-Pesa: {'kind': 'till' | 'paybill', 'number': '...',
     # 'account': '...' (a paybill's account), 'name': '...' (as M-Pesa
     # shows it, so the payer knows they have the right one)}.
-    'mpesa': {},
-    # A paypal.me name.
+    'mpesa': {'kind': 'till', 'number': '8496746'},
+    # A paypal.me name, or a PayPal payment link
+    # (https://www.paypal.com/ncp/payment/...).
     'paypal': '',
 }
 
@@ -101,10 +102,19 @@ def _mpesa() -> dict[str, str]:
 
 
 def _paypal_link() -> str:
-    name = str(_config.get('paypal') or '').strip()
-    name = name.rsplit('/', 1)[-1]  # a whole paypal.me link works too
-    if not _config.get('enabled') or not re.fullmatch(r'[A-Za-z0-9_-]{2,40}', name):
+    raw = str(_config.get('paypal') or '').strip()
+    if not _config.get('enabled') or not raw:
         return ''
+    # A payment link made in PayPal: a checkout of its own, kept as it is.
+    link = re.fullmatch(r'https://www\.paypal\.com/ncp/payment/([A-Z0-9]{6,40})/?', raw)
+    if link:
+        return f'https://www.paypal.com/ncp/payment/{link.group(1)}'
+    # A paypal.me name, alone or as its whole address; any other address is
+    # not taken, however it ends.
+    me = re.fullmatch(r'(?:https?://(?:www\.)?paypal\.me/|https://www\.paypal\.com/paypalme/)?([A-Za-z0-9_-]{2,40})/?', raw)
+    if not me:
+        return ''
+    name = me.group(1)
     return f'https://www.paypal.com/paypalme/{name}'
 
 

@@ -97,11 +97,63 @@ async function openReport(on = '') {
   return true
 }
 
+// By email the window sends it (report.py): a free Web3Forms form takes
+// submissions from a browser only, and this window is one.
+async function emailIt(email, url) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(email),
+  })
+  let answer = {}
+  try {
+    answer = await res.json()
+  } catch {
+    // not JSON: the status says enough
+  }
+  if (!res.ok || !answer.success) throw new Error(answer.message || `Web3Forms answered ${res.status}`)
+}
+
 /** Send one. Resolves to {id, status: 'sent' | 'queued'}; rejects on failure. */
 async function send(payload) {
   const res = await API.sendReport(payload)
-  if (res.data && res.data.status === 'queued') status.pending += 1
-  return res.data
+  const data = res.data || {}
+  if (data.status === 'prepared' && data.email) {
+    try {
+      await emailIt(data.email, data.url)
+      return { id: data.id, status: 'sent' }
+    } catch (err) {
+      // Offline, most likely: kept, and sent when Dannify next starts.
+      console.warn('[report] not sent now, kept for later', err)
+      await API.holdReport(data.email).catch(() => {})
+      status.pending += 1
+      return { id: data.id, status: 'queued' }
+    }
+  }
+  if (data.status === 'queued') status.pending += 1
+  return data
+}
+
+/** What could not go before, sent now: once, a little after the app starts. */
+export async function sendHeldReports() {
+  let list
+  try {
+    list = (await API.heldReports()).data || {}
+  } catch {
+    return 0
+  }
+  let sent = 0
+  for (const email of list.emails || []) {
+    try {
+      await emailIt(email, list.url)
+    } catch {
+      break // still offline: the rest can wait too
+    }
+    await API.reportDone(email.report_id).catch(() => {})
+    status.pending = Math.max(0, status.pending - 1)
+    sent++
+  }
+  return sent
 }
 
 export function useReporting() {

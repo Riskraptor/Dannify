@@ -19,10 +19,11 @@ def _with(**values):
     return support.config()
 
 
-def test_ko_fi_alone_by_default():
+def test_ko_fi_and_the_mpesa_till_by_default():
     out = _with()
     assert out['configured'] and out['link'] == 'https://ko-fi.com/dkavangi'
-    assert out['mpesa'] == {} and out['paypal_link'] == ''
+    assert out['mpesa'] == {'kind': 'till', 'number': '8496746', 'name': ''}
+    assert out['paypal_link'] == ''
 
 
 def test_an_mpesa_till_and_a_paybill():
@@ -36,6 +37,12 @@ def test_an_mpesa_that_is_not_one_is_left_out():
     assert _with(mpesa={'kind': 'send money', 'number': '0712345678'})['mpesa'] == {}
     assert _with(mpesa={'kind': 'till', 'number': '12'})['mpesa'] == {}
     assert _with(mpesa='0712345678')['mpesa'] == {}
+
+
+def test_a_paypal_payment_link_is_kept_as_it_is():
+    link = 'https://www.paypal.com/ncp/payment/ABCD1234EFGH5'
+    assert _with(paypal=link)['paypal_link'] == link
+    assert _with(paypal='https://www.paypal.com.evil.example/ncp/payment/ABCD1234')['paypal_link'] == ''
 
 
 def test_paypal_by_name_or_by_link():

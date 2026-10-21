@@ -250,6 +250,15 @@ function getReportStatus() {
 function sendReport(payload) {
   return API.post('/api/support/report/send', payload, { timeout: 90000 })
 }
+function holdReport(email) {
+  return API.post('/api/support/report/hold', { email })
+}
+function heldReports() {
+  return API.get('/api/support/report/held')
+}
+function reportDone(id) {
+  return API.post('/api/support/report/done', { id })
+}
 
 // Playlists made in the app (kept on this PC).
 function getPlaylists() {
@@ -561,6 +570,9 @@ export default {
   reportClientError,
   getReportStatus,
   sendReport,
+  holdReport,
+  heldReports,
+  reportDone,
   getPlaylists,
   getPlaylist,
   createPlaylist,
