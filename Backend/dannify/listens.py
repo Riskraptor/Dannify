@@ -646,14 +646,31 @@ def recap(year: int, now: Optional[float] = None) -> dict[str, Any]:
     chosen = plays[lo:hi]
 
     by_song, by_artist, by_album, by_hour, total = _tally(chosen, songs)
-    top_songs, top_artists, top_albums = _ranked(songs, by_song, by_artist, by_album, 5)
+    # Twenty-five songs: five are shown, all of them make "Your top songs of
+    # the year" when it is saved as a playlist.
+    top_songs, top_artists, top_albums = _ranked(songs, by_song, by_artist, by_album, 25)
+    top_artists, top_albums = top_artists[:5], top_albums[:5]
 
     by_day: dict[date, int] = {}
     months = [0] * 12
-    for at, seconds, _key in chosen:
+    weekdays = [0] * 7  # Monday first
+    # Each month's own favourite artist, and the most a song was played in a day.
+    month_artists: list[dict[str, list]] = [{} for _ in range(12)]
+    song_days: dict[tuple[str, date], int] = {}
+    first_heard: dict[str, int] = {}
+    for at, seconds, key in chosen:
         day = date.fromtimestamp(at)
         by_day[day] = by_day.get(day, 0) + seconds
         months[day.month - 1] += seconds
+        weekdays[day.weekday()] += seconds
+        song_days[(key, day)] = song_days.get((key, day), 0) + 1
+        first_heard.setdefault(key, at)
+        for name in songs[key].get('artists') or []:
+            folded = name.casefold().strip()
+            if folded:
+                who = month_artists[day.month - 1].setdefault(folded, [name, 0, {}])
+                who[1] += seconds
+                who[2][key] = who[2].get(key, 0) + 1
     busiest = max(by_day.items(), key=lambda kv: (kv[1], kv[0])) if by_day else None
     _current, longest = _streaks(set(by_day), date.fromtimestamp(min(now, end - 1)))
 
@@ -664,10 +681,41 @@ def recap(year: int, now: Optional[float] = None) -> dict[str, Any]:
             before.add(name.casefold().strip())
     new_artists = sum(1 for folded in by_artist if folded not in before)
 
+    def month_top(tally: dict[str, list]) -> Optional[dict[str, Any]]:
+        if not tally:
+            return None
+        name, seconds, keys = max(tally.values(), key=lambda w: (w[1], w[0]))
+        favourite = max(keys, key=lambda k: keys[k])
+        return {'name': name, 'seconds': seconds, 'cover': _cover(songs[favourite])}
+
+    # The song played most in a single day: the year's "on repeat" moment.
+    repeat = None
+    if song_days:
+        (key, day), n = max(song_days.items(), key=lambda kv: (kv[1], kv[0][1]))
+        if n > 1:
+            repeat = _entry(songs, key, plays=n, date=day.isoformat())
+    top_song_more = None
+    if top_songs:
+        key = top_songs[0]['key']
+        top_song_more = {
+            'first': date.fromtimestamp(first_heard[key]).isoformat(),
+            'most_in_a_day': max((n for (k, _d), n in song_days.items() if k == key), default=0),
+        }
+
+    # The year before, to say how this one compares.
+    before_lo = bisect.bisect_left(plays, (_day_start(date(year - 1, 1, 1)), -1, ''))
+    last_year = plays[before_lo:lo]
+
     return {
         'year': year,
         'years': years,
         'seconds': total,
+        'hours': by_hour,
+        'weekdays': weekdays,
+        'month_artists': [month_top(m) for m in month_artists],
+        'repeat': repeat,
+        'top_song_more': top_song_more,
+        'last_year': {'seconds': sum(sec for _at, sec, _k in last_year), 'plays': len(last_year)},
         'plays': len(chosen),
         'songs': len(by_song),
         'artists': len(by_artist),
