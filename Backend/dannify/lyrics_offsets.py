@@ -6,13 +6,17 @@ keyed by ``artist|title`` in a small JSON file. Every future playback of that
 song, for any user, then applies the saved preferences automatically. A
 crowd-sourced lyric-correction layer.
 
-Record shape:  ``{ "offset": float_seconds, "version": int_index }``
+Record shape:  ``{ "offset": float_seconds, "version": int_index, "pick": str }``
+``pick`` is the chosen version's fingerprint (lyrics.fingerprint): the index
+alone pointed at another version once the list was ordered differently, and
+choosing the first version was not kept at all (index 0 is the default).
 Legacy records may be a bare float (offset only): handled transparently.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import threading
 from pathlib import Path
 from typing import Any, Optional
@@ -32,11 +36,12 @@ def _coerce(value: Any) -> dict[str, Any]:
         return {
             'offset': float(value.get('offset') or 0.0),
             'version': int(value.get('version') or 0),
+            'pick': str(value.get('pick') or ''),
         }
     try:
-        return {'offset': float(value), 'version': 0}
+        return {'offset': float(value), 'version': 0, 'pick': ''}
     except (TypeError, ValueError):
-        return {'offset': 0.0, 'version': 0}
+        return {'offset': 0.0, 'version': 0, 'pick': ''}
 
 
 def init(database_dir: Path) -> None:
@@ -75,10 +80,10 @@ def get_prefs(title: str, artist: str) -> dict[str, Any]:
     """Return ``{offset, version}`` for the song (defaults 0/0)."""
 
     if not _loaded:
-        return {'offset': 0.0, 'version': 0}
+        return {'offset': 0.0, 'version': 0, 'pick': ''}
     with _lock:
         rec = _data.get(_key(title, artist))
-        return dict(rec) if rec else {'offset': 0.0, 'version': 0}
+        return _coerce(rec) if rec else {'offset': 0.0, 'version': 0, 'pick': ''}
 
 
 # Back-compat: offset-only accessor used elsewhere.
@@ -91,20 +96,29 @@ def set(  # noqa: A001 - mirrors prior public name
     artist: str,
     offset: Optional[float] = None,
     version: Optional[int] = None,
+    pick: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Update offset and/or version for the song; persist; return the record."""
+    """Update offset, version and/or pick for the song; persist; return the record."""
 
     if not title or not artist:
-        return {'offset': 0.0, 'version': 0}
+        return {'offset': 0.0, 'version': 0, 'pick': ''}
     key = _key(title, artist)
     with _lock:
-        rec = dict(_data.get(key) or {'offset': 0.0, 'version': 0})
+        rec = _coerce(_data.get(key) or {})
         if offset is not None:
             rec['offset'] = max(-30.0, min(30.0, float(offset)))
         if version is not None:
             rec['version'] = max(0, int(version))
+        if pick is not None:
+            rec['pick'] = re.sub(r'[^0-9a-f]', '', str(pick).lower())[:16]
+        if not rec['pick']:
+            rec.pop('pick')
         # Drop the record entirely if it's back to defaults.
-        if abs(rec.get('offset', 0.0)) < 1e-3 and int(rec.get('version', 0)) == 0:
+        if (
+            abs(rec.get('offset', 0.0)) < 1e-3
+            and int(rec.get('version', 0)) == 0
+            and not rec.get('pick')
+        ):
             _data.pop(key, None)
         else:
             _data[key] = rec

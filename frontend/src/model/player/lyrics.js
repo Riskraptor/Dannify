@@ -175,12 +175,23 @@ export function resetLyricsOffset() {
 export function saveLyricsOffset() {
   const { title, artist } = lyricsMeta.value
   if (!title || !artist) return Promise.resolve()
+  // The version by its fingerprint as well as its place: the place alone
+  // pointed at another version once the list was ordered differently, and
+  // picking the first was not kept at all.
+  const shown = lyricVersions.value[lyricVersionIndex.value]
   return API.saveLyricsOffset(
     title,
     artist,
     lyricsOffset.value,
-    lyricVersionCount.value > 1 ? lyricVersionIndex.value : undefined
+    lyricVersionCount.value > 1 ? lyricVersionIndex.value : undefined,
+    shown && shown.pick ? shown.pick : undefined
   ).catch(() => {})
+}
+
+// Two lists of timed lines are the same lyrics, timed the same.
+function sameLines(a, b) {
+  if (!a || !b || a.length !== b.length || !a.length) return false
+  return a.every((line, i) => Math.abs(line.time - b[i].time) < 0.06 && line.text === b[i].text)
 }
 
 /**
@@ -196,15 +207,25 @@ export async function loadLyricVersions() {
   if (lyricVersions.value.length) return true
   const token = lyricsToken
   let versions = []
+  let res = { data: {} }
   try {
-    const res = await API.getLyricVersions(_lyricsParams(track))
+    res = await API.getLyricVersions(_lyricsParams(track))
     versions = (res.data && res.data.versions) || []
   } catch {
     versions = []
   }
   if (token !== lyricsToken || currentTrack.value !== track) return false
   lyricVersions.value = versions
-  if (versions.length) lyricVersionCount.value = versions.length
+  if (versions.length) {
+    lyricVersionCount.value = versions.length
+    // The picker marks the version on screen: the best match found at first
+    // is not always the first in the list.
+    const showing = versions.findIndex((v) => sameLines(v.synced, lyricsLines.value))
+    if (showing >= 0) lyricVersionIndex.value = showing
+    else if (res.data && typeof res.data.version === 'number' && res.data.version < versions.length) {
+      lyricVersionIndex.value = res.data.version
+    }
+  }
   return versions.length > 0
 }
 

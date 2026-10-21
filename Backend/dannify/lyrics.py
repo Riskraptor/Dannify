@@ -819,6 +819,21 @@ def same_words(a: Optional[str], b: Optional[str]) -> bool:
     return bool(na) and na == nb
 
 
+def fingerprint(lines: Any) -> str:
+    """A short mark of one version's words and timing, so a choice can be
+    found again wherever that version lands in the list next time (the list
+    is re-ranked, and lrclib gains uploads). Takes parsed lines or LRC text."""
+
+    import hashlib  # noqa: PLC0415
+
+    if isinstance(lines, str) or lines is None:
+        lines = parse_lrc(lines)
+    body = '\n'.join(f"{round(float(l['time']), 1)}|{_norm(l['text'])}" for l in lines)
+    if not body:
+        return ''
+    return hashlib.sha1(body.encode('utf-8')).hexdigest()[:16]
+
+
 def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
     """Return all synced versions as ``[{synced:[...], plain, has}, ...]``.
 
@@ -834,5 +849,8 @@ def fetch_versions_structured(song: dict[str, Any]) -> list[dict[str, Any]]:
         plain = ver.plain or (
             '\n'.join(l['text'] for l in lines if l['text']) or None
         )
-        out.append({'synced': lines, 'plain': plain, 'has': True, 'about': ver.about or {}})
+        out.append({
+            'synced': lines, 'plain': plain, 'has': True, 'about': ver.about or {},
+            'pick': fingerprint(lines),
+        })
     return out

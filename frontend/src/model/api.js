@@ -199,10 +199,11 @@ function keepLyricVersion(file, version, hints = {}) {
   return API.post('/api/lyrics/keep', { file, version, ...hints })
 }
 
-function saveLyricsOffset(title, artist, offset, version) {
+function saveLyricsOffset(title, artist, offset, version, pick) {
   const body = { title, artist }
   if (offset !== undefined && offset !== null) body.offset = offset
   if (version !== undefined && version !== null) body.version = version
+  if (pick !== undefined && pick !== null) body.pick = pick
   return API.post('/api/lyrics/offset', body)
 }
 

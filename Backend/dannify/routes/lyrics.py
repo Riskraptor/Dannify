@@ -173,9 +173,11 @@ def _lyrics_from_file(
         if song['name'] and song['artists']:
             raw = None
             # A version chosen for this song stays chosen through a reload.
-            chosen = lyrics_offsets.get_prefs(song['name'], song['artists'][0])['version']
-            if chosen > 0:
-                text = lyrics_mod.version_text(song, chosen)
+            prefs = lyrics_offsets.get_prefs(song['name'], song['artists'][0])
+            if prefs['version'] > 0 or prefs.get('pick'):
+                versions = lyrics_mod.fetch_versions_structured(song)
+                chosen = _chosen_index(versions, prefs)
+                text = lyrics_mod.version_text(song, chosen) if chosen is not None else None
                 if text:
                     raw = lyrics_mod.Lyrics(plain=None, synced=text)
             if raw is None:
@@ -309,41 +311,41 @@ async def lyrics_endpoint(
     primary = song_artists[0] if song_artists else ''
     prefs = lyrics_offsets.get_prefs(song.get('name', ''), primary)
 
-    if prefs['version'] > 0:
-        # User picked a specific version → resolve the full list.
+    chosen_at = None
+    versions: list[dict[str, Any]] = []
+    if prefs['version'] > 0 or prefs.get('pick'):
+        # A version was chosen for this song: it is the one shown, found by
+        # its fingerprint wherever the list now puts it.
         versions = await asyncio.to_thread(
             lyrics_mod.fetch_versions_structured, song
         )
-        if versions:
-            idx = prefs['version'] if prefs['version'] < len(versions) else 0
-            chosen = versions[idx]
-            result = {
-                'synced': chosen['synced'],
-                'plain': chosen['plain'],
-                'has': True,
-                'version_count': len(versions),
-            }
-        else:
-            result = await asyncio.to_thread(
-                lyrics_mod.fetch_structured,
-                song,
-                _effective_lyrics_providers(state.settings) or ['lrclib'],
-            )
-            result['version_count'] = 0
+        chosen_at = _chosen_index(versions, prefs)
+    if chosen_at is not None:
+        chosen = versions[chosen_at]
+        result = {
+            'synced': chosen['synced'],
+            'plain': chosen['plain'],
+            'has': True,
+            'version_count': len(versions),
+        }
     else:
         # FAST PATH: single best-match fetch (one parallel /get+/search round).
         # The version count is discovered lazily by the frontend only when the
-        # user opens the switcher: keeping the common load quick.
+        # user opens the switcher: keeping the common load quick. A choice
+        # that is no longer among the versions falls back to this too.
         result = await asyncio.to_thread(
             lyrics_mod.fetch_structured,
             song,
             _effective_lyrics_providers(state.settings) or ['lrclib'],
         )
         # -1 means "unknown; ask /api/lyrics/versions on demand".
-        result['version_count'] = -1 if result.get('synced') else 0
+        if versions:
+            result['version_count'] = len(versions)
+        else:
+            result['version_count'] = -1 if result.get('synced') else 0
 
     result['offset'] = prefs['offset']
-    result['version'] = prefs['version']
+    result['version'] = chosen_at if chosen_at is not None else 0
     result['title'] = song.get('name', '')
     result['artist'] = primary
     return result
@@ -398,7 +400,8 @@ async def lyrics_versions_endpoint(
     song_artists = song.get('artists') or []
     primary = song_artists[0] if song_artists else ''
     prefs = lyrics_offsets.get_prefs(song.get('name', ''), primary)
-    current = prefs['version'] if prefs['version'] < len(versions) else 0
+    found = _chosen_index(versions, prefs)
+    current = found if found is not None else 0
     if kept and not lyrics_mod.same_words(kept, lyrics_mod.version_text(song, current)):
         # A saved song shows what is kept beside it: that is the version it is.
         # The one picked is trusted first: two uploads can differ only by a
@@ -414,6 +417,21 @@ async def lyrics_versions_endpoint(
         'title': song.get('name', ''),
         'artist': primary,
     }
+
+
+def _chosen_index(versions: list[dict[str, Any]], prefs: dict[str, Any]) -> Optional[int]:
+    """Which of *versions* is the one chosen for the song: by its fingerprint
+    first, wherever it now sits in the list, then by where it was. None when
+    nothing was chosen or it is no longer there."""
+
+    pick = prefs.get('pick') or ''
+    if pick:
+        for i, version in enumerate(versions):
+            if version.get('pick') == pick:
+                return i
+        return None
+    at = int(prefs.get('version') or 0)
+    return at if 0 < at < len(versions) else None
 
 
 @router.post('/api/lyrics/keep')
@@ -446,7 +464,7 @@ async def lyrics_keep_endpoint(request: Request) -> dict[str, Any]:
         if not text:
             return False
         _persist_lyrics(where, artists[0], song['name'], text)
-        lyrics_offsets.set(song['name'], artists[0], None, version)
+        lyrics_offsets.set(song['name'], artists[0], None, version, lyrics_mod.fingerprint(text))
         return True
 
     return {'kept': await asyncio.to_thread(keep)}
@@ -470,6 +488,8 @@ async def lyrics_offset_endpoint(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail='title and artist required')
     offset = payload.get('offset')
     version = payload.get('version')
+    pick = payload.get('pick')
+    pick = None if pick is None else str(pick)[:40]
     try:
         offset = None if offset is None else float(offset)
     except (TypeError, ValueError):
@@ -479,7 +499,7 @@ async def lyrics_offset_endpoint(request: Request) -> dict[str, Any]:
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail='version must be an int')
     rec = await asyncio.to_thread(
-        lyrics_offsets.set, title, artist, offset, version
+        lyrics_offsets.set, title, artist, offset, version, pick
     )
     return {
         'title': title,

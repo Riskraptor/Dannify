@@ -141,8 +141,8 @@ def _saved_song(monkeypatch, tmp_path, kept_text='', chosen=0, versions=(V1, V2)
     monkeypatch.setattr(lyrics_routes, '_read_existing_lyrics', lambda full, a, t: kept_text)
     written, prefs = [], []
     monkeypatch.setattr(lyrics_routes, '_persist_lyrics', lambda full, a, t, text: written.append((a, t, text)))
-    monkeypatch.setattr(lyrics_routes.lyrics_offsets, 'set', lambda t, a, o, v: prefs.append((t, a, v)))
-    monkeypatch.setattr(lyrics_routes.lyrics_offsets, 'get_prefs', lambda t, a: {'offset': 0.0, 'version': chosen})
+    monkeypatch.setattr(lyrics_routes.lyrics_offsets, 'set', lambda t, a, o, v, pick=None: prefs.append((t, a, v)))
+    monkeypatch.setattr(lyrics_routes.lyrics_offsets, 'get_prefs', lambda t, a: {'offset': 0.0, 'version': chosen, 'pick': ''})
     return written, prefs
 
 
@@ -183,3 +183,50 @@ def test_the_same_lyrics_timed_the_same_are_the_same_version():
     assert lyrics.same_words(V1, V1 + '\n')
     assert not lyrics.same_words(V1, V2)
     assert not lyrics.same_words('', '')
+
+
+# --- A chosen version stays chosen ----------------------------------------------
+
+from dannify import lyrics_offsets  # noqa: E402
+
+
+def test_a_fingerprint_is_the_words_and_their_timing():
+    assert lyrics.fingerprint(V1) == lyrics.fingerprint(lyrics.parse_lrc(V1))
+    assert lyrics.fingerprint(V1) != lyrics.fingerprint(V2)
+    assert lyrics.fingerprint('') == ''
+
+
+def test_choosing_the_first_version_is_kept_too(tmp_path):
+    lyrics_offsets.init(tmp_path)
+    lyrics_offsets.set('Calm Down', 'Rema', None, 0, lyrics.fingerprint(V1))
+    lyrics_offsets.init(tmp_path)  # as after a restart
+    assert lyrics_offsets.get_prefs('Calm Down', 'Rema')['pick'] == lyrics.fingerprint(V1)
+    lyrics_offsets.set('Calm Down', 'Rema', 0.0, 0, '')
+    assert lyrics_offsets.get_prefs('Calm Down', 'Rema') == {'offset': 0.0, 'version': 0, 'pick': ''}
+
+
+def test_the_chosen_version_is_found_wherever_the_list_now_puts_it(monkeypatch):
+    v3 = '[00:03.00] three'
+    # Chosen when it was second; the list has since been ranked again.
+    prefs = {'offset': 0.0, 'version': 1, 'pick': lyrics.fingerprint(V2)}
+    monkeypatch.setattr(lyrics_routes.lyrics_offsets, 'get_prefs', lambda t, a: dict(prefs))
+    monkeypatch.setattr(lyrics, '_versions_of', lambda song: [lyrics.Lyrics(synced=v) for v in (v3, V1, V2)])
+    monkeypatch.setattr(lyrics, 'fetch_structured', lambda *a, **k: {'synced': [], 'plain': None, 'has': False})
+    out = asyncio.run(lyrics_routes.lyrics_endpoint(
+        title='Calm Down', artist='Rema', album='', duration=239, url='', file='', refresh=0))
+    assert out['version'] == 2
+    assert [l['text'] for l in out['synced']] == ['one', 'two'] and out['synced'][0]['time'] == 1.5
+    listed = asyncio.run(lyrics_routes.lyrics_versions_endpoint(
+        title='Calm Down', artist='Rema', album='', duration=239, url='', file=''))
+    assert listed['version'] == 2
+
+
+def test_a_choice_no_longer_there_falls_back_to_the_best_match(monkeypatch):
+    prefs = {'offset': 0.0, 'version': 0, 'pick': 'deadbeefdeadbeef'}
+    monkeypatch.setattr(lyrics_routes.lyrics_offsets, 'get_prefs', lambda t, a: dict(prefs))
+    monkeypatch.setattr(lyrics, '_versions_of', lambda song: [lyrics.Lyrics(synced=V1)])
+    best = {'synced': lyrics.parse_lrc(V1), 'plain': 'one', 'has': True}
+    monkeypatch.setattr(lyrics, 'fetch_structured', lambda *a, **k: dict(best))
+    out = asyncio.run(lyrics_routes.lyrics_endpoint(
+        title='Calm Down', artist='Rema', album='', duration=239, url='', file='', refresh=0))
+    assert out['has'] and out['version'] == 0 and out['version_count'] == 1
