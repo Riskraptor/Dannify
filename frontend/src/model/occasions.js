@@ -317,6 +317,18 @@ export function toneList(palette) {
   })
 }
 
+/** Every country the calendar knows of, by its name in *locale*, in order. */
+export function countryChoices(data = calendar.value, locale = 'en') {
+  if (!data) return []
+  const codes = new Set(Object.keys(data.national || {}))
+  for (const list of Object.values(data.zones || {})) for (const code of list) codes.add(code)
+  const collator = new Intl.Collator(locale)
+  return [...codes]
+    .map((code) => ({ code, name: countryName(code, locale) }))
+    .filter((c) => c.name && c.name !== c.code)
+    .sort((a, b) => collator.compare(a.name, b.name))
+}
+
 /** A country's name, in a language, from the system's own list. */
 export function countryName(code, locale = 'en') {
   if (!code) return ''
