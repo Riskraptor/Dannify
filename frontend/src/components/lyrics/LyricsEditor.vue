@@ -51,6 +51,7 @@ import { useDialogs } from '/src/model/dialog'
 import { rememberFocus, trapTab } from '/src/model/focusTrap'
 import { useLyricsSubmit, LYRICS_EDITOR, WORDS, SYNC } from '/src/model/lyrics/useLyricsSubmit'
 import { useSyncSession } from '/src/model/lyrics/useSyncSession'
+import { createListen } from '/src/model/lyrics/listen'
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import EditorStepper from './editor/EditorStepper.vue'
 import StepWords from './editor/StepWords.vue'
@@ -78,7 +79,14 @@ const session = useSyncSession({
   release: () => shell.value?.querySelector('[data-sync-home]')?.focus({ preventScroll: true }),
 })
 
-provide(LYRICS_EDITOR, { s, session, player, close })
+// Play, pause and go back from any step, the words box included.
+const listen = createListen({
+  player,
+  seekBy: (delta) => session.seekBy(delta),
+  replays: () => s.phase.value === WORDS,
+})
+
+provide(LYRICS_EDITOR, { s, session, player, listen, close })
 
 let giveBack = null
 
@@ -103,6 +111,7 @@ function onKey(e) {
     trapTab(e, shell.value)
     return
   }
+  if (listen.handleKey(e)) return
   session.handleKey(e)
 }
 

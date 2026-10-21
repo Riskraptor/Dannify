@@ -4,6 +4,15 @@ What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
 page](https://github.com/Riskraptor/Dannify/releases).
 
+## 4.14.2
+
+- **Write lyrics as you listen.** Adding lyrics now plays the song right
+  beside the words: play, pause, go back or forward 5 seconds, or slow it
+  down, without leaving the box you are typing in. Ctrl+Space plays and
+  pauses and Alt with the arrows goes back and forward, keys that never get
+  in the way of typing. Each time it plays again, it goes back 2 seconds so
+  you catch the last words (this can be turned off).
+
 ## 4.14.1
 
 - **Support Dannify on GitHub Sponsors.** Monthly or one time, any amount,

@@ -69,9 +69,9 @@ Lyrics scroll in a side panel and follow the song, lighting up word by word
 as each line is sung. If they run early or late, click the line you are
 hearing and they line up; if there are several versions, pick the one that
 fits best, for a saved song too, and it is kept beside the song. If a track
-has none, there is an editor for writing them (a chorus
-typed once and repeated) and tapping the timing in, and what you write goes
-out to everyone else playing that song.
+has none, there is an editor for writing them (pasted, or typed as the
+song plays beside them, a chorus typed once and repeated) and tapping the
+timing in, and what you write goes out to everyone else playing that song.
 
 When the queue runs out, the music keeps going with songs like the last one,
 and from your own library when there is no connection.

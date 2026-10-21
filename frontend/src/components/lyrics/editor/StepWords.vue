@@ -55,6 +55,8 @@
         </label>
       </div>
 
+      <ListenBar />
+
       <p v-if="s.restored.value" class="note">
         <Icon icon="ph:clock-counter-clockwise-bold" class="h-4 w-4 shrink-0" />
         <span class="flex-1">{{ t('publish.restored') }}</span>
@@ -144,6 +146,7 @@ import { useI18n } from '/src/i18n'
 import { LYRICS_EDITOR, SYNC } from '/src/model/lyrics/useLyricsSubmit'
 import { repeatLines, insertPart, partLabel } from '/src/model/lyrics/repeat'
 import EditorFooter from './EditorFooter.vue'
+import ListenBar from './ListenBar.vue'
 
 const { t } = useI18n()
 const { s, close } = inject(LYRICS_EDITOR)
