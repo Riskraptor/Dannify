@@ -63,6 +63,24 @@ export function syncSoon(now = Date.now()) {
   return syncFromYouTube()
 }
 
+/** "1,234 plays from YouTube Music · up to date 5 minutes ago", or what is happening. */
+export function syncLine(t, locale) {
+  if (ytmSyncing.value) return t('account.syncing')
+  const { last, total } = ytmStatus.value
+  if (!last) return t('account.syncSoon')
+  const plays = t('account.syncedPlays', { count: new Intl.NumberFormat(locale).format(total || 0) })
+  return `${plays} · ${t('account.syncedAgo', { when: agoText(last, locale) })}`
+}
+
+function agoText(seconds, locale) {
+  const diff = Math.max(0, Date.now() / 1000 - seconds)
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+  if (diff < 60) return rtf.format(0, 'second')
+  if (diff < 3600) return rtf.format(-Math.round(diff / 60), 'minute')
+  if (diff < 86400) return rtf.format(-Math.round(diff / 3600), 'hour')
+  return rtf.format(-Math.round(diff / 86400), 'day')
+}
+
 export async function loadYtmStatus() {
   try {
     const res = await API.youTubeHistoryStatus()

@@ -156,3 +156,18 @@ def test_a_year_with_nothing_in_it():
     assert year['busiest_day'] is None and year['peak_hour'] is None and year['first'] is None
     assert year['top_songs'] == []
     assert year['years'] == [2025]
+
+
+def test_right_about_now_is_this_hour_on_this_kind_of_day():
+    assert time.localtime(NOW).tm_wday == 1  # a Tuesday, ten at night
+    for day in (13, 14, 15, 16):  # weekday evenings
+        for i in (1, 2, 3, 4):
+            play(i, when(2026, 10, day, 22) + i * 240)
+        play(5, when(2026, 10, day, 8))  # mornings: another time of day
+    play(6, when(2026, 10, 17, 22))  # a Saturday night: another kind of day
+    play(7, when(2026, 10, 19, 22))  # Monday night counts...
+    play(7, NOW - 3600)  # ...but it was played an hour ago: left for later
+    found = {m['id']: m for m in listens.mixes(now=NOW)['mixes']}
+    assert set(ids(found['right_now'])) == {'Song 1', 'Song 2', 'Song 3', 'Song 4'}
+    # Nothing at this hour on this kind of day: no mix.
+    assert 'right_now' not in {m['id'] for m in listens.mixes(now=when(2026, 10, 24, 15))['mixes']}

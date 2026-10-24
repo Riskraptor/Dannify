@@ -8,8 +8,9 @@ export const MIXES = {
   top_month: { title: 'mixes.topMonth', text: 'mixes.topMonthText', icon: 'ph:crown-simple', tone: 'mix-top' },
   forgotten: { title: 'mixes.forgotten', text: 'mixes.forgottenText', icon: 'ph:heart', tone: 'mix-forgotten' },
   recent: { title: 'mixes.recent', text: 'mixes.recentText', icon: 'ph:sparkle', tone: 'mix-recent' },
+  right_now: { title: 'mixes.rightNow', text: 'mixes.rightNowText', icon: 'ph:clock-countdown', tone: 'mix-now' },
 }
-export const MIX_ORDER = ['on_repeat', 'top_month', 'recent', 'forgotten']
+export const MIX_ORDER = ['right_now', 'on_repeat', 'top_month', 'recent', 'forgotten']
 
 const RECENT = 40
 

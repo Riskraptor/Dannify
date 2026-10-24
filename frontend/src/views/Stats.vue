@@ -32,11 +32,16 @@
            the page opens (model/ytmSync.js): nothing to press. -->
       <div v-if="listens.keeping.value && account.signedIn.value && ytmSyncOn" class="stats-source is-quiet">
         <Icon icon="ph:youtube-logo-fill" class="stats-source-mark h-4 w-4 shrink-0" />
-        <p class="min-w-0 flex-1">{{ t('stats.withYouTube') }}</p>
-        <span v-if="ytmSyncing" class="stats-source-busy" :title="t('stats.bringingIn')">
-          <span class="spinner h-3.5 w-3.5" />
-          {{ t('stats.bringingIn') }}
+        <p class="min-w-0 flex-1">
+          <span class="font-semibold text-fg">{{ t('stats.withYouTube') }}</span>
+          <span class="stats-source-line">{{ ytmSyncing ? t('stats.bringingIn') : syncLine(t, locale) }}</span>
+        </p>
+        <!-- And the other way: what is played here goes to YouTube Music. -->
+        <span v-if="account.sendHistory.value" class="stats-source-both" :title="t('stats.bothWays')">
+          <Icon icon="ph:arrows-left-right-bold" class="h-3.5 w-3.5" />
+          {{ t('stats.bothWaysShort') }}
         </span>
+        <span v-if="ytmSyncing" class="spinner h-3.5 w-3.5" :aria-label="t('stats.bringingIn')" />
       </div>
       <div v-else-if="listens.keeping.value && !account.signedIn.value" class="stats-source">
         <Icon icon="ph:youtube-logo-fill" class="stats-source-mark h-4 w-4 shrink-0" />
@@ -296,7 +301,7 @@
 
 <script setup>
 import { useAccount } from '/src/model/account'
-import { syncSoon, ytmSyncOn, ytmSyncing } from '/src/model/ytmSync'
+import { loadYtmStatus, syncLine, syncSoon, ytmSyncOn, ytmSyncing } from '/src/model/ytmSync'
 import { ref, shallowRef, computed, watch, onActivated, onDeactivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
@@ -393,6 +398,7 @@ async function load() {
 }
 watch(days, load, { immediate: true })
 // What was played on YouTube Music meanwhile comes in as the page opens.
+loadYtmStatus()
 syncSoon()
 
 // A song that ends while the page is open is counted on it there and then;
@@ -640,6 +646,23 @@ function openAlbum(a) {
 }
 .stats-source-mark {
   color: #ff3b52;
+}
+.stats-source-line {
+  display: block;
+  font-size: 12px;
+  color: rgb(var(--c-fg) / var(--fg-55));
+}
+.stats-source-both {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: rgb(var(--c-accent));
+  background: rgb(var(--c-accent) / 0.12);
 }
 .stats {
   container: stats / inline-size;

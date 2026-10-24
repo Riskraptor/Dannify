@@ -89,7 +89,7 @@ import { Icon } from '@iconify/vue'
 import { useAccount } from '/src/model/account'
 import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
-import { loadYtmStatus, setYtmSync, ytmStatus, ytmSyncOn, ytmSyncing } from '/src/model/ytmSync'
+import { loadYtmStatus, setYtmSync, syncLine as ytmLine, ytmSyncOn, ytmSyncing } from '/src/model/ytmSync'
 
 const { t, locale } = useI18n()
 const account = useAccount()
@@ -98,22 +98,7 @@ const photoFailed = ref(false)
 onMounted(loadYtmStatus)
 
 // "1,234 plays from YouTube Music · up to date 5 minutes ago"
-const syncLine = computed(() => {
-  if (ytmSyncing.value) return t('account.syncing')
-  const { last, total } = ytmStatus.value
-  if (!last) return t('account.syncSoon')
-  const plays = t('account.syncedPlays', { count: new Intl.NumberFormat(locale.value).format(total || 0) })
-  return `${plays} · ${t('account.syncedAgo', { when: ago(last) })}`
-})
-
-function ago(seconds) {
-  const diff = Math.max(0, Date.now() / 1000 - seconds)
-  const rtf = new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' })
-  if (diff < 60) return rtf.format(0, 'second')
-  if (diff < 3600) return rtf.format(-Math.round(diff / 60), 'minute')
-  if (diff < 86400) return rtf.format(-Math.round(diff / 3600), 'hour')
-  return rtf.format(-Math.round(diff / 86400), 'day')
-}
+const syncLine = computed(() => ytmLine(t, locale.value))
 </script>
 
 <style scoped>

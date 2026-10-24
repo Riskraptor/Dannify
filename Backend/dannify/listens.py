@@ -693,9 +693,49 @@ _MIX_MIN = 4
 _ON_REPEAT_DAYS = 21
 
 
+# Right about now: this time of day, give or take, on this kind of day.
+_NOW_WINDOW = 90  # minutes either side
+_NOW_DAYS = 90
+_NOW_HALF_LIFE = 30  # days: a play a month old counts half
+_NOW_FRESH = 6 * 3600  # just played: left for later
+
+
+def _right_now(plays: list[tuple[int, int, str]], now: float) -> list[tuple[str, list[int]]]:
+    """The songs played around this time of day on the same kind of day (a
+    weekday, or the weekend), the last few months, the nearer in time and in
+    the day the more they count, without what was played in the last hours."""
+
+    here = time.localtime(now)
+    minute = here.tm_hour * 60 + here.tm_min
+    weekend = here.tm_wday >= 5
+    score: dict[str, float] = {}
+    rows: dict[str, list[int]] = {}
+    just_played: set[str] = set()
+    for at, seconds, key in plays[bisect.bisect_left(plays, (int(now - _NOW_DAYS * 86400), -1, '')):]:
+        if at > now - _NOW_FRESH:
+            just_played.add(key)
+            continue
+        then = time.localtime(at)
+        if (then.tm_wday >= 5) != weekend:
+            continue
+        apart = abs(then.tm_hour * 60 + then.tm_min - minute)
+        apart = min(apart, 1440 - apart)
+        if apart > _NOW_WINDOW:
+            continue
+        age = (now - at) / 86400
+        score[key] = score.get(key, 0.0) + 0.5 ** (age / _NOW_HALF_LIFE) * (1 - apart / (2 * _NOW_WINDOW))
+        row = rows.setdefault(key, [0, 0, 0])
+        row[0] += 1
+        row[1] += seconds
+        row[2] = max(row[2], at)
+    ranked = sorted((k for k in score if k not in just_played), key=lambda k: (-score[k], k))
+    return [(k, rows[k]) for k in ranked]
+
+
 def mixes(now: Optional[float] = None) -> dict[str, Any]:
-    """``{mixes: [{id, songs}]}``: On repeat, Forgotten favourites and Top
-    this month, each left out while it has too few songs to be a mix."""
+    """``{mixes: [{id, songs}]}``: On repeat, Forgotten favourites, Top this
+    month and Right about now, each left out while it has too few songs to be
+    a mix."""
 
     now = time.time() if now is None else now
     with _lock:
@@ -738,7 +778,11 @@ def mixes(now: Optional[float] = None) -> dict[str, Any]:
     first_of_month = _day_start(date.fromtimestamp(now).replace(day=1))
     month = sorted(tally(since(first_of_month)).items(), key=lambda kv: (-kv[1][1], -kv[1][0], kv[0]))
 
-    for mix_id, rows in (('on_repeat', on_repeat), ('forgotten', forgotten), ('top_month', month)):
+    right_now = _right_now(plays, now)
+
+    for mix_id, rows in (
+        ('on_repeat', on_repeat), ('forgotten', forgotten), ('top_month', month), ('right_now', right_now)
+    ):
         if len(rows) >= _MIX_MIN:
             found.append({'id': mix_id, 'songs': listed(rows)})
     return {'mixes': found}
