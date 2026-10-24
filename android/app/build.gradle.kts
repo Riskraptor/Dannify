@@ -16,11 +16,13 @@ val appVersionCode: Int = appVersion.split('.').map { it.toInt() }.let { p ->
 
 // The Python that runs the build's own steps and compiles the app's Python:
 // the same version the app carries.
-val buildPython: String = System.getenv("DANNIFY_BUILD_PYTHON") ?: "python"
+val hostPython: String = System.getenv("DANNIFY_BUILD_PYTHON") ?: "python"
 
 android {
     namespace = "app.dannify"
-    compileSdk = 36
+    // Compiled against Android 17, which today's AndroidX needs; it still
+    // runs as an Android 16 app (targetSdk), with none of 17's new rules.
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.dannify"
@@ -28,9 +30,19 @@ android {
         targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersion
-        ndk {
-            // Phones, and the emulator on a PC.
-            abiFilters += listOf("arm64-v8a", "x86_64")
+    }
+
+    // One APK per processor, each with only its own Python and programs:
+    // arm64 for phones, x86_64 for Chromebooks and the emulator on a PC.
+    flavorDimensions += "abi"
+    productFlavors {
+        create("arm64") {
+            dimension = "abi"
+            ndk { abiFilters += "arm64-v8a" }
+        }
+        create("x86_64") {
+            dimension = "abi"
+            ndk { abiFilters += "x86_64" }
         }
     }
 
@@ -102,12 +114,12 @@ chaquopy {
 
 // The packed interface (assets/dannify.res) and the programs the app carries
 // (jniLibs/<abi>/lib*.so), made before every build by tools/prepare.py from
-// frontend/dist, android/native and QuickJS's own release.
-val prepareDannify by tasks.registering(Exec::class) {
+// frontend/dist and android/native.
+val prepareDannify = tasks.register<Exec>("prepareDannify") {
     group = "dannify"
-    description = "Packs the interface and fetches the programs the app carries."
+    description = "Packs the interface and places the programs the app carries."
     workingDir = rootDir
-    commandLine(buildPython, "tools/prepare.py")
+    commandLine(hostPython, "tools/prepare.py")
     inputs.dir(rootDir.resolve("../frontend/dist"))
     inputs.dir(rootDir.resolve("native"))
     inputs.file(rootDir.resolve("tools/prepare.py"))

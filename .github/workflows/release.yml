@@ -1,11 +1,12 @@
 # Every platform's release files: the Windows setup and the package installed
-# copies update from, the Linux .deb, and Dannify.app as a .zip (what the app
-# updates itself from) and a .dmg (what people download).
+# copies update from, the Linux .deb, Dannify.app as a .zip (what the app
+# updates itself from) and a .dmg (what people download), and the Android app,
+# one APK per processor.
 #
 # Nothing here is signed with the release key. That key never leaves the
 # release machine, which downloads these files, signs them and publishes
-# them (packaging/publish.ps1). The macOS app is signed ad hoc only: there is
-# no Apple Developer ID.
+# them (packaging/publish.ps1); the APKs' own signing key stays there too.
+# The macOS app is signed ad hoc only: there is no Apple Developer ID.
 name: Release builds
 
 on:
@@ -265,5 +266,73 @@ jobs:
         with:
           name: macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.dmg
           path: out/macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+          compression-level: 0
+
+  # What the Android app carries that is built for Android: pydantic-core and
+  # the media tool (android-native.yml, the same workflow run on its own).
+  android-native:
+    uses: ./.github/workflows/android-native.yml
+
+  android:
+    needs: android-native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Version
+        id: version
+        run: echo "version=$(sed -n "s/^__version__ = '\(.*\)'/\1/p" Backend/dannify/__init__.py)" >> "$GITHUB_OUTPUT"
+      # The runner's own JDK 21 and Android SDK; Python as the app carries it.
+      - name: Java
+        run: echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build the interface
+        working-directory: frontend
+        run: |
+          npm ci
+          npx vite build
+      - name: What is built for Android
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download ${{ github.run_id }} --repo ${{ github.repository }} --name android-native --dir android/native
+      - name: Gradle's downloads (cached)
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('android/**/*.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - name: Build the APKs
+        working-directory: android
+        env:
+          DANNIFY_BUILD_PYTHON: python
+        run: ./gradlew --no-daemon --console=plain assembleArm64Release assembleX86_64Release
+      # Unsigned: the release machine signs them (packaging/publish.ps1).
+      - name: Name them
+        run: |
+          mkdir -p out
+          for arch in arm64 x86_64; do
+            cp "android/app/build/outputs/apk/$arch/release/app-$arch-release-unsigned.apk" \
+              "out/android-Dannify-${{ steps.version.outputs.version }}-$arch.apk"
+          done
+          ls -la out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-Dannify-${{ steps.version.outputs.version }}-arm64.apk
+          path: out/android-Dannify-${{ steps.version.outputs.version }}-arm64.apk
+          if-no-files-found: error
+          # Already compressed.
+          compression-level: 0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-Dannify-${{ steps.version.outputs.version }}-x86_64.apk
+          path: out/android-Dannify-${{ steps.version.outputs.version }}-x86_64.apk
           if-no-files-found: error
           compression-level: 0

@@ -7,11 +7,17 @@
 # Runs wherever PowerShell does: releases are cut from Linux now.
 #
 # One release carries every platform: the Windows setup and package, the
-# Linux .deb and the macOS apps, all built by the release workflow on
-# GitHub's machines when the tag is pushed. They come down unsigned: they are
-# signed here, with the offline release key that never goes near GitHub, and
-# every file is checked against the key installed copies trust before
-# anything is uploaded.
+# Linux .deb, the macOS apps and the Android APKs, all built by the release
+# workflow on GitHub's machines when the tag is pushed. They come down
+# unsigned: they are signed here, with the offline release key that never
+# goes near GitHub, and every file is checked against the key installed
+# copies trust before anything is uploaded. The APKs are signed first with
+# the Android app's own key, which stays here too (see android/README.md).
+#
+# The Android signing needs the Android SDK's build-tools (apksigner, which
+# runs on Java: JAVA_HOME), and the app's key: DANNIFY_APK_KEYSTORE names it
+# (default ~/.dannify/dannify.keystore), and its password is in
+# DANNIFY_APK_KEYSTORE_PASSWORD or in a file beside it, <keystore>.password.
 #
 # -WindowsFrom local takes the Windows files from packaging\out instead, as
 # build.ps1 leaves them on a Windows desk, already signed.
@@ -28,7 +34,7 @@ param(
     [string]$Repo = 'Riskraptor/Dannify',
     # The platforms this release must carry. Leaving one out is a decision,
     # never something that happens because its build failed.
-    [ValidateSet('windows', 'linux', 'macos')][string[]]$Platforms = @('windows', 'linux', 'macos'),
+    [ValidateSet('windows', 'linux', 'macos', 'android')][string[]]$Platforms = @('windows', 'linux', 'macos', 'android'),
     # Where the Windows files come from: the release workflow, or a build.ps1
     # run on this machine.
     [ValidateSet('ci', 'local')][string]$WindowsFrom = 'ci',
@@ -99,6 +105,34 @@ if ($Platforms -contains 'macos') {
         $wanted += "macos-Dannify-$version-$arch.zip", "macos-Dannify-$version-$arch.dmg"
     }
 }
+$apks = @()
+if ($Platforms -contains 'android') {
+    $apks = @('arm64', 'x86_64') | ForEach-Object { "android-Dannify-$version-$_.apk" }
+    $wanted += $apks
+}
+
+# Everything the Android signing needs is checked before any waiting.
+if ($apks) {
+    $sdk = @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT, (Join-Path $HOME 'Android/sdk')) |
+        Where-Object { $_ -and (Test-Path (Join-Path $_ 'build-tools')) } | Select-Object -First 1
+    if (-not $sdk) { throw "no Android SDK build-tools for apksigner (set ANDROID_HOME)" }
+    $apksigner = Get-ChildItem (Join-Path $sdk 'build-tools') -Directory |
+        Sort-Object { [version](($_.Name -replace '-.*$', '') + '.0' * (3 - ($_.Name -replace '-.*$', '').Split('.').Count)) } -Descending |
+        ForEach-Object { Join-Path $_.FullName $(if ($env:OS -eq 'Windows_NT') { 'apksigner.bat' } else { 'apksigner' }) } |
+        Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $apksigner) { throw "no apksigner in $sdk/build-tools" }
+    $keystore = if ($env:DANNIFY_APK_KEYSTORE) { $env:DANNIFY_APK_KEYSTORE } else { Join-Path $HOME '.dannify/dannify.keystore' }
+    if (-not (Test-Path $keystore)) { throw "no Android signing key at $keystore (DANNIFY_APK_KEYSTORE)" }
+    # The password is handed over by name, never on a command line.
+    $keyPass = if ($env:DANNIFY_APK_KEYSTORE_PASSWORD) { 'env:DANNIFY_APK_KEYSTORE_PASSWORD' } else { "file:$keystore.password" }
+    if (-not $env:DANNIFY_APK_KEYSTORE_PASSWORD -and -not (Test-Path "$keystore.password")) {
+        throw "no password for $keystore (DANNIFY_APK_KEYSTORE_PASSWORD, or $keystore.password)"
+    }
+    # The certificate every Dannify APK has ever been signed with. Android
+    # installs an update only over an app signed with the same key: an APK
+    # signed with any other could never update a single phone.
+    $certificate = (Get-Content (Join-Path $PSScriptRoot 'android/certificate.sha256') -Raw).Trim().ToLower()
+}
 if ($Run -and -not $DryRun) { throw '-Run is for -DryRun only: a release carries the builds of its own tag' }
 if ($wanted) {
     $requestedRun = $Run
@@ -141,6 +175,20 @@ if ($wanted) {
         $dest = Join-Path $work $name
         Copy-Item $found.FullName $dest -Force
         $files += $dest
+    }
+
+    # The APKs first get the Android app's own signature, which the release
+    # signature below then covers with the rest of the file.
+    foreach ($name in $apks) {
+        $apk = Join-Path $work $name
+        Write-Host "Signing $name for Android" -ForegroundColor Cyan
+        & $apksigner sign --ks $keystore --ks-pass $keyPass --ks-key-alias dannify --v4-signing-enabled false $apk
+        if ($LASTEXITCODE -ne 0) { throw "signing $name for Android failed" }
+        $printed = & $apksigner verify --print-certs $apk
+        if ($LASTEXITCODE -ne 0) { throw "$name does not verify as an APK" }
+        $found = $printed | Select-String 'certificate SHA-256 digest: ([0-9a-f]{64})' | Select-Object -First 1
+        $digest = if ($found) { $found.Matches[0].Groups[1].Value } else { '' }
+        if ($digest -ne $certificate) { throw "$name is signed with another key ($digest), not the app's ($certificate)" }
     }
 
     # Signed here, with the offline key. release_key.py refuses to sign with
