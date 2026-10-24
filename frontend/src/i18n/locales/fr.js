@@ -1191,6 +1191,7 @@ export default {
     partLogs: 'Journal d’activité',
     partLogsText: 'Le détail de ce que l’application a fait récemment. Utile seulement pour les problèmes difficiles.',
     partLogsSize: 'Le détail de ce que l’application a fait récemment ({size}). Utile seulement pour les problèmes difficiles.',
+    logsSealed: 'Scellé : ce journal est écrit pour que seul le développeur puisse le lire.',
     seeWhat: 'Voir exactement ce qui serait envoyé',
     notSent: 'Désactivé : ceci n’est pas envoyé.',
     noneYet: 'Rien pour l’instant.',

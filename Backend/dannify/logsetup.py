@@ -6,9 +6,12 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
 from pathlib import Path
 
 from loguru import logger
+
+from . import sealed
 
 
 class _InterceptHandler(logging.Handler):
@@ -27,6 +30,37 @@ class _InterceptHandler(logging.Handler):
         logger.opt(depth=depth, exception=record.exc_info).log(
             level, record.getMessage()
         )
+
+
+class _SealedFile:
+    """The log file of a shipped copy: a sealed line for each record
+    (sealed.py), with anything that signs in blanked first, turned over at
+    5 MB with three kept, like the plain one."""
+
+    def __init__(self, path: Path, limit: int = 5 * 1024 * 1024, keep: int = 3) -> None:
+        self.path = Path(path)
+        self.limit = limit
+        self.keep = keep
+        self._lock = threading.Lock()
+
+    def __call__(self, message: str) -> None:
+        from .report import scrub  # noqa: PLC0415  (not needed before the first line)
+
+        line = sealed.line(scrub(str(message).rstrip('\n'))) + '\n'
+        with self._lock:
+            try:
+                if self.path.exists() and self.path.stat().st_size + len(line) > self.limit:
+                    self._turn_over()
+                with open(self.path, 'a', encoding='utf-8') as f:
+                    f.write(line)
+            except OSError:
+                pass
+
+    def _turn_over(self) -> None:
+        for n in range(self.keep, 0, -1):
+            newer = self.path if n == 1 else self.path.with_name(f'{self.path.name}.{n - 1}')
+            if newer.exists():
+                os.replace(newer, self.path.with_name(f'{self.path.name}.{n}'))
 
 
 def _setup_logging(level: str) -> None:
@@ -93,7 +127,27 @@ def _setup_logging(level: str) -> None:
     # explicit because the icons in the log format (✓ ✗ ‼ ♪) crash a
     # cp1252 default sink on Windows.
     _log_file = os.getenv('DANNIFY_LOG_FILE')
-    if _log_file:
+    if _log_file and sealed.sealing():
+        # A shipped copy's log is sealed: only the developer can read what
+        # the app did (sealed.py).
+        try:
+            Path(_log_file).parent.mkdir(parents=True, exist_ok=True)
+            logger.add(
+                _SealedFile(Path(_log_file)),
+                format=(
+                    '{time:YYYY-MM-DD HH:mm:ss} '
+                    '{level.icon} {level: <7} '
+                    '{extra[component]: <12} {message}'
+                ),
+                level=level.upper(),
+                colorize=False,
+                backtrace=False,
+                diagnose=False,
+                enqueue=True,
+            )
+        except Exception:
+            pass
+    elif _log_file:
         try:
             Path(_log_file).parent.mkdir(parents=True, exist_ok=True)
             logger.add(

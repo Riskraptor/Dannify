@@ -1157,6 +1157,7 @@ export default {
     partLogs: 'Registro de atividade',
     partLogsText: 'Um registro detalhado do que o aplicativo fez há pouco. Só é preciso para problemas difíceis.',
     partLogsSize: 'Um registro detalhado do que o aplicativo fez há pouco ({size}). Só é preciso para problemas difíceis.',
+    logsSealed: 'Selado: este registro é escrito para que só o desenvolvedor possa lê-lo.',
     seeWhat: 'Ver exatamente o que seria enviado',
     notSent: 'Desligado: isto não é enviado.',
     noneYet: 'Nada aqui ainda.',

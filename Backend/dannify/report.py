@@ -46,6 +46,8 @@ from typing import Any, Iterable, Optional
 
 from loguru import logger
 
+from . import sealed
+
 # Where reports go. Empty: not open yet (see the module notes).
 REPORT_ENDPOINT = ''
 # The Web3Forms form that emails reports to the developer. Public by design:
@@ -175,8 +177,8 @@ def _about(version: str, settings: dict[str, Any], facts: dict[str, Any]) -> str
     lines = [
         f'Dannify {version}',
         f'Made {time.strftime("%Y-%m-%d %H:%M:%S %z")}',
-        f'Windows: {platform.platform()} ({platform.machine()})',
-        f'Python: {sys.version.split()[0]}, packaged: {bool(getattr(sys, "frozen", False))}',
+        f'System: {platform.platform()} ({platform.machine()})',
+        f'Core: {platform.python_version()}, {"installed" if getattr(sys, "frozen", False) else "source"}',
         '',
     ]
     for key, value in facts.items():
@@ -270,10 +272,15 @@ def preview(
     errors = [e for e in window_errors if e]
     logs = _logs(Path(data_dir), log_file)
     tail = ''
+    closed = False
     if logs:
         try:
             lines = _tail(logs[-1], 256 * 1024).splitlines()
-            tail = scrub('\n'.join(lines[-PREVIEW_LOG_LINES:]))
+            # A shipped copy's log is sealed (sealed.py): only the developer
+            # can read it, so it is said to be, not shown as letters.
+            plain = [line for line in lines if not sealed.is_sealed(line)]
+            closed = len(plain) < len(lines)
+            tail = scrub('\n'.join(plain[-PREVIEW_LOG_LINES:]))
         except OSError:
             tail = ''
     return {
@@ -283,6 +290,7 @@ def preview(
         if errors else '',
         'logs': [{'name': p.name, 'bytes': p.stat().st_size} for p in logs],
         'logs_tail': tail,
+        'logs_sealed': closed,
     }
 
 

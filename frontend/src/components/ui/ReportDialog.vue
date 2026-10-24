@@ -318,6 +318,8 @@ const previewText = computed(() => {
   if (!p) return '\u2026'
   if (previewTab.value === 'about') return p.about
   if (previewTab.value === 'errors') return p.errors_text || t('problems.noneYet')
+  // A shipped copy's log is sealed: there is nothing to read here.
+  if (p.logs_sealed) return t('problems.logsSealed')
   return p.logs_tail || t('problems.noneYet')
 })
 

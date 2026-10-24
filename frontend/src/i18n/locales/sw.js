@@ -1157,6 +1157,7 @@ export default {
     partLogs: 'Kumbukumbu za shughuli',
     partLogsText: 'Rekodi ya kina ya ambacho programu ilifanya hivi karibuni. Inahitajika tu kwa matatizo magumu.',
     partLogsSize: 'Rekodi ya kina ya ambacho programu ilifanya hivi karibuni ({size}). Inahitajika tu kwa matatizo magumu.',
+    logsSealed: 'Imefungwa: rekodi hii imeandikwa ili msanidi programu pekee aweze kuisoma.',
     seeWhat: 'Tazama hasa kitakachotumwa',
     notSent: 'Imezimwa: hii haitumwi.',
     noneYet: 'Hakuna kitu bado.',

@@ -457,6 +457,7 @@ export default {
     partLogs: 'Activity log',
     partLogsText: 'A detailed record of what the app did lately. Only needed for hard problems.',
     partLogsSize: 'A detailed record of what the app did lately ({size}). Only needed for hard problems.',
+    logsSealed: 'Sealed: this record is written so that only the developer can read it.',
     seeWhat: 'See exactly what would be sent',
     notSent: 'Off: this is not sent.',
     noneYet: 'Nothing here yet.',

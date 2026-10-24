@@ -1157,6 +1157,7 @@ export default {
     partLogs: 'Aktivitätsprotokoll',
     partLogsText: 'Ein genaues Protokoll dessen, was die App zuletzt getan hat. Nur bei schwierigen Problemen nötig.',
     partLogsSize: 'Ein genaues Protokoll dessen, was die App zuletzt getan hat ({size}). Nur bei schwierigen Problemen nötig.',
+    logsSealed: 'Versiegelt: Dieses Protokoll ist so geschrieben, dass nur der Entwickler es lesen kann.',
     seeWhat: 'Genau ansehen, was gesendet würde',
     notSent: 'Aus: Das wird nicht gesendet.',
     noneYet: 'Noch nichts da.',
