@@ -92,9 +92,11 @@ sed -i 's/^\(\.nas\.l\?o\): \$< nasm\.h$/\1:/' libmp3lame/i386/Makefile.in
 sed -i 's/^if test ${cross_compiling} = "yes"; then$/if false; then/' configure
 # AR_FLAGS: ar ignores the 'u' in libtool's 'cru', and said so for each library.
 # Every tool named outright: the NDK's are not called after the host, and
-# configure warned about any it found only under its plain name.
+# configure warned about any it found only under its plain name. Windows'
+# DLLTOOL and MANIFEST_TOOL (mt) are named too, as none: libtool looks for
+# them everywhere, and a Linux machine's tape tool is also called mt.
 CC="$CC" AR="$TOOLS/llvm-ar" RANLIB="$TOOLS/llvm-ranlib" STRIP="$TOOLS/llvm-strip" \
-NM="$TOOLS/llvm-nm" OBJDUMP="$TOOLS/llvm-objdump" AR_FLAGS=cr \
+NM="$TOOLS/llvm-nm" OBJDUMP="$TOOLS/llvm-objdump" DLLTOOL=false MANIFEST_TOOL=: AR_FLAGS=cr \
 CFLAGS="$QUIET_CFLAGS" alex_cv_ieee854_float80=no \
 ./configure --host="$TRIPLE" --prefix="$DEPS" --enable-static --disable-shared \
     --disable-frontend --disable-decoder --disable-gtktest >/dev/null
