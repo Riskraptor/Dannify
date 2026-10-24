@@ -64,7 +64,10 @@ object MediaLink {
             snapshot = fresh
             player?.show(fresh)
             PlaybackGuard.playing(fresh.playing)
-            if (fresh.hasTrack && controller == null) connect()
+            // The notification comes with the music: a song put back paused
+            // as the app opens is not playing anything yet. Once it has
+            // played, the notification stays while it is paused.
+            if (fresh.playing && controller == null) connect()
         }
     }
 
