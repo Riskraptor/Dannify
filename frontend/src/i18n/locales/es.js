@@ -989,7 +989,7 @@ export default {
     hidden: 'Dannify sigue funcionando aquí. Haz clic en el icono para abrirlo, o clic derecho para salir.',
   },
   net: {
-    offline: 'No hay conexión a internet. Dannify seguirá donde lo dejó.',
+    offline: 'Estás sin conexión. Tu música guardada suena como siempre, y lo demás vuelve solo.',
     backOnline: 'De nuevo en línea',
     offlineTitle: 'No tienes conexión',
     offlinePage: 'Esta página necesita internet. Se abrirá sola cuando vuelvas a estar en línea, y tu música guardada suena como siempre.',
@@ -997,6 +997,13 @@ export default {
     offlineHome: 'No tienes conexión. Las recomendaciones vuelven con la conexión; toda tu música guardada está aquí.',
     loadFailed: 'No se pudo cargar.',
     loadFailedText: 'YouTube no respondió como se esperaba. Inténtalo de nuevo en un momento; tu música guardada sigue sonando.',
+    offlinePill: 'Sin conexión',
+    offlinePillHint: 'Estás sin conexión. Tu música guardada suena como siempre, y todo lo demás vuelve solo. Haz clic para comprobar de nuevo.',
+    checking: 'Comprobando…',
+    checkAgain: 'Comprobar de nuevo',
+    shuffleSaved: 'Aleatorio con tus canciones',
+    openSaved: 'Tus canciones',
+    offlineBrowse: 'Los estados de ánimo y los géneros necesitan internet, y vuelven solos. Toda tu música guardada está aquí.',
   },
   explore: {
     title: 'Explorar',
@@ -1166,7 +1173,6 @@ export default {
     eyebrow: 'Explorar',
     playlistCount: '{count} playlist | {count} playlists',
     failedTitle: 'No se pudo abrir',
-    failedText: 'Revisa tu conexión e inténtalo de nuevo.',
   },
   stats: {
     title: 'Tu escucha',

@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import API from '/src/model/api'
+import { failedForNetwork, whenOnline } from '/src/model/connectivity'
 
 // Moods and genres from YouTube Music, for Search before anything is typed
 // (and each one's page of playlists). Read once a session; the server keeps
@@ -8,6 +9,8 @@ import API from '/src/model/api'
 const sections = ref([])
 const loaded = ref(false)
 const failed = ref(false)
+// Failed for want of a connection: loaded again by itself once it is back.
+const offline = ref(false)
 let loading = null
 
 export function loadMoods() {
@@ -17,9 +20,12 @@ export function loadMoods() {
       .then((res) => {
         sections.value = (res.data && res.data.sections) || []
         failed.value = false
+        offline.value = false
       })
-      .catch(() => {
+      .catch(async (err) => {
         failed.value = true
+        offline.value = await failedForNetwork(err)
+        if (offline.value) whenOnline(() => loadMoods())
       })
       .finally(() => {
         loaded.value = true
@@ -75,5 +81,5 @@ export function moodGlyph(title) {
 }
 
 export function useMoods() {
-  return { sections, loaded, failed, load: loadMoods }
+  return { sections, loaded, failed, offline, load: loadMoods }
 }

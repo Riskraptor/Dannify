@@ -989,7 +989,7 @@ export default {
     hidden: 'Dannify bado inafanya kazi hapa. Bofya ikoni kuifungua, au bofya kulia ili kuondoka.',
   },
   net: {
-    offline: 'Hakuna muunganisho wa intaneti. Dannify itaendelea ilipoachia.',
+    offline: 'Uko nje ya mtandao. Muziki uliohifadhi unacheza kama kawaida, na mengine yanarudi yenyewe.',
     backOnline: 'Umerudi mtandaoni',
     offlineTitle: 'Uko nje ya mtandao',
     offlinePage: 'Ukurasa huu unahitaji intaneti. Unafunguka wenyewe ukirudi mtandaoni, na muziki wako uliohifadhiwa unacheza kama kawaida.',
@@ -997,6 +997,13 @@ export default {
     offlineHome: 'Uko nje ya mtandao. Mapendekezo yanarudi pamoja na muunganisho; muziki wako uliohifadhiwa wote uko hapa.',
     loadFailed: 'Hiki hakikuweza kupakiwa.',
     loadFailedText: 'YouTube haikujibu kama ilivyotarajiwa. Jaribu tena baada ya muda mfupi; muziki wako uliohifadhiwa bado unacheza.',
+    offlinePill: 'Nje ya mtandao',
+    offlinePillHint: 'Uko nje ya mtandao. Muziki uliohifadhi unacheza kama kawaida, na mengine yote yanarudi yenyewe. Bofya kuangalia tena.',
+    checking: 'Inaangalia…',
+    checkAgain: 'Angalia tena',
+    shuffleSaved: 'Changanya nyimbo ulizohifadhi',
+    openSaved: 'Nyimbo zako',
+    offlineBrowse: 'Hisia na aina za muziki zinahitaji mtandao, na zinarudi zenyewe. Muziki wako wote uliohifadhi uko hapa.',
   },
   explore: {
     title: 'Gundua',
@@ -1166,7 +1173,6 @@ export default {
     eyebrow: 'Vinjari',
     playlistCount: 'orodha {count} | orodha {count}',
     failedTitle: 'Hiki hakikuweza kufunguliwa',
-    failedText: 'Angalia muunganisho wako, kisha ujaribu tena.',
   },
   stats: {
     title: 'Usikilizaji wako',

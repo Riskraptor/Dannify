@@ -17,11 +17,16 @@
     <div v-if="loading" class="view-pad grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-4 pt-2">
       <div v-for="n in 12" :key="n" class="skeleton aspect-square" />
     </div>
+    <!-- Offline: the saved music is a click away, and the page opens by
+         itself once the connection is back. Anything else is said as it is. -->
+    <div v-else-if="failed === 'offline'" class="view-pad">
+      <OfflineCard />
+    </div>
     <EmptyState
       v-else-if="failed"
-      icon="ph:wifi-slash"
+      icon="ph:warning-circle"
       :title="t('browse.failedTitle')"
-      :text="t('browse.failedText')"
+      :text="t('net.loadFailedText')"
     >
       <button class="btn btn-pill" @click="load">{{ t('common.retry') }}</button>
     </EmptyState>
@@ -47,6 +52,8 @@ import { moodColour, moodGlyph } from '/src/model/moods'
 import { useI18n } from '/src/i18n'
 import MediaCard from '/src/components/MediaCard.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
+import OfflineCard from '/src/components/ui/OfflineCard.vue'
+import { failedForNetwork, useConnectivity, whenOnline } from '/src/model/connectivity'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -56,21 +63,41 @@ const params = computed(() => String(route.params.params || ''))
 const title = computed(() => String(route.query.title || ''))
 const colour = computed(() => moodColour(title.value))
 const glyph = computed(() => moodGlyph(title.value))
+const connectivity = useConnectivity()
 const playlists = ref([])
 const loading = ref(true)
-const failed = ref(false)
+// '' (none), 'offline', or 'error'.
+const failed = ref('')
 
 async function load() {
   const p = params.value
   if (!p) return
+  // Known to be offline: said at once, and opened by itself once the
+  // connection is back (a look is taken now, in case it already is).
+  if (connectivity.isOffline.value) {
+    failed.value = 'offline'
+    loading.value = false
+    whenOnline(() => {
+      if (p === params.value && failed.value) load()
+    })
+    connectivity.probe()
+    return
+  }
   loading.value = true
-  failed.value = false
+  failed.value = ''
   try {
     const res = await API.getMoodPlaylists(p)
     if (p !== params.value) return
     playlists.value = (res.data && res.data.playlists) || []
-  } catch {
-    failed.value = true
+  } catch (err) {
+    const offline = await failedForNetwork(err)
+    if (p !== params.value) return
+    failed.value = offline ? 'offline' : 'error'
+    if (offline) {
+      whenOnline(() => {
+        if (p === params.value && failed.value) load()
+      })
+    }
   } finally {
     loading.value = false
   }

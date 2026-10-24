@@ -1024,7 +1024,7 @@ export default {
     hidden: 'Dannify est toujours ouvert ici. Cliquez sur l’icône pour le rouvrir, ou faites un clic droit pour quitter.',
   },
   net: {
-    offline: 'Pas de connexion. Dannify reprendra là où il s’est arrêté.',
+    offline: 'Vous êtes hors ligne. Votre musique enregistrée se lit comme d’habitude, et le reste revient tout seul.',
     backOnline: 'De nouveau en ligne',
     offlineTitle: 'Vous êtes hors ligne',
     offlinePage: 'Cette page a besoin d’Internet. Elle s’ouvrira toute seule dès le retour de la connexion, et votre musique enregistrée se lit comme d’habitude.',
@@ -1032,6 +1032,13 @@ export default {
     offlineHome: 'Vous êtes hors ligne. Les recommandations reviennent avec la connexion ; toute votre musique enregistrée est là.',
     loadFailed: 'Impossible de charger ceci.',
     loadFailedText: 'YouTube n’a pas répondu comme prévu. Réessayez dans un instant ; votre musique enregistrée se lit toujours.',
+    offlinePill: 'Hors ligne',
+    offlinePillHint: 'Vous êtes hors ligne. Votre musique enregistrée se lit comme d’habitude, et tout le reste revient tout seul. Cliquez pour vérifier à nouveau.',
+    checking: 'Vérification…',
+    checkAgain: 'Vérifier à nouveau',
+    shuffleSaved: 'Lire vos titres en aléatoire',
+    openSaved: 'Vos titres',
+    offlineBrowse: 'Les ambiances et les genres ont besoin d’internet, et reviennent tout seuls. Toute votre musique enregistrée est là.',
   },
   explore: {
     title: 'Explorer',
@@ -1201,7 +1208,6 @@ export default {
     eyebrow: 'Parcourir',
     playlistCount: '{count} playlist | {count} playlists',
     failedTitle: 'Impossible d’ouvrir cette page',
-    failedText: 'Vérifiez votre connexion, puis réessayez.',
   },
   stats: {
     title: 'Vos écoutes',

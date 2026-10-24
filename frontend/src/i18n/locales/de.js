@@ -989,7 +989,7 @@ export default {
     hidden: 'Dannify läuft hier weiter. Klicken Sie auf das Symbol zum Öffnen, oder mit der rechten Maustaste zum Beenden.',
   },
   net: {
-    offline: 'Keine Internetverbindung. Dannify macht dort weiter, wo es aufgehört hat.',
+    offline: 'Sie sind offline. Ihre gespeicherte Musik läuft wie gewohnt, und der Rest kommt von selbst zurück.',
     backOnline: 'Wieder online',
     offlineTitle: 'Sie sind offline',
     offlinePage: 'Diese Seite braucht Internet. Sie öffnet sich von selbst, sobald Sie wieder online sind, und Ihre gespeicherten Songs spielen ganz normal.',
@@ -997,6 +997,13 @@ export default {
     offlineHome: 'Sie sind offline. Empfehlungen kommen mit der Verbindung zurück; alle Ihre gespeicherten Songs sind hier.',
     loadFailed: 'Das hat nicht geladen.',
     loadFailedText: 'YouTube hat nicht wie erwartet geantwortet. Versuchen Sie es gleich noch einmal; Ihre gespeicherten Songs spielen weiter.',
+    offlinePill: 'Offline',
+    offlinePillHint: 'Sie sind offline. Ihre gespeicherte Musik läuft wie gewohnt, und alles andere kommt von selbst zurück. Klicken, um erneut zu prüfen.',
+    checking: 'Wird geprüft…',
+    checkAgain: 'Erneut prüfen',
+    shuffleSaved: 'Gespeicherte Songs zufällig abspielen',
+    openSaved: 'Ihre Songs',
+    offlineBrowse: 'Stimmungen und Genres brauchen das Internet und kommen von selbst zurück. Ihre gespeicherte Musik ist komplett da.',
   },
   explore: {
     title: 'Entdecken',
@@ -1166,7 +1173,6 @@ export default {
     eyebrow: 'Stöbern',
     playlistCount: '{count} Playlist | {count} Playlists',
     failedTitle: 'Das ließ sich nicht öffnen',
-    failedText: 'Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.',
   },
   stats: {
     title: 'Was Sie hören',

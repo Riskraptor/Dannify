@@ -54,6 +54,7 @@
 
     <div class="tb-right">
       <div class="tb-app">
+        <OfflineIndicator />
         <RepairIndicator />
         <DownloadIndicator />
         <UpdateButton />
@@ -120,6 +121,7 @@ import SearchBox from './SearchBox.vue'
 import WindowControls from './WindowControls.vue'
 import DownloadIndicator from './DownloadIndicator.vue'
 import RepairIndicator from './RepairIndicator.vue'
+import OfflineIndicator from './OfflineIndicator.vue'
 import UpdateButton from './UpdateButton.vue'
 
 const { t } = useI18n()

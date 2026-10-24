@@ -989,7 +989,7 @@ export default {
     hidden: 'O Dannify continua rodando aqui. Clique no ícone para abrir, ou clique com o botão direito para sair.',
   },
   net: {
-    offline: 'Sem conexão com a internet. O Dannify vai continuar de onde parou.',
+    offline: 'Você está offline. Sua música salva toca normalmente, e o resto volta sozinho.',
     backOnline: 'On-line de novo',
     offlineTitle: 'Você está off-line',
     offlinePage: 'Esta página precisa de internet. Ela abre sozinha quando você estiver on-line de novo, e suas músicas salvas tocam normalmente.',
@@ -997,6 +997,13 @@ export default {
     offlineHome: 'Você está off-line. As recomendações voltam com a conexão; todas as suas músicas salvas estão aqui.',
     loadFailed: 'Não foi possível carregar.',
     loadFailedText: 'O YouTube não respondeu como esperado. Tente de novo em instantes; suas músicas salvas continuam tocando.',
+    offlinePill: 'Offline',
+    offlinePillHint: 'Você está offline. Sua música salva toca normalmente, e todo o resto volta sozinho. Clique para verificar de novo.',
+    checking: 'Verificando…',
+    checkAgain: 'Verificar de novo',
+    shuffleSaved: 'Aleatório com suas músicas',
+    openSaved: 'Suas músicas',
+    offlineBrowse: 'Climas e gêneros precisam da internet, e voltam sozinhos. Toda a sua música salva está aqui.',
   },
   explore: {
     title: 'Explorar',
@@ -1166,7 +1173,6 @@ export default {
     eyebrow: 'Navegar',
     playlistCount: '{count} playlist | {count} playlists',
     failedTitle: 'Não foi possível abrir',
-    failedText: 'Verifique sua conexão e tente de novo.',
   },
   stats: {
     title: 'O que você ouve',

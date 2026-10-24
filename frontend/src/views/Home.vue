@@ -141,10 +141,7 @@
       </template>
 
       <!-- No feed and no connection: said, rather than an empty page. -->
-      <p v-if="feedOffline" class="feed-note">
-        <Icon icon="ph:wifi-slash" class="h-4 w-4 shrink-0" />
-        {{ t('net.offlineHome') }}
-      </p>
+      <OfflineCard v-if="feedOffline" compact class="feed-offline" :text="t('net.offlineHome')" />
 
       <!-- Loading. Shaped like the shelves it stands in for: bare grey slabs
            read as a broken page, not a loading one. -->
@@ -300,6 +297,7 @@ import Shelf from '/src/components/ui/Shelf.vue'
 import SongTile from '/src/components/ui/SongTile.vue'
 import MediaCard from '/src/components/MediaCard.vue'
 import MixCard from '/src/components/MixCard.vue'
+import OfflineCard from '/src/components/ui/OfflineCard.vue'
 import AnimatedName from '/src/components/ui/AnimatedName.vue'
 // Fetched with the page's first paint out of the way.
 const MusicLately = defineAsyncComponent(() => import('/src/components/MusicLately.vue'))
@@ -660,16 +658,8 @@ function submitWelcome() {
   color: rgb(var(--c-fg));
   text-decoration: underline;
 }
-.feed-note {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 8px 0 28px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  background: rgb(var(--c-tint) / 0.05);
-  font-size: 13px;
-  color: rgb(var(--c-fg) / 0.7);
+.feed-offline {
+  margin-bottom: 28px;
 }
 .feed-skeleton {
   padding-bottom: 28px;
