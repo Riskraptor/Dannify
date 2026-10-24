@@ -258,7 +258,7 @@ const accountClearSession = () => call('account_clear_session')
 const revealInFolder = (file) => call('shell_reveal', String(file || ''))
 const openLibraryFolder = () => call('shell_open_library')
 const openExternal = (url) => {
-  if (!isDesktop) {
+  if (!isApp) {
     window.open(url, '_blank', 'noopener')
     return Promise.resolve()
   }

@@ -14,7 +14,9 @@
           <Icon icon="ph:folder-open" class="h-4 w-4" />
           {{ t('settings.openFolder') }}
         </button>
-        <button class="btn" @click="changeFolder">{{ t('settings.change') }}</button>
+        <!-- On a phone the music lives in the app's own folder: Android
+             hands an app no folder of the person's choosing to write to. -->
+        <button v-if="!desktop.isAndroid" class="btn" @click="changeFolder">{{ t('settings.change') }}</button>
       </div>
     </div>
     <label class="row">

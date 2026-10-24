@@ -68,9 +68,12 @@ object WebHost {
         web.loadUrl(url)
     }
 
-    /** Run *script* in the page, from any thread. */
-    fun evaluate(script: String) {
-        main.post { view?.evaluateJavascript(script, null) }
+    /** Run *script* in the page, from any thread; *done* gets its answer. */
+    fun evaluate(script: String, done: ((String?) -> Unit)? = null) {
+        main.post {
+            val web = view
+            if (web == null) done?.invoke(null) else web.evaluateJavascript(script) { done?.invoke(it) }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")

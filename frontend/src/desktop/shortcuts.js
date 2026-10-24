@@ -269,7 +269,7 @@ export function installShortcuts() {
   // Files dropped from Explorer would otherwise navigate the webview away.
   window.addEventListener('dragover', (e) => e.preventDefault())
   window.addEventListener('drop', (e) => e.preventDefault())
-  if (desktop.isDesktop) guardLikeAnApp()
+  if (desktop.isApp) guardLikeAnApp()
   if (desktop.isDesktop) {
     const z = currentZoom()
     if (z !== 1) desktop.whenReady().then(() => desktop.setZoom(z))

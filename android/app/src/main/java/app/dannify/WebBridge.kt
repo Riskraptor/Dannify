@@ -56,7 +56,7 @@ object WebBridge {
                 "clipboard_read" -> JSONObject.quote(clipboardText())
                 "app_set_theme" -> {
                     val theme = args.optString(0)
-                    main.post { (WebHost.activity as? MainActivity)?.applyTheme(theme) }
+                    main.post { MainActivity.themeChanged(theme) }
                     "null"
                 }
                 "app_quit" -> {

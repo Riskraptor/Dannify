@@ -2,4 +2,6 @@
 <resources>
     <string name="backend_failed">O Dannify não conseguiu iniciar. Feche-o nos apps recentes e abra de novo.</string>
     <string name="sign_in_title">Entrar com o Google</string>
+    <string name="webview_old">O Dannify precisa de uma versão mais recente do Android System WebView, a parte do Android que mostra as páginas dele. Atualize-o e abra o Dannify de novo.</string>
+    <string name="webview_update">Atualizar o WebView</string>
 </resources>

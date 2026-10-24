@@ -64,6 +64,7 @@
         <activity
             android:name=".SignInActivity"
             android:exported="false"
+            android:label="@string/sign_in_title"
             android:theme="@style/Theme.Dannify.SignIn" />
 
         <service

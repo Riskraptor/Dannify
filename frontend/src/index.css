@@ -357,6 +357,15 @@
     cursor: default;
   }
 
+  /* The Android app: a tap is a tap, with no grey flash, and a finger held
+     on a song opens its menu instead of selecting the words under it. Text
+     boxes and anything .selectable still select (below). */
+  html.is-android {
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
   input,
   textarea,
   [contenteditable='true'],
