@@ -306,6 +306,94 @@ def mood_playlists(params: str) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Charts and new releases: what YouTube Music says is played now, where the
+# listener is
+# ---------------------------------------------------------------------------
+
+_CHARTS_TTL = 60 * 60 * 6
+_CHART_ARTISTS = 20
+_NEW_RELEASES = 24
+
+
+def charts(country: str = '') -> dict[str, Any]:
+    """YouTube Music's charts for a country (two capital letters; ``ZZ`` or
+    one it has no charts for: the world): ``{country, code, playlists,
+    artists}``. The playlists are its chart lists (the trending songs, the
+    top videos); the artists the most played now, ranked, with which way
+    they are going."""
+
+    code = country.strip().upper() if re.fullmatch(r'[A-Za-z]{2}', country.strip() or '') else 'ZZ'
+    key = f'charts::{code}'
+    hit = _cache.get(key)
+    if hit and time.time() - hit[0] < _CHARTS_TTL:
+        return hit[1]
+    raw = _ytm().get_charts(code) or {}
+    options = ((raw.get('countries') or {}).get('options')) or []
+    if code != 'ZZ' and options and code not in options:
+        return charts('ZZ')
+    playlists = []
+    for item in raw.get('videos') or []:
+        pid = item.get('playlistId') if isinstance(item, dict) else None
+        if pid and item.get('title'):
+            playlists.append({
+                'type': 'playlist',
+                'browse_id': pid,
+                'name': str(item['title']),
+                'cover_url': _thumb(item),
+            })
+    artists = []
+    for item in (raw.get('artists') or [])[:_CHART_ARTISTS]:
+        if not isinstance(item, dict) or not item.get('browseId') or not item.get('title'):
+            continue
+        trend = str(item.get('trend') or '')
+        artists.append({
+            'type': 'artist',
+            'browse_id': item['browseId'],
+            'name': str(item['title']),
+            'cover_url': _thumb(item),
+            'rank': int(item['rank']) if str(item.get('rank') or '').isdigit() else len(artists) + 1,
+            'trend': trend if trend in ('up', 'down', 'neutral') else 'neutral',
+            'subscribers': str(item.get('subscribers') or ''),
+        })
+    selected = ((raw.get('countries') or {}).get('selected') or {}).get('text') or ''
+    out = {'country': str(selected), 'code': code, 'playlists': playlists, 'artists': artists}
+    if playlists or artists:
+        _cache_put(key, out)
+    return out
+
+
+def new_releases() -> list[dict[str, Any]]:
+    """New albums and singles, as YouTube Music's explore page shows them
+    where the listener is."""
+
+    key = 'new_releases'
+    hit = _cache.get(key)
+    if hit and time.time() - hit[0] < _CHARTS_TTL:
+        return hit[1]
+    raw = _ytm().get_explore() or {}
+    cards = []
+    for item in (raw.get('new_releases') or [])[:_NEW_RELEASES]:
+        if not isinstance(item, dict) or not item.get('browseId') or not item.get('title'):
+            continue
+        artists = [
+            a.get('name') if isinstance(a, dict) else str(a)
+            for a in item.get('artists') or []
+        ]
+        cards.append({
+            'type': 'album',
+            'browse_id': item['browseId'],
+            'name': str(item['title']),
+            'artist': ', '.join(a for a in artists if a),
+            'kind': str(item.get('type') or ''),
+            'cover_url': _thumb(item),
+            'explicit': bool(item.get('isExplicit')),
+        })
+    if cards:
+        _cache_put(key, cards)
+    return cards
+
+
+# ---------------------------------------------------------------------------
 # Suggestions: what the search box offers while something is being typed
 # ---------------------------------------------------------------------------
 

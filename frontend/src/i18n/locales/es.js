@@ -1011,6 +1011,14 @@ export default {
     saveSong: 'Guardar',
     openInSpotify: 'Abrir en Spotify',
   },
+  charts: {
+    title: 'Listas · {country}',
+    topArtists: 'Artistas top · {country}',
+    newReleases: 'Novedades',
+    fromYtm: 'Lista de YouTube Music',
+    subscribers: '{count} suscriptores',
+    world: 'Global',
+  },
   net: {
     offline: 'Estás sin conexión. Tu música guardada suena como siempre, y lo demás vuelve solo.',
     backOnline: 'De nuevo en línea',

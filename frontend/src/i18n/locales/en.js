@@ -853,6 +853,14 @@ export default {
     quit: 'Quit Dannify',
     hidden: 'Dannify is still running here. Click the icon to open it, or right-click it to quit.',
   },
+  charts: {
+    title: 'Charts · {country}',
+    topArtists: 'Top artists · {country}',
+    newReleases: 'New releases',
+    fromYtm: 'YouTube Music chart',
+    subscribers: '{count} subscribers',
+    world: 'Global',
+  },
   net: {
     offline: 'You’re offline. Your saved music plays as usual, and the rest comes back by itself.',
     backOnline: 'Back online',

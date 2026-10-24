@@ -30,7 +30,14 @@ outside the app can reach.
 ## What it does
 
 Search the YouTube Music catalogue and play anything in about a third of a
-second. Suggestions and results come in as you type.
+second. Suggestions and results come in as you type. Search opens on YouTube
+Music's charts and top artists where you are, what is newly out, and its
+moods and genres.
+
+Paste a Spotify link anywhere in the window (a song, an album, a playlist or
+an artist) and it opens on a page of its own, each song paired with the same
+one on YouTube Music: play it, save it, or keep the lot as a playlist of your
+own in one click. YouTube and YouTube Music links open the same way.
 
 Save whatever you want to keep. Saved songs live in your library, tagged
 properly, with their artwork and lyrics, and play without a connection. They
@@ -42,8 +49,9 @@ lists its songs in album order with their real track numbers, and one click
 opens the whole album to save the rest of it.
 
 It keeps a listening history, if you want it to. History shows what you
-played day by day, and Your stats shows time listened, streaks, the hours you
-listen at and your top songs, artists and albums. It stays on your computer;
+played day by day, and Your stats shows time listened, streaks, the hours and
+days of the week you listen at, your top songs, artists and albums, the songs
+new to you, and highlights such as your biggest day and longest sitting. It stays on your computer;
 connect ListenBrainz in Settings, Accounts and your listens go to your profile
 there too. Signed in with Google, what you play on YouTube Music elsewhere
 (your phone, the web, a speaker) counts here as well, so a copy installed
@@ -105,6 +113,10 @@ General.
 It picks up where you left off. Close it and the queue and the track you were
 on come back next launch, paused at the second you stopped. Restart it into
 an update and the song plays on from the same second.
+
+Offline, it is at ease: a small "Offline" sign says so, your saved music is a
+click away from any page that needs the internet, and those pages come back
+by themselves when the connection does.
 
 Closing the window keeps the music going. It drops to the tray instead of
 quitting.

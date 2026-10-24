@@ -1011,6 +1011,14 @@ export default {
     saveSong: 'Salvar',
     openInSpotify: 'Abrir no Spotify',
   },
+  charts: {
+    title: 'Paradas · {country}',
+    topArtists: 'Artistas em alta · {country}',
+    newReleases: 'Lançamentos',
+    fromYtm: 'Parada do YouTube Music',
+    subscribers: '{count} inscritos',
+    world: 'Global',
+  },
   net: {
     offline: 'Você está offline. Sua música salva toca normalmente, e o resto volta sozinho.',
     backOnline: 'On-line de novo',

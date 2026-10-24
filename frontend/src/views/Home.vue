@@ -110,6 +110,10 @@
         />
       </Shelf>
 
+      <!-- YouTube Music's charts where you are: for everyone, signed in or
+           not (its feed below has the new releases). A file of its own. -->
+      <YtmCharts :releases="false" />
+
       <!-- Your YouTube Music picks (personalized once signed in) -->
       <template v-for="(section, si) in feedSections" :key="section.title + si">
         <section v-if="section.songs" class="shelf-block">
@@ -298,6 +302,7 @@ import SongTile from '/src/components/ui/SongTile.vue'
 import MediaCard from '/src/components/MediaCard.vue'
 import MixCard from '/src/components/MixCard.vue'
 import OfflineCard from '/src/components/ui/OfflineCard.vue'
+const YtmCharts = defineAsyncComponent(() => import('/src/components/YtmCharts.vue'))
 import AnimatedName from '/src/components/ui/AnimatedName.vue'
 // Fetched with the page's first paint out of the way.
 const MusicLately = defineAsyncComponent(() => import('/src/components/MusicLately.vue'))

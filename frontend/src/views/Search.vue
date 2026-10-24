@@ -78,6 +78,8 @@
           </span>
         </div>
       </section>
+      <!-- What is played now where you are, before the moods and genres. -->
+      <div class="search-shelves"><YtmCharts /></div>
       <!-- Browse all: YouTube Music's moods and genres, as a music app's
            search page opens on. -->
       <section v-if="moods.sections.value.length" class="view-pad browse">
@@ -268,7 +270,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, inject, onMounted, onActivated, onDeactivated } from 'vue'
+import { ref, computed, watch, inject, onMounted, onActivated, onDeactivated, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
@@ -289,6 +291,7 @@ import Shelf from '/src/components/ui/Shelf.vue'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
 import OfflineCard from '/src/components/ui/OfflineCard.vue'
+const YtmCharts = defineAsyncComponent(() => import('/src/components/YtmCharts.vue'))
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import { useDeferred } from '/src/model/deferred'
 import { useMoods, moodColour, moodGlyph } from '/src/model/moods'
@@ -760,6 +763,16 @@ onRefresh(() => {
 }
 .browse {
   padding-top: 8px;
+}
+/* A shelf's cards have padding of their own: pulled in by less than a
+   page's edge, their pictures line up with the page (as on Home). */
+.search-shelves {
+  padding: 8px 14px 0;
+}
+@media (min-width: 1024px) {
+  .search-shelves {
+    padding: 8px 22px 0;
+  }
 }
 .browse-head {
   margin: 8px 0 4px;

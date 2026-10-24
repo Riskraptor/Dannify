@@ -442,6 +442,13 @@ function searchSuggest(q, signal) {
 function getMoods() {
   return API.get('/api/explore/moods')
 }
+// YouTube Music's charts where the listener is, and its new releases.
+function exploreCharts(country) {
+  return API.get('/api/explore/charts', { params: { country } })
+}
+function exploreNew() {
+  return API.get('/api/explore/new')
+}
 function getMoodPlaylists(params) {
   return API.get('/api/explore/moods/playlists', { params: { params } })
 }
@@ -630,6 +637,8 @@ export default {
   exploreArtist,
   getMoods,
   getMoodPlaylists,
+  exploreCharts,
+  exploreNew,
   exploreAlbum,
   explorePlaylist,
   // account + personalization

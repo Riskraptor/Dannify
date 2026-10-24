@@ -1011,6 +1011,14 @@ export default {
     saveSong: 'Hifadhi',
     openInSpotify: 'Fungua kwenye Spotify',
   },
+  charts: {
+    title: 'Chati · {country}',
+    topArtists: 'Wasanii bora · {country}',
+    newReleases: 'Matoleo mapya',
+    fromYtm: 'Chati ya YouTube Music',
+    subscribers: 'Wafuatiliaji {count}',
+    world: 'Dunia',
+  },
   net: {
     offline: 'Uko nje ya mtandao. Muziki uliohifadhi unacheza kama kawaida, na mengine yanarudi yenyewe.',
     backOnline: 'Umerudi mtandaoni',

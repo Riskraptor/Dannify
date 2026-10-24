@@ -1046,6 +1046,14 @@ export default {
     saveSong: 'Enregistrer',
     openInSpotify: 'Ouvrir dans Spotify',
   },
+  charts: {
+    title: 'Classements · {country}',
+    topArtists: 'Top artistes · {country}',
+    newReleases: 'Nouveautés',
+    fromYtm: 'Classement YouTube Music',
+    subscribers: '{count} abonnés',
+    world: 'Monde',
+  },
   net: {
     offline: 'Vous êtes hors ligne. Votre musique enregistrée se lit comme d’habitude, et le reste revient tout seul.',
     backOnline: 'De nouveau en ligne',

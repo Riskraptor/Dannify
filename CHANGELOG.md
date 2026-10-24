@@ -4,27 +4,39 @@ What changed in each release of Dannify. The newest is at the top. Every
 release, with its downloads, is on the [releases
 page](https://github.com/Riskraptor/Dannify/releases).
 
-## 4.14.2
+## 4.15.0
 
-- **Write lyrics as you listen.** Adding lyrics now plays the song right
-  beside the words: play, pause, go back or forward 5 seconds, or slow it
-  down, without leaving the box you are typing in. Ctrl+Space plays and
-  pauses and Alt with the arrows goes back and forward, keys that never get
-  in the way of typing. Each time it plays again, it goes back 2 seconds so
-  you catch the last words (this can be turned off).
-- **Every Browse category opens again.** Family, Pop, Rock and most other
-  genres said "This could not be opened" since YouTube Music added songs and
-  albums to those pages. They open with their playlists again.
-- **Safer restarts on Windows.** If the old copy does not close during a
-  restart into an update, the new one now stops cleanly instead of carrying
-  on beside it.
+Spotify links, the charts where you are, richer stats, and an app that is
+at ease offline.
+
+- **Paste a Spotify link, anywhere.** A song, album, playlist or artist
+  opens on a page of its own, every song ready to play, save, or keep as
+  a playlist of yours in one click. YouTube and YouTube Music links open
+  too.
+- **Charts and new releases.** YouTube Music's charts and top artists where
+  you are, on Home and Search, and what is newly out.
+- **Your stats, deeper.** Highlights (your biggest day, longest sitting,
+  an average day, the song on repeat), your week day by day, and the songs
+  new to you, to play or keep.
+- **At ease offline.** A calm "Offline" sign, your saved music a click
+  away on any page that needs the internet, and pages that come back by
+  themselves.
+- **Write lyrics as you listen.** The song plays right beside the words:
+  Ctrl+Space plays and pauses, Alt and the arrows go back and forward, and
+  playing again replays the last 2 seconds.
+- **Report a problem, your way.** Choose what goes with it; the activity
+  log only if you say so. See exactly what would be sent first.
+- **Support is GitHub Sponsors only.** M-Pesa, PayPal and Ko-fi are gone.
+
+Plus fixes: every Browse category opens again, and a restart that cannot
+replace the old copy stops cleanly.
 
 ## 4.14.1
 
 - **Support Dannify on GitHub Sponsors.** Monthly or one time, any amount,
   by card from anywhere in the world, and GitHub keeps no fee. It's the new
   way to give, at the top of Settings, Support Dannify. M-Pesa stays for
-  Kenya; PayPal and Ko-fi are no longer offered.
+  Kenya; PayPal and Ko-fi are no longer offered. (M-Pesa went in 4.15.0.)
 
 ## 4.14.0
 

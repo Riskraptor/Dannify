@@ -1011,6 +1011,14 @@ export default {
     saveSong: 'Speichern',
     openInSpotify: 'In Spotify öffnen',
   },
+  charts: {
+    title: 'Charts · {country}',
+    topArtists: 'Top-Künstler · {country}',
+    newReleases: 'Neuerscheinungen',
+    fromYtm: 'YouTube-Music-Chart',
+    subscribers: '{count} Abonnenten',
+    world: 'Weltweit',
+  },
   net: {
     offline: 'Sie sind offline. Ihre gespeicherte Musik läuft wie gewohnt, und der Rest kommt von selbst zurück.',
     backOnline: 'Wieder online',

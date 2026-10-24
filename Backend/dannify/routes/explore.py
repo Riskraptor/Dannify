@@ -185,6 +185,28 @@ async def explore_moods_endpoint() -> dict[str, Any]:
         raise HTTPException(status_code=502, detail='unavailable') from exc
 
 
+@router.get('/api/explore/charts')
+async def explore_charts_endpoint(country: str = Query('', max_length=2)) -> dict[str, Any]:
+    """YouTube Music's charts where the listener is (explorer.charts)."""
+
+    try:
+        return await asyncio.to_thread(explorer.charts, country)
+    except Exception as exc:
+        logger.opt(exception=True).info('charts failed')
+        raise HTTPException(status_code=502, detail='unavailable') from exc
+
+
+@router.get('/api/explore/new')
+async def explore_new_endpoint() -> dict[str, Any]:
+    """New albums and singles (explorer.new_releases)."""
+
+    try:
+        return {'albums': await asyncio.to_thread(explorer.new_releases)}
+    except Exception as exc:
+        logger.opt(exception=True).info('new releases failed')
+        raise HTTPException(status_code=502, detail='unavailable') from exc
+
+
 @router.get('/api/explore/moods/playlists')
 async def explore_mood_playlists_endpoint(params: str = Query(..., max_length=400)) -> dict[str, Any]:
     try:
