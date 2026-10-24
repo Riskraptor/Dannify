@@ -31,6 +31,12 @@ import tempfile
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import testlog  # noqa: E402  (packaging/testlog.py: this run's key for the sealed log)
+
+# Every copy started here, and every one they start, seals its log for it.
+os.environ['DANNIFY_LOG_KEY'] = testlog.public_hex()
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
@@ -51,7 +57,7 @@ def fail(text: str) -> None:
             path = data / name
             if path.is_file():
                 print(f'\n--- {path} (last 80 lines)')
-                print('\n'.join(path.read_text(errors='replace').splitlines()[-80:]))
+                print('\n'.join(testlog.read(path).splitlines()[-80:]))
     reports = Path.home() / 'Library' / 'Logs' / 'DiagnosticReports'
     for report in sorted(reports.glob('Dannify*'))[-2:]:
         print(f'\n--- {report}')
@@ -118,7 +124,7 @@ class Copy:
 
     def starts(self) -> int:
         try:
-            return (self.data / 'dannify.log').read_text(errors='replace').count(STARTED)
+            return testlog.read(self.data / 'dannify.log').count(STARTED)
         except OSError:
             return 0
 
@@ -299,11 +305,11 @@ def first_start(app: Path) -> None:
         fail('the app did not write its start marker')
     if copy.send({'cmd': 'ping'}) != {'ok': True}:
         fail('the instance socket does not answer')
-    if 'Another launch asked' in (copy.data / 'dannify.log').read_text(errors='replace'):
+    if 'Another launch asked' in testlog.read(copy.data / 'dannify.log'):
         # Nothing launched it twice: a helper process the app started
         # itself was taken for a second copy of the app.
         fail('a second copy of the app started and handed over')
-    errors = [line for line in (copy.data / 'dannify.log').read_text(errors='replace').splitlines()
+    errors = [line for line in testlog.read(copy.data / 'dannify.log').splitlines()
               if ' | ERROR ' in line or ' | CRITICAL ' in line or 'Traceback' in line]
     if errors:
         print('errors in the log (shown, not fatal):\n  ' + '\n  '.join(errors[:20]))
@@ -316,16 +322,17 @@ def started_by_launchservices(app: Path) -> None:
     copy = Copy(app, 'opened')
     before = copy.starts()
     # Hidden, as at login (the login item passes --minimized the same way).
-    done = run(['/usr/bin/open', '-n', '--env', f'DANNIFY_DATA_DIR={copy.data}', str(app),
+    done = run(['/usr/bin/open', '-n', '--env', f'DANNIFY_DATA_DIR={copy.data}',
+                '--env', f'DANNIFY_LOG_KEY={testlog.public_hex()}', str(app),
                 '--args', '--minimized'])
     if done.returncode != 0:
         fail(f'open -n --env: {done.stderr}')
     copy.wait_started(before)
-    if 'Window hidden until asked' not in (copy.data / 'dannify.log').read_text(errors='replace'):
+    if 'Window hidden until asked' not in testlog.read(copy.data / 'dannify.log'):
         fail('the copy started with --minimized did not start hidden')
     time.sleep(3)
     screenshot('started-hidden')
-    shown_early = 'Window shown again' in (copy.data / 'dannify.log').read_text(errors='replace')
+    shown_early = 'Window shown again' in testlog.read(copy.data / 'dannify.log')
     if windows_of(copy.pid()):
         fail('the copy started hidden has a window on screen'
              + (' (it showed itself)' if shown_early else ' (not shown by the shell)'))
@@ -370,7 +377,7 @@ def good_update(app: Path, archive: Path) -> Path:
     # Same data folder, so past the first-run welcome: the main window.
     screenshot('after-update')
     ports = [line.rsplit(':', 1)[-1].split()[0] for line in
-             (copy.data / 'dannify.log').read_text(errors='replace').splitlines()
+             testlog.read(copy.data / 'dannify.log').splitlines()
              if 'Uvicorn running on' in line]
     print('ports used, before and after the update:', ports)
     wait_until(lambda: not (place / 'Dannify.app.old').exists(), 30, 'the new version to remove the backup')

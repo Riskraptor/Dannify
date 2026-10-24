@@ -75,3 +75,19 @@ def test_a_report_says_a_sealed_log_is_sealed(tmp_path, monkeypatch):
 @pytest.mark.parametrize('line', ['', '~short', 'plain text line', '~' + 'a' * 80 + ' b'])
 def test_plain_lines_are_not_taken_for_sealed_ones(line):
     assert not sealed.is_sealed(line)
+
+
+def test_the_linux_package_seals_and_a_test_reads_with_a_key_of_its_own(tmp_path, monkeypatch):
+    monkeypatch.delenv('DANNIFY_SEAL_LOGS', raising=False)
+    monkeypatch.delattr('sys.frozen', raising=False)
+    monkeypatch.setenv('DANNIFY_PACKAGED', '1')  # what /usr/bin/dannify sets
+    assert sealed.sealing()
+    own = os.urandom(32)
+    monkeypatch.setenv('DANNIFY_LOG_KEY', sealed.public_of(own).hex())
+    monkeypatch.setattr(sealed, '_sealer', None)
+    line = sealed.line('Application startup complete')
+    assert sealed.is_sealed(line) and 'startup' not in line
+    assert sealed.Opener(own).open(line) == 'Application startup complete'
+    # Anything that is not a key leaves it sealed for the developer.
+    monkeypatch.setenv('DANNIFY_LOG_KEY', 'plain please')
+    assert sealed._public().hex() == sealed.LOG_PUBLIC

@@ -45,6 +45,8 @@ import winreg
 import zlib
 from pathlib import Path
 
+import testlog  # packaging/testlog.py: the key a shipped copy's log is sealed for here
+
 REPO = Path(__file__).resolve().parents[1]
 VERSION = re.search(r"__version__\s*=\s*'([^']+)'",
                     (REPO / 'Backend' / 'dannify' / '__init__.py').read_text(encoding='utf-8')).group(1)
@@ -101,7 +103,9 @@ def later(n):
 def env():
     e = {k: v for k, v in os.environ.items() if not k.upper().startswith(('DANNIFY_', 'DOWNTIFY_'))}
     e.pop('DATABASE_DIR', None)
-    e.update(DANNIFY_DATA_DIR=str(DATA), DOWNLOAD_DIR=str(MUSIC), DANNIFY_INSTANCE=NAME)
+    # The copy seals its log for this run's own key (testlog.py), which reads it.
+    e.update(DANNIFY_DATA_DIR=str(DATA), DOWNLOAD_DIR=str(MUSIC), DANNIFY_INSTANCE=NAME,
+             DANNIFY_LOG_KEY=testlog.public_hex())
     return e
 
 
@@ -147,7 +151,8 @@ def keep_logs(n):
         if src.is_file():
             dst = SCR / f'{NAME}-fail{n}-{name}'
             try:
-                dst.write_bytes(src.read_bytes())
+                # Kept opened: the run's key goes with the run.
+                dst.write_text(testlog.read(src), encoding='utf-8')
                 print(f'     kept {dst}', flush=True)
             except OSError:
                 pass
@@ -300,10 +305,7 @@ def snap(hwnd, out):
 # Explorer does, through the launcher) and reads what the app wrote in its
 # log in the sandbox data folder.
 def app_log():
-    try:
-        return (DATA / 'dannify.log').read_text(encoding='utf-8', errors='replace')
-    except OSError:
-        return ''
+    return testlog.read(DATA / 'dannify.log')
 
 
 def open_with_app(path, port, timeout=45):
