@@ -16,7 +16,8 @@
           data-tour="np-cover"
           @click="openNowPlaying"
         >
-          <CoverImage :src="cur.cover" radius="sm" :size="56" class="h-full w-full" eager />
+          <!-- A new song comes in: the cover settles into place. -->
+          <CoverImage :key="songKey" :src="cur.cover" radius="sm" :size="56" class="h-full w-full pb-song-cover" eager />
           <span v-if="player.isBuffering.value" class="pb-cover-overlay is-visible">
             <span class="spinner h-5 w-5 text-white" />
           </span>
@@ -31,7 +32,7 @@
             {{ t('player.hintNowPlaying') }}
           </button>
         </Transition>
-        <div class="min-w-0">
+        <div :key="songKey" class="min-w-0 pb-song-words">
           <button class="pb-title" :title="cur.title" @click="openNowPlaying">
             {{ cur.title }}
           </button>
@@ -42,13 +43,14 @@
         <button
           v-if="!ui.isCompact.value && videoId && !onNowPlaying"
           class="icon-btn is-round press shrink-0 pb-like"
-          :class="{ 'is-liked': liked }"
+          :class="{ 'is-liked': liked, 'is-popping': popping }"
           :title="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
           :aria-label="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
           :aria-pressed="liked"
-          @click="account.toggleLike(row.raw)"
+          @click="like"
         >
           <Icon :icon="liked ? 'ph:heart-fill' : 'ph:heart'" class="h-[18px] w-[18px]" />
+          <span v-if="popping" class="pb-like-burst" aria-hidden="true"><i v-for="n in 6" :key="n" :style="{ '--n': n }" /></span>
         </button>
         <!-- A download arrow, filled once saved, a ring while it saves. A
              green tick beside the heart read as a second "liked", not as
@@ -319,6 +321,23 @@ const ui = useUi()
 const account = useAccount()
 
 const cur = computed(() => player.currentTrack.value)
+// What names a song, for its cover and words to come in anew when it changes.
+const songKey = computed(() => {
+  const c = cur.value
+  return c ? c.video_id || c.file || c.url || c.title || '' : ''
+})
+// A heart that pops when a song is liked (not when it is unliked).
+const popping = ref(false)
+let popTimer = 0
+function like() {
+  const was = liked.value
+  account.toggleLike(row.value.raw)
+  if (!was) {
+    popping.value = true
+    clearTimeout(popTimer)
+    popTimer = setTimeout(() => (popping.value = false), 650)
+  }
+}
 
 // Long plays (a podcast, a long mix) get steps of seconds and the speed.
 const long = computed(() => !!cur.value && (player.duration.value || 0) >= 20 * 60)
@@ -674,6 +693,69 @@ function onTrackMenu(e) {
   gap: 8px;
   width: 100%;
   max-width: 600px;
+}
+.pb-song-cover {
+  animation: pb-cover-in 0.42s var(--ease-out) both;
+}
+.pb-song-words {
+  animation: pb-words-in 0.38s var(--ease-out) both;
+}
+@keyframes pb-cover-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+}
+@keyframes pb-words-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+}
+.pb-like {
+  position: relative;
+}
+.pb-like.is-popping svg {
+  animation: pb-heart 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes pb-heart {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.3);
+  }
+}
+.pb-like-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pb-like-burst i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px;
+  border-radius: 999px;
+  background: rgb(var(--c-accent));
+  transform: rotate(calc(var(--n) * 60deg)) translateY(0);
+  animation: pb-burst 0.55s var(--ease-out) both;
+}
+@keyframes pb-burst {
+  to {
+    opacity: 0;
+    transform: rotate(calc(var(--n) * 60deg)) translateY(-15px) scale(0.4);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pb-song-cover,
+  .pb-song-words,
+  .pb-like.is-popping svg,
+  .pb-like-burst i {
+    animation: none;
+  }
 }
 .pb-jump {
   position: relative;
