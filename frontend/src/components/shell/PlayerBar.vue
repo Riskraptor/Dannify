@@ -76,6 +76,17 @@
         >
           <Icon icon="ph:shuffle-bold" class="h-[18px] w-[18px]" />
         </button>
+        <!-- A podcast or a long mix: a step back and a step on, in seconds. -->
+        <button
+          v-if="long"
+          class="icon-btn is-round pb-jump"
+          :title="t('player.back15')"
+          :aria-label="t('player.back15')"
+          @click="jump(-15)"
+        >
+          <Icon icon="ph:arrow-counter-clockwise-bold" class="h-[18px] w-[18px]" />
+          <span class="pb-jump-n">15</span>
+        </button>
         <button
           class="icon-btn is-round"
           :disabled="!cur"
@@ -107,6 +118,16 @@
           <Icon icon="ph:skip-forward-fill" class="h-5 w-5" />
         </button>
         <button
+          v-if="long"
+          class="icon-btn is-round pb-jump"
+          :title="t('player.forward30')"
+          :aria-label="t('player.forward30')"
+          @click="jump(30)"
+        >
+          <Icon icon="ph:arrow-clockwise-bold" class="h-[18px] w-[18px]" />
+          <span class="pb-jump-n">30</span>
+        </button>
+        <button
           class="icon-btn is-round"
           :class="{ 'is-active-dot': player.repeatMode.value !== 'off' }"
           :disabled="!cur"
@@ -134,6 +155,19 @@
           @change="(r) => player.seekRatio(r)"
         />
         <span class="pb-time">{{ formatTime(player.duration.value) }}</span>
+        <!-- The listening speed (Sound): to hand for a long play, and shown
+             whenever it is not the usual. Right-click puts it back. -->
+        <button
+          v-if="long || speedShown !== 1"
+          class="pb-speed"
+          :class="{ 'is-on': speedShown !== 1 }"
+          :title="t('player.speedTitle')"
+          :aria-label="t('player.speedTitle')"
+          @click="nextSpeed"
+          @contextmenu.prevent="player.setSpeed(1)"
+        >
+          {{ speedText }}
+        </button>
       </div>
     </div>
 
@@ -285,6 +319,19 @@ const ui = useUi()
 const account = useAccount()
 
 const cur = computed(() => player.currentTrack.value)
+
+// Long plays (a podcast, a long mix) get steps of seconds and the speed.
+const long = computed(() => !!cur.value && (player.duration.value || 0) >= 20 * 60)
+function jump(seconds) {
+  player.seek((player.currentTime.value || 0) + seconds)
+}
+const SPEEDS = [1, 1.25, 1.5, 2, 0.75]
+const speedShown = computed(() => Math.round((player.speed.value || 1) * 100) / 100)
+const speedText = computed(() => `${speedShown.value.toFixed(2).replace(/\.?0+$/, '')}×`)
+function nextSpeed() {
+  const at = SPEEDS.findIndex((s) => Math.abs(s - speedShown.value) < 0.01)
+  player.setSpeed(SPEEDS[(at + 1) % SPEEDS.length])
+}
 
 // --- Sleep timer ---
 // A clock for the minutes left, ticking only while a timer is set.
@@ -627,6 +674,42 @@ function onTrackMenu(e) {
   gap: 8px;
   width: 100%;
   max-width: 600px;
+}
+.pb-jump {
+  position: relative;
+}
+.pb-jump-n {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-top: 1px;
+  font-size: 7.5px;
+  font-weight: 800;
+  pointer-events: none;
+}
+.pb-speed {
+  flex: none;
+  min-width: 38px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--c-fg) / var(--fg-55));
+  background: rgb(var(--c-tint) / 0.07);
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+.pb-speed:hover {
+  color: rgb(var(--c-fg));
+  background: rgb(var(--c-tint) / 0.14);
+}
+.pb-speed.is-on {
+  color: rgb(var(--c-accent));
+  background: rgb(var(--c-accent) / 0.14);
 }
 .pb-time {
   min-width: 38px;
