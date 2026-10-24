@@ -1,9 +1,12 @@
 package app.dannify
 
+import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -14,6 +17,8 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -30,6 +35,8 @@ import kotlinx.coroutines.launch
  */
 class MainActivity : ComponentActivity() {
     private lateinit var frame: FrameLayout
+    // Android's own question about notifications; the answer needs no reply.
+    private val notifyAsk = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
@@ -120,6 +127,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showFailure() = showMessage(getString(R.string.backend_failed))
+
+    /**
+     * Whether Dannify may show notifications, asked once, the first time songs
+     * are saved (Android 13 on): how far they have got is shown in one. The
+     * music's own notification needs no asking.
+     */
+    fun askToNotify() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        val asked = getSharedPreferences("dannify-asked", MODE_PRIVATE)
+        if (asked.getBoolean("notifications", false)) return
+        asked.edit().putBoolean("notifications", true).apply()
+        notifyAsk.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     /** A few words on Dannify's black instead of the page, and a button. */
     private fun showMessage(words: String, button: String? = null, onTap: () -> Unit = {}) {

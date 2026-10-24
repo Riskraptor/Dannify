@@ -128,19 +128,30 @@ export function installDesktopIntegration() {
     }
   )
 
-  if (!desktop.isDesktop) return
-
-  // Taskbar button progress bar mirrors the download queue.
+  // Songs being saved: the taskbar (or dock) button's bar on a desktop. On a
+  // phone, a notification that also keeps them going with the app put away,
+  // in the interface's own words.
   let lastProgress = ''
   watch(
     () => [stats.value.active, Math.round(stats.value.percent)],
     ([active, percent]) => {
+      if (desktop.isAndroid) {
+        const key = active ? `n:${active}:${percent}` : 'none'
+        if (key === lastProgress) return
+        lastProgress = key
+        desktop.setDownloads(
+          active ? { active, percent, text: t('downloads.tooltipActive', { active, percent }) } : null
+        )
+        return
+      }
       const key = active ? `n:${percent}` : 'none'
       if (key === lastProgress) return
       lastProgress = key
       desktop.setTaskbarProgress(active ? Math.max(2, percent) / 100 : 0, active ? 'normal' : 'none')
     }
   )
+
+  if (!desktop.isDesktop) return
 
   // Tray menu strings, in the UI language. Re-sent when the language
   // changes so the notification area never falls back to English. The

@@ -4,4 +4,5 @@
     <string name="sign_in_title">Ingia kwa Google</string>
     <string name="webview_old">Dannify inahitaji toleo jipya zaidi la Android System WebView, sehemu ya Android inayoonyesha kurasa zake. Isasishe, kisha ufungue Dannify tena.</string>
     <string name="webview_update">Sasisha WebView</string>
+    <string name="downloads_channel">Vipakuliwa</string>
 </resources>

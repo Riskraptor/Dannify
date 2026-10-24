@@ -5,4 +5,5 @@
     <string name="sign_in_title">Sign in with Google</string>
     <string name="webview_old">Dannify needs a newer Android System WebView, the part of Android that shows its pages. Update it, then open Dannify again.</string>
     <string name="webview_update">Update WebView</string>
+    <string name="downloads_channel">Downloads</string>
 </resources>

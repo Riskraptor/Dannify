@@ -44,6 +44,10 @@ object WebBridge {
                     args.optJSONObject(0)?.let { MediaLink.update(it) }
                     "null"
                 }
+                "android_downloads" -> {
+                    Downloads.update(args.optJSONObject(0))
+                    "null"
+                }
                 "shell_open_external" -> {
                     val url = args.optString(0)
                     if (url.startsWith("https://") || url.startsWith("http://")) {

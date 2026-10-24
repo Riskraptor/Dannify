@@ -272,6 +272,9 @@ const setSplashWords = (words) => call('app_set_splash_words', words)
 const readClipboard = () => call('clipboard_read')
 // A link shared to the Android app before the page could open it.
 const takeSharedLink = () => call('android_take_link')
+// Songs being saved, for the Android app's notification: {active, percent,
+// text}, or null once they are all done.
+const setDownloads = (state) => call('android_downloads', state)
 const setTaskbarProgress = (value, mode = 'normal') =>
   call('taskbar_progress', Number(value) || 0, mode)
 const setPlaybackState = (payload) => call('taskbar_playback', payload)
@@ -444,6 +447,7 @@ export const desktop = {
   setSplashWords,
   readClipboard,
   takeSharedLink,
+  setDownloads,
   setTaskbarProgress,
   setPlaybackState,
 }
