@@ -37,7 +37,14 @@ moods and genres.
 Paste a Spotify link anywhere in the window (a song, an album, a playlist or
 an artist) and it opens on a page of its own, each song paired with the same
 one on YouTube Music: play it, save it, or keep the lot as a playlist of your
-own in one click. YouTube and YouTube Music links open the same way.
+own in one click. YouTube and YouTube Music links open the same way, a
+channel by its @name too. A Spotify podcast or episode opens the same show on
+YouTube Music, and long plays get steps of 15 and 30 seconds and the
+listening speed right in the player.
+
+The first time, Dannify walks you round itself: a spotlight on one thing at a
+time, an arrow to it, and a few steps you try yourself. After a big update a
+short tour shows what is new. Either is in Settings, General any time.
 
 Save whatever you want to keep. Saved songs live in your library, tagged
 properly, with their artwork and lyrics, and play without a connection. They
@@ -58,7 +65,8 @@ there too. Signed in with Google, what you play on YouTube Music elsewhere
 today starts with all your listening. It comes in by itself whenever you
 open Your stats, History or Your Soundtrack, with nothing to press.
 
-From that history Home makes you mixes that keep themselves up to date: On
+From that history Home makes you mixes that keep themselves up to date:
+Right About Now (what you tend to play at this hour, on this kind of day), On
 Repeat, Top This Month, Forgotten Favourites and Recently Added. Your
 Soundtrack tells the story of your year in music in up to fourteen pages:
 your minutes against last year, your top artist and song and albums, your
@@ -99,7 +107,9 @@ Christmas and many more on your country's own dates, and your country's own
 days in its flag's colours. Each has its own look (snow drifting in depth,
 fireworks that climb and burst, glowing lanterns and lamps, shooting stars,
 petals, confetti) in the app, on the startup screen and in the installer, a
-greeting, and music for the day on Home. It works it all out offline, from
+greeting, music for the day on Home, and a page of its own with a countdown
+ticking to it, its playlists and songs, and what you played on it last year.
+It works it all out offline, from
 this computer's time zone and region. Setting Dannify up asks where you
 are, and Settings, Special days lets you change it, with the next special
 day shown in its own colours and the rest of the year after it.
@@ -118,8 +128,12 @@ Offline, it is at ease: a small "Offline" sign says so, your saved music is a
 click away from any page that needs the internet, and those pages come back
 by themselves when the connection does.
 
-Closing the window keeps the music going. It drops to the tray instead of
-quitting.
+Closing the window quits. Turn on "Keep playing when I close the window" in
+Settings, General and it drops to the tray instead, the music still going.
+
+Important fixes reach you without waiting for a release, and an urgent update
+says so and asks first. A problem report shows exactly what it would send,
+and the activity log in it is sealed so only the developer can read it.
 
 When something goes wrong it says so, with the fix beside it: a song that
 will not play can be repaired (downloaded again in the same place), a music

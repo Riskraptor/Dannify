@@ -6,30 +6,50 @@ page](https://github.com/Riskraptor/Dannify/releases).
 
 ## 4.15.0
 
-Spotify links, the charts where you are, richer stats, and an app that is
-at ease offline.
+Podcasts and Spotify links, a guided tour, special days with pages of their
+own, the charts where you are, richer stats, and an app at ease offline.
 
+- **A guided tour.** After setup, Dannify walks you round itself: a
+  spotlight on one thing at a time, an arrow to it, and a few steps you try
+  yourself. After a big update, a short tour of what is new. Both are in
+  Settings, General and the command palette, any time.
 - **Paste a Spotify link, anywhere.** A song, album, playlist or artist
-  opens on a page of its own, every song ready to play, save, or keep as
-  a playlist of yours in one click. YouTube and YouTube Music links open
-  too.
-- **Charts and new releases.** YouTube Music's charts and top artists where
-  you are, on Home and Search, and what is newly out.
-- **Your stats, deeper.** Highlights (your biggest day, longest sitting,
-  an average day, the song on repeat), your week day by day, and the songs
-  new to you, to play or keep.
-- **At ease offline.** A calm "Offline" sign, your saved music a click
-  away on any page that needs the internet, and pages that come back by
+  opens on a page of its own, every song ready to play, save, or keep as a
+  playlist of yours in one click. YouTube and YouTube Music links open too,
+  channels by their @name included.
+- **Podcasts.** A Spotify podcast or episode link opens the same show on
+  YouTube Music, every episode ready to play. Long plays get steps of 15 and
+  30 seconds and the listening speed right in the player.
+- **Special days, a page each.** Each day opens in its own colours and
+  weather, with a countdown ticking to it, its playlists and songs, what you
+  played on it last year, and the days after it.
+- **Right About Now.** A new mix of what you tend to play at this hour, on
+  this kind of day. It changes with the hour.
+- **Charts and new releases.** The charts and top artists where you are, on
+  Home and Search, and what is newly out.
+- **Your stats, deeper.** Highlights (your biggest day, longest sitting, an
+  average day, the song on repeat), your week day by day, the songs new to
+  you, and when your YouTube Music listening last came in.
+- **Now Playing, easy to find.** The cover flies into the big player and
+  back; a hint shows the way once; Ctrl+E opens it from anywhere.
+- **At ease offline.** A calm "Offline" sign, your saved music a click away
+  on any page that needs the internet, and pages that come back by
   themselves.
-- **Write lyrics as you listen.** The song plays right beside the words:
-  Ctrl+Space plays and pauses, Alt and the arrows go back and forward, and
-  playing again replays the last 2 seconds.
-- **Report a problem, your way.** Choose what goes with it; the activity
-  log only if you say so. See exactly what would be sent first.
+- **Write lyrics as you listen.** The song plays beside the words; adding
+  lyrics never changes the song's details.
+- **Fixes on the spot.** Important fixes, like a change in how YouTube
+  answers, reach you without waiting for a release, and an urgent update
+  says so and asks before it installs. A fix build reads "4.15.0 · fix 1".
+- **Report a problem, your way.** Choose what goes with it; see exactly what
+  would be sent. The activity log is sealed: only the developer can read it.
+- **Closing the window quits**, unless you turn on "Keep playing when I
+  close the window" in Settings, General.
 - **Support is GitHub Sponsors only.** M-Pesa, PayPal and Ko-fi are gone.
 
-Plus fixes: every Browse category opens again, and a restart that cannot
-replace the old copy stops cleanly.
+Plus fixes: the window keeps its size through maximize and restore, every
+Browse category opens again, a restart that cannot replace the old copy
+stops cleanly, and the developer-style buttons (refresh pictures, refresh
+recommendations, copy link) are gone because it all keeps itself fresh.
 
 ## 4.14.1
 
