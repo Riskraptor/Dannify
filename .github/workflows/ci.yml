@@ -1,7 +1,7 @@
-# Every push and pull request: the backend tests, the interface tests and a
-# build of the interface and the installer program. Nothing here signs or
-# publishes anything; releases are built with packaging\build.ps1, which
-# signs with a key that never leaves the release machine.
+# Every push and pull request: the backend tests, the interface tests, a
+# build of the interface and the installer program, and of the Android app.
+# Nothing here signs or publishes anything; releases are signed with keys
+# that never leave the release machine (packaging/publish.ps1).
 name: CI
 
 on:
@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: read
+  # gh run download, for what the Android native jobs of the run built.
+  actions: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -128,3 +130,46 @@ jobs:
       - name: Build and check the installer, unsigned and code-signed
         shell: pwsh
         run: ./packaging/test_installer.ps1
+
+  # What the Android app carries that is built for Android (cached: only
+  # built again when its scripts change), then the app itself, for the
+  # emulator and for phones.
+  android-native:
+    uses: ./.github/workflows/android-native.yml
+
+  android:
+    needs: android-native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Java
+        run: echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build the interface
+        working-directory: frontend
+        run: |
+          npm ci
+          npx vite build
+      - name: What is built for Android
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download ${{ github.run_id }} --repo ${{ github.repository }} --name android-native --dir android/native
+      - name: Gradle's downloads (cached)
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('android/**/*.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - name: Build the app
+        working-directory: android
+        env:
+          DANNIFY_BUILD_PYTHON: python
+        run: ./gradlew --no-daemon --console=plain assembleX86_64Debug assembleArm64Debug

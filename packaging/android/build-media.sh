@@ -9,8 +9,8 @@
 #   abi      arm64-v8a (phones) or x86_64 (the emulator on a PC)
 #   out-dir  default android/native; the program lands in <out-dir>/<abi>/
 #
-# Needs Android's NDK (ANDROID_NDK_HOME, or on a GitHub runner the newest
-# one, ANDROID_NDK_LATEST_HOME), make and curl, on Linux.
+# Needs Android's NDK, r28 or later (the newest on a GitHub runner,
+# ANDROID_NDK_LATEST_HOME, or else ANDROID_NDK_HOME), make and curl, on Linux.
 #
 # It is a program, not a library. Android runs programs only from an app's
 # native library folder, so it is named like one and installed there with
@@ -39,7 +39,7 @@ API=24
 ABI="${1:?which processor: arm64-v8a or x86_64}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="${2:-$HERE/../../android/native}"
-NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_LATEST_HOME:-}}"
+NDK="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-}}"
 [ -d "$NDK" ] || { echo "no NDK: set ANDROID_NDK_HOME" >&2; exit 1; }
 TOOLS="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
 JOBS="$(nproc)"
