@@ -17,8 +17,12 @@ from dannify import jsruntime, keystore, osenv, streaming, vault
 def test_the_app_tells_the_backend_where_everything_is(monkeypatch, tmp_path):
     from dannify.shell.android import host
 
+    # Each one noted first, so all of them are put back afterwards: the start
+    # sets them for the whole process, and a TZ left behind moved every later
+    # test's days into Nairobi's time.
     for name in ('DANNIFY_DATA_DIR', 'DOWNLOAD_DIR', 'DANNIFY_BUNDLE_DIR', 'DANNIFY_NATIVE_DIR', 'TMPDIR', 'TZ', 'LANG'):
-        monkeypatch.delenv(name, raising=False)
+        monkeypatch.setenv(name, '')
+        monkeypatch.delenv(name)
     config = {
         'data_dir': str(tmp_path / 'data'),
         'music_dir': str(tmp_path / 'Music' / 'Dannify'),
