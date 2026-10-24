@@ -134,7 +134,7 @@ jobs:
           $url = 'https://github.com/quickjs-ng/quickjs/releases/download/v0.17.0/qjs-windows-x86_64.exe'
           $want = '2aeabf0092c3262d6b2609824418f7dd7ed1f1df939f73b2b15645230cac0d77'
           New-Item -ItemType Directory -Force packaging/jsruntime | Out-Null
-          Invoke-WebRequest $url -OutFile packaging/jsruntime/dnfjs.exe
+          Invoke-WebRequest $url -OutFile packaging/jsruntime/dnfjs.exe -MaximumRetryCount 6 -RetryIntervalSec 10
           $got = (Get-FileHash packaging/jsruntime/dnfjs.exe -Algorithm SHA256).Hash.ToLower()
           if ($got -ne $want) { throw "QuickJS does not match its checksum ($got)" }
       - name: Build Dannify and its installer

@@ -48,7 +48,9 @@ rm -rf "$BUILD" "$DIST"
 mkdir -p "$BUILD" "$OUT" "$HERE/jsruntime"
 
 echo "== QuickJS-ng ${QJS_VERSION}"
-curl -fsSL --retry 3 -o "$BUILD/quickjs.tar.gz" "$QJS_URL"
+# Every failure retried, a name that will not resolve too: a release build
+# once lost github.com for a minute halfway.
+curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o "$BUILD/quickjs.tar.gz" "$QJS_URL"
 echo "$QJS_SHA256  $BUILD/quickjs.tar.gz" | shasum -a 256 -c -
 tar xzf "$BUILD/quickjs.tar.gz" -C "$BUILD"
 cmake -S "$BUILD/quickjs-${QJS_VERSION}" -B "$BUILD/quickjs" -DCMAKE_BUILD_TYPE=Release \
