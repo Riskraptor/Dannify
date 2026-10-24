@@ -7,10 +7,6 @@
       :subtitle="lib.artists.value.length ? t('artists.count', { count: lib.artists.value.length }) : t('artists.subtitle')"
     >
       <template v-if="lib.artists.value.length" #actions>
-        <button class="btn btn-pill h-8 text-xs" :disabled="refreshing" @click="refreshPictures">
-          <Icon icon="ph:arrows-clockwise" class="h-4 w-4" :class="{ 'animate-spin': refreshing }" />
-          {{ t('details.refreshPictures') }}
-        </button>
         <div class="filter">
           <Icon icon="ph:magnifying-glass" class="filter-icon" />
           <input
@@ -113,16 +109,6 @@ const query = ref('')
 
 lib.ensureLoaded()
 const artistLinks = useArtistLinks()
-const refreshing = ref(false)
-async function refreshPictures() {
-  refreshing.value = true
-  try {
-    await refreshArtists([])
-    await artistLinks.load()
-  } finally {
-    refreshing.value = false
-  }
-}
 onRefresh(() => lib.refresh())
 
 const sortedArtists = computed(() => sortedBy(lib.artists.value, (a) => a.name))

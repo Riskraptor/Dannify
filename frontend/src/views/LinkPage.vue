@@ -145,9 +145,6 @@ import {
 } from '/src/model/tracks'
 import { usePlaylists } from '/src/model/playlists'
 import { openContextMenu } from '/src/model/contextMenu'
-import { copyText } from '/src/model/clipboard'
-import { toast } from '/src/model/toast'
-import { desktop } from '/src/desktop/bridge'
 import { failedForNetwork, whenOnline } from '/src/model/connectivity'
 import { useI18n } from '/src/i18n'
 import CollectionHero from '/src/components/ui/CollectionHero.vue'
@@ -296,7 +293,6 @@ function saveAll() {
 }
 
 function openMore(e) {
-  const url = page.value.url
   openContextMenu(
     e,
     [
@@ -306,15 +302,6 @@ function openMore(e) {
         label: t('playlists.addTo'),
         icon: 'ph:list-plus',
         action: () => whenMatched('playlist', (list) => playlists.pickPlaylist(list)),
-      },
-      { divider: true },
-      { label: t('links.openInSpotify'), icon: 'ph:spotify-logo', action: () => desktop.openExternal(url) },
-      {
-        label: t('actions.copyLink'),
-        icon: 'ph:link',
-        action: async () => {
-          if (await copyText(url)) toast(t('actions.linkCopied'), { icon: 'ph:link' })
-        },
       },
     ],
     { anchor: true }

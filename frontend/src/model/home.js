@@ -136,9 +136,16 @@ async function load(force = false) {
   return inflight
 }
 
+// Coming back to the window after a good while: the picks are fetched again,
+// quietly, behind the ones on screen. There is no button for it.
+const REFRESH_AFTER_MS = 30 * 60 * 1000
+
 // Signing in or out changes what the feed contains, so the stored copy from
 // the other state must not survive it.
 if (typeof window !== 'undefined') {
+  window.addEventListener('focus', () => {
+    if (loaded.value && Date.now() - fetchedAt > REFRESH_AFTER_MS) load(true)
+  })
   window.addEventListener('dannify:account-changed', () => {
     clearStored()
     load(true)

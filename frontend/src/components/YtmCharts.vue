@@ -10,7 +10,7 @@
         :key="p.browse_id"
         :item="{ name: p.name, cover: p.cover_url }"
         kind="playlist"
-        :subtitle-text="t('charts.fromYtm')"
+        :subtitle-text="countryName"
         @open="router.push({ name: 'ExplorePlaylist', params: { id: p.browse_id } })"
       />
     </Shelf>

@@ -34,6 +34,10 @@ from loguru import logger
 from .library import _same_artist, fold
 
 _RETRY_MISS = 7 * 24 * 3600
+# A found artist's picture and page are looked up again after this long, in
+# the background, the old ones standing until the new are in: artists change
+# their pictures, and nobody should need a button for that.
+_REFRESH_FOUND = 30 * 24 * 3600
 # Entries written before the songs were asked who they credit carry no
 # version. They are looked up again once, the old answer standing meanwhile.
 _VERSION = 2
@@ -236,6 +240,7 @@ def known(
     hints = hints or {}
     out: dict[str, dict[str, str]] = {}
     missing: list[tuple[str, str]] = []
+    refresh: list[str] = []
     with _lock:
         for name in names:
             key = fold(name)
@@ -250,6 +255,11 @@ def known(
                 elif _outdated(entry, hints.get(name)):
                     _pending.add(key)
                     missing.append((key, name))
+                elif entry.get('id') and time.time() - float(entry.get('t') or 0) > _REFRESH_FOUND:
+                    # A month old: looked up again quietly. Not counted as
+                    # coming, so nothing on screen waits for it.
+                    _pending.add(key)
+                    refresh.append(name)
             elif key not in _pending:
                 _pending.add(key)
                 missing.append((key, name))
@@ -258,6 +268,8 @@ def known(
     for key, name in missing:
         if name:
             _pool.submit(_fill, key, name, hints.get(name))
+    for name in refresh:
+        _pool.submit(_fill, fold(name), name, hints.get(name))
     return out, len(missing)
 
 

@@ -34,8 +34,6 @@ export default {
       review: 'Next: check it over',
       timeNew: 'Next: time {count} new line | Next: time {count} new lines',
     },
-    editDetails: 'Edit details',
-    detailsDone: 'Done',
     keepsTiming: 'These lyrics are already in time. Fix any words that are wrong: every line you leave as it is keeps its timing.',
     outOfOrder: '{count} line is timed before the one above it. Put it right so the words show in order. | {count} lines are timed before the ones above them. Put them right so the words show in order.',
     fixTiming: 'Fix the timing',
@@ -424,7 +422,6 @@ export default {
     notFoundText: 'These could not be found, so they are left out.',
     saveAsPlaylist: 'Save as a playlist',
     saveSong: 'Save',
-    openInSpotify: 'Open in Spotify',
   },
   problems: {
     title: 'Report a problem',

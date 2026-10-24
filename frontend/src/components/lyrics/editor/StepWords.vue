@@ -1,9 +1,9 @@
 <template>
   <section class="step-body">
     <div class="words">
-      <!-- The song in one line. Its details are opened only to correct
-           them: boxes of what is already right were the first thing a
-           newcomer had to read. -->
+      <!-- The song in one line. Its details are the song's own and are not
+           changed here: lyrics are for the song that is playing. Only a song
+           that came without a title or an artist asks for them. -->
       <div class="songline">
         <span class="songline-text" dir="auto">
           <b>{{ form.track || '—' }}</b>
@@ -14,15 +14,6 @@
             {{ form.album }}
           </template>
         </span>
-        <button
-          v-if="!s.missing.value.details"
-          class="btn-ghost btn-pill press"
-          :aria-expanded="s.showDetails.value ? 'true' : 'false'"
-          @click="s.detailsOpen.value = !s.detailsOpen.value"
-        >
-          <Icon :icon="s.showDetails.value ? 'ph:caret-up-bold' : 'ph:pencil-simple-bold'" class="h-3.5 w-3.5" />
-          {{ s.showDetails.value ? t('publish.detailsDone') : t('publish.editDetails') }}
-        </button>
       </div>
 
       <div v-if="s.showDetails.value" class="details">

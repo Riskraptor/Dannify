@@ -34,7 +34,9 @@ export function useLyricsSubmit({ player }) {
   // details below it are being corrected.
   const song = ref({ title: '', artist: '' })
   const cover = ref('')
-  // The details are opened only to correct them.
+  // The song's details are its own, and are not changed here: they are asked
+  // for only when the song came without them, and stay asked for until the
+  // editor closes (they would vanish mid-word otherwise).
   const detailsOpen = ref(false)
   // The timing the lyrics had when the editor opened, when they had any: the
   // words are edited as words, and keep it (see lyricsMerge.js).
@@ -69,7 +71,7 @@ export function useLyricsSubmit({ player }) {
     words: !form.value.raw.trim(),
   }))
   const canLeaveWords = computed(() => !missing.value.details && !missing.value.duration && !missing.value.words)
-  const showDetails = computed(() => detailsOpen.value || missing.value.details)
+  const showDetails = computed(() => detailsOpen.value)
 
   // The timing as it stands: the lines' own once there are lines (they may
   // have been worked on since), what the lyrics came with before that.
@@ -199,7 +201,12 @@ export function useLyricsSubmit({ player }) {
   }
 
   function applyDraft(draft, fresh) {
-    form.value = draft.form
+    // The words and timing from the draft; the details from the song, which
+    // a draft from an earlier version could have had changed.
+    const own = fresh.form.track && fresh.form.artist
+    form.value = own
+      ? { ...draft.form, track: fresh.form.track, artist: fresh.form.artist, album: fresh.form.album || draft.form.album }
+      : draft.form
     if (!(form.value.duration > 0)) form.value.duration = fresh.form.duration
     seedTimes.value = draft.seed
     linesFrom = draft.from
@@ -229,6 +236,7 @@ export function useLyricsSubmit({ player }) {
       applyDraft(draft, fresh)
       restored.value = serialise() !== baseline
     }
+    detailsOpen.value = missing.value.details
     return true
   }
 
@@ -240,7 +248,7 @@ export function useLyricsSubmit({ player }) {
     applyFresh(seedFrom(openedTrack))
     baseline = serialise()
     restored.value = false
-    detailsOpen.value = false
+    detailsOpen.value = missing.value.details
   }
 
   function flushDraft() {

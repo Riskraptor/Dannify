@@ -113,7 +113,6 @@ import { Icon } from '@iconify/vue'
 import { desktop, bindWindowDrag, platform } from '/src/desktop/bridge'
 import { useUi } from '/src/model/ui'
 import { useAccount } from '/src/model/account'
-import { useHomeFeed } from '/src/model/home'
 import { useOnboarding } from '/src/model/onboarding'
 import { openContextMenu } from '/src/model/contextMenu'
 import { useI18n } from '/src/i18n'
@@ -155,20 +154,17 @@ function openAccountMenu(e) {
     [
       { label: account.displayName.value, icon: 'ph:user-circle', disabled: true },
       { divider: true },
+      // Liked Songs is at the top of Your Library, and the recommendations
+      // keep themselves fresh (model/home.js): what is left is the account.
       {
-        label: t('account.likedSongs'),
-        icon: 'ph:heart',
-        action: () => router.push({ name: 'Liked' }),
+        label: t('stats.nav'),
+        icon: 'ph:chart-bar',
+        action: () => router.push({ name: 'Stats' }),
       },
       {
-        label: t('account.refreshFeed'),
-        icon: 'ph:arrows-clockwise',
-        // The recommendations are the home feed. This used to refresh the
-        // account alone, and nothing on screen changed.
-        action: () => {
-          account.refresh()
-          useHomeFeed().load(true)
-        },
+        label: t('account.settings'),
+        icon: 'ph:gear-six',
+        action: () => router.push({ name: 'Settings', query: { pane: 'accounts' } }),
       },
       { divider: true },
       { label: t('account.signOut'), icon: 'ph:sign-out', action: () => account.signOut() },

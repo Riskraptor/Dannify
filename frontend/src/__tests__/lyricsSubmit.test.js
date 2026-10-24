@@ -269,14 +269,18 @@ describe('drafts', () => {
     expect(again.editor.lines.value[4]).toMatchObject({ text: 'One more', time: 25 })
   })
 
-  it('files the draft under the song, not under a corrected title', () => {
+  it('files the draft under the song, and the song keeps its own details', () => {
     const player = fakePlayer()
     const s = openOn(player)
+    // A draft from a version that let the title be changed.
     s.form.value.track = 'Suzanna (Live)'
     s.form.value.raw = 'words'
     s.close()
     expect(storage.has(draftKey('Suzanna', 'Sauti Sol'))).toBe(true)
-    expect(openOn(player).form.value.track).toBe('Suzanna (Live)')
+    const again = openOn(player)
+    expect(again.form.value.track).toBe('Suzanna')
+    expect(again.form.value.raw).toBe('words')
+    expect(again.showDetails.value).toBe(false)
   })
 
   it('saves on its own a moment after a change', async () => {
