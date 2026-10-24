@@ -75,6 +75,8 @@
   <ReportDialog v-if="wanted.report" />
   <LyricsEditor v-if="wanted.editor" :open="submitOpen" @close="submitOpen = false" />
   <Onboarding v-if="wanted.onboarding" />
+  <!-- The tour: fetched when it starts, gone when it ends. -->
+  <TourHost v-if="tour" :key="tour.name + tour.at" />
   <!-- A special day's greeting: its code is fetched on such a day only. -->
   <OccasionGreeting v-if="greetToday" :occasion="greetToday" />
 </template>
@@ -99,6 +101,7 @@ import { loadCalendar, region, shouldGreet, systemRegion, today } from './model/
 import { startYtmSync } from './model/ytmSync'
 import { useReporting } from './model/problems'
 import { whatsNew } from './model/updates'
+import { tour } from './model/tour'
 
 // What most sessions never open stays out of the first download: the mini
 // player, the dialogs, the lyrics editor and the first-run welcome are each
@@ -110,6 +113,7 @@ const WhatsNewDialog = defineAsyncComponent(() => import('./components/ui/WhatsN
 const ReportDialog = defineAsyncComponent(() => import('/src/components/ui/ReportDialog.vue'))
 const LyricsEditor = defineAsyncComponent(() => import('./components/lyrics/LyricsEditor.vue'))
 const Onboarding = defineAsyncComponent(() => import('./components/Onboarding.vue'))
+const TourHost = defineAsyncComponent(() => import('./components/tour/TourHost.vue'))
 const OccasionGreeting = defineAsyncComponent(() => import('./components/ui/OccasionGreeting.vue'))
 // Fetched only when a restart into an update begins.
 const RestartScreen = defineAsyncComponent(() => import('./components/shell/RestartScreen.vue'))

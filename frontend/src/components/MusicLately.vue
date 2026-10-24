@@ -2,7 +2,7 @@
   <!-- Today, this week, this month and this year, each a tile of its own
        colour: the minutes, the shape of the listening, and its moments taking
        turns (Backend listens.glance). Each opens its story. -->
-  <section v-if="shown" class="lately">
+  <section v-if="shown" class="lately" data-tour="lately">
     <header class="lately-head">
       <h2 class="lately-title">{{ t('story.lately') }}</h2>
       <button class="lately-more" @click="open('year')">{{ t('story.open') }}</button>

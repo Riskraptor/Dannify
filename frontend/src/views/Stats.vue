@@ -123,7 +123,7 @@
           <template v-else>
             <!-- What stood out: the biggest day, the longest sitting, an
                  average day, what was new, and the song on repeat. -->
-            <section v-if="moments.length" class="moments" :aria-label="t('stats.highlights')">
+            <section v-if="moments.length" class="moments" data-tour="highlights" :aria-label="t('stats.highlights')">
               <div v-for="m in moments" :key="m.id" class="moment" :class="`is-${m.id}`">
                 <span class="moment-icon"><Icon :icon="m.icon" class="h-4 w-4" /></span>
                 <p class="moment-label">{{ m.label }}</p>

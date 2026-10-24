@@ -6,7 +6,7 @@
     </div>
 
     <!-- LEFT: what's playing -->
-    <div class="pb-left" @contextmenu="onTrackMenu">
+    <div class="pb-left" data-tour="player" @contextmenu="onTrackMenu">
       <template v-if="cur">
         <button
           class="pb-cover"
@@ -179,6 +179,7 @@
         :aria-label="t('lyrics.title')"
         :aria-pressed="shows('lyrics')"
         aria-keyshortcuts="Control+L"
+        data-tour="lyrics-btn"
         @click="ui.showPane('lyrics', onNowPlaying)"
       >
         <Icon icon="ph:microphone-stage" class="h-[18px] w-[18px]" />
@@ -203,6 +204,7 @@
         :aria-label="t('sound.title')"
         :aria-expanded="soundOpen"
         aria-haspopup="dialog"
+        data-tour="sound"
         @click="soundOpen = !soundOpen"
       >
         <Icon icon="ph:sliders-horizontal" class="h-[18px] w-[18px]" />

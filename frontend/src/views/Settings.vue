@@ -106,6 +106,7 @@
         <!-- General: the language, then the system (closing to the tray,
              starting at login, shortcuts) -->
         <SettingsLanguage v-if="has('general')" v-show="showPane('general')" :style="paneStyle('general')" @vue:updated="onSectionUpdated" />
+        <SettingsTour v-if="has('general')" v-show="showPane('general')" :style="paneStyle('general')" @vue:updated="onSectionUpdated" />
         <SettingsSystem v-if="desktop.isDesktop && has('general')" v-show="showPane('general')" :style="paneStyle('general')" @vue:updated="onSectionUpdated" />
 
         <!-- Appearance -->
@@ -168,6 +169,7 @@ import SettingsListenBrainz from '/src/components/settings/SettingsListenBrainz.
 import SettingsAppearance from '/src/components/settings/SettingsAppearance.vue'
 import SettingsSpecialDays from '/src/components/settings/SettingsSpecialDays.vue'
 import SettingsLanguage from '/src/components/settings/SettingsLanguage.vue'
+import SettingsTour from '/src/components/settings/SettingsTour.vue'
 import SettingsSystem from '/src/components/settings/SettingsSystem.vue'
 import SettingsPlayback from '/src/components/settings/SettingsPlayback.vue'
 import SettingsSound from '/src/components/settings/SettingsSound.vue'

@@ -1,5 +1,5 @@
 <template>
-  <div class="sbx" :class="{ 'is-focused': focused }" data-no-drag>
+  <div class="sbx" :class="{ 'is-focused': focused }" data-no-drag data-tour="search">
     <Icon icon="ph:magnifying-glass" class="sbx-icon" />
     <input
       ref="input"
@@ -34,6 +34,7 @@
     <div
       v-if="focused && suggestions.length"
       class="sbx-pop menu-surface"
+      data-tour-grow
       @mousedown.prevent
     >
       <p v-if="!needle" class="sbx-pop-head">{{ t('search.recent') }}</p>

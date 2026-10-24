@@ -28,8 +28,16 @@
           </header>
           <WhatsNew :version="shown.version" :notes="shown.notes" flat :bare="!!shown.celebrate" />
           <div class="wnd-actions">
-            <button ref="okBtn" class="btn-accent btn-pill press px-5" @click="close">
-              {{ shown.celebrate ? t('update.letsGo') : t('update.gotIt') }}
+            <!-- After a big update: the new things, shown where they are. -->
+            <button v-if="shown.celebrate" class="btn btn-pill press px-5" @click="close">
+              {{ t('update.gotIt') }}
+            </button>
+            <button v-if="shown.celebrate" ref="okBtn" class="btn-accent btn-pill press px-5" @click="showMe">
+              <Icon icon="ph:compass-fill" class="h-4 w-4" />
+              {{ t('tour.showMe') }}
+            </button>
+            <button v-else ref="okBtn" class="btn-accent btn-pill press px-5" @click="close">
+              {{ t('update.gotIt') }}
             </button>
           </div>
         </div>
@@ -39,6 +47,7 @@
 </template>
 
 <script setup>
+import { startTour } from '/src/model/tour'
 import { computed, nextTick, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { whatsNew } from '/src/model/updates'
@@ -60,6 +69,10 @@ let giveBack = null
 
 function close() {
   whatsNew.value = null
+}
+function showMe() {
+  close()
+  setTimeout(() => startTour('new'), 250)
 }
 
 function onKey(e) {

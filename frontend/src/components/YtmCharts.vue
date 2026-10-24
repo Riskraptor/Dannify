@@ -3,7 +3,7 @@
        charts, the artists climbing them, and what is new. Nothing at all
        when it cannot be had (offline, signed out of nothing: it needs no
        sign-in). -->
-  <div v-if="artists.length || playlists.length || albums.length" class="ytm-charts">
+  <div v-if="artists.length || playlists.length || albums.length" class="ytm-charts" data-tour="charts">
     <Shelf v-if="playlists.length" :title="t('charts.title', { country: countryName })">
       <MediaCard
         v-for="p in playlists"
