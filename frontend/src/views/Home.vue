@@ -93,6 +93,7 @@
            there signed out and offline, unlike the feed. -->
       <Shelf
         v-if="mixes.length"
+        data-tour="mixes"
         :title="t('mixes.shelf')"
         :more-label="t('stats.nav')"
         @more="router.push({ name: 'Stats' })"

@@ -20,6 +20,7 @@ export const TOURS = {
   ],
   new: [
     { id: 'newHello', icon: 'ph:sparkle-fill' },
+    { id: 'newMixes', target: 'mixes', place: 'top', route: 'Home', optional: true },
     { id: 'newLinks', target: 'search', place: 'bottom' },
     { id: 'newCharts', target: 'charts', place: 'top', route: 'Search', optional: true },
     { id: 'newStats', target: 'highlights', place: 'bottom', route: 'Stats', optional: true },
