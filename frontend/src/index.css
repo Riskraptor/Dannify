@@ -357,6 +357,15 @@
     cursor: default;
   }
 
+  /* The Android app: a tap is a tap, with no grey flash, and a finger held
+     on a song opens its menu instead of selecting the words under it. Text
+     boxes and anything .selectable still select (below). */
+  html.is-android {
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
   input,
   textarea,
   [contenteditable='true'],
@@ -985,4 +994,17 @@
 html[data-away] .decor,
 html[data-away] .decor * {
   animation-play-state: paused !important;
+}
+
+/* Keyboard hints are for keyboards. On a screen that is only touched (a
+   phone, in the Android app or a browser) there is no Ctrl+K or Space to
+   press, so the hints go; a Chromebook with its keyboard keeps them. */
+@media (hover: none) and (pointer: coarse) {
+  kbd,
+  .sbx-hint,
+  .keys,
+  .cp-keys,
+  .cp-foot {
+    display: none !important;
+  }
 }

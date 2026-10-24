@@ -8,6 +8,7 @@ import { t } from '/src/i18n'
 import { ensureFullWindow } from '/src/desktop/fullWindow'
 import { usePlayer } from '/src/model/player'
 import { likeCurrent, saveCurrent } from '/src/model/tracks'
+import { toggleNowPlaying } from '/src/model/nowPlaying'
 
 // App-wide keyboard shortcuts and right-click behaviour. Playback keys
 // (Space, arrows, M/N/P/S/R) live in model/player.js.
@@ -131,7 +132,7 @@ function onKeyDown(e) {
     ui.showPane('queue', router.currentRoute.value.name === 'NowPlaying')
   } else if (ctrl && !e.shiftKey && key === 'e') {
     e.preventDefault()
-    import('/src/model/nowPlaying').then((m) => m.toggleNowPlaying())
+    toggleNowPlaying()
   } else if (ctrl && e.shiftKey && key === 'm' && desktop.isDesktop) {
     e.preventDefault()
     desktop.setMini(!desktop.state.mini)
@@ -268,7 +269,7 @@ export function installShortcuts() {
   // Files dropped from Explorer would otherwise navigate the webview away.
   window.addEventListener('dragover', (e) => e.preventDefault())
   window.addEventListener('drop', (e) => e.preventDefault())
-  if (desktop.isDesktop) guardLikeAnApp()
+  if (desktop.isApp) guardLikeAnApp()
   if (desktop.isDesktop) {
     const z = currentZoom()
     if (z !== 1) desktop.whenReady().then(() => desktop.setZoom(z))

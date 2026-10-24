@@ -99,7 +99,7 @@ import { restarting, welcomeBack } from './model/restart'
 import { startOnboarding, useOnboarding } from './model/onboarding'
 import { loadCalendar, region, shouldGreet, systemRegion, today } from './model/occasions'
 import { startYtmSync } from './model/ytmSync'
-import { useReporting } from './model/problems'
+import { sendHeldReports, useReporting } from './model/problems'
 import { whatsNew } from './model/updates'
 import { tour } from './model/tour'
 
@@ -270,7 +270,7 @@ onMounted(() => {
   player.restoreSession()
   welcomeBack()
   // Problem reports that could not go before (offline) go now, quietly.
-  setTimeout(() => import('./model/problems').then((m) => m.sendHeldReports()), 20000)
+  setTimeout(sendHeldReports, 20000)
   // Early in a new week or month: its story, said once (model/storyNudge.js).
   setTimeout(() => import('./model/storyNudge').then((m) => m.nudgeStories()), 15000)
 })

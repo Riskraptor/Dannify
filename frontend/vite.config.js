@@ -112,6 +112,11 @@ export default defineConfig({
     drop: ['console', 'debugger'],
     legalComments: 'none',
   },
+  test: {
+    // Node 26 has a localStorage of its own and warns in every test file that
+    // nothing gave it a file to keep it in. The tests stand in their own.
+    execArgv: ['--no-webstorage'],
+  },
   server: {
     // `npm run dev` talks to a locally running backend (python main.py).
     proxy: {

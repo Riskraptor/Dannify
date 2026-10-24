@@ -82,7 +82,13 @@ def _make_lifespan(startup_fn):
 # The Linux package runs from source but is installed all the same, so it
 # takes the installed defaults too (osenv.packaged).
 _FROZEN = bool(getattr(sys, 'frozen', False))
-_BUNDLE_DIR = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
+# The Android app is not frozen, but it is shipped: its packed interface sits
+# where the app unpacked it, which it names in DANNIFY_BUNDLE_DIR.
+_SHIPPED = _FROZEN or osenv.IS_ANDROID
+_BUNDLE_DIR = Path(
+    os.getenv('DANNIFY_BUNDLE_DIR')
+    or getattr(sys, '_MEIPASS', Path(__file__).resolve().parent)
+)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 if osenv.packaged():
@@ -471,11 +477,11 @@ def build_app() -> FastAPI:
 
     packed = None
     if not os.getenv('WEB_GUI_LOCATION'):
-        packed = respack.bundle(_BUNDLE_DIR if _FROZEN else None)
+        packed = respack.bundle(_BUNDLE_DIR if _SHIPPED else None)
     if packed is not None and 'ui/index.html' in packed:
         app.mount('/', PackedUI(packed), name='static')
     else:
-        if _FROZEN and not os.getenv('WEB_GUI_LOCATION'):
+        if _SHIPPED and not os.getenv('WEB_GUI_LOCATION'):
             # The pack is part of the install. Missing or unreadable means the
             # install is damaged, and saying so beats a window that comes up
             # blank with nothing in the log to explain it.

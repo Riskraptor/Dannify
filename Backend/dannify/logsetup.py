@@ -12,6 +12,14 @@ from pathlib import Path
 from loguru import logger
 
 from . import sealed
+from .osenv import IS_ANDROID
+
+# The log file is written from a queue of its own, so a slow disk never holds
+# up a request. Not on Android: the queue is multiprocessing's, which needs
+# the POSIX semaphores Android does not have, and the file sink failed to be
+# added at all, so the app kept no log. One process there, and loguru's own
+# lock keeps the file whole.
+_QUEUED = not IS_ANDROID
 
 
 class _InterceptHandler(logging.Handler):
@@ -143,7 +151,7 @@ def _setup_logging(level: str) -> None:
                 colorize=False,
                 backtrace=False,
                 diagnose=False,
-                enqueue=True,
+                enqueue=_QUEUED,
             )
         except Exception:
             pass
@@ -163,7 +171,7 @@ def _setup_logging(level: str) -> None:
                 diagnose=False,
                 rotation='5 MB',
                 retention=3,
-                enqueue=True,
+                enqueue=_QUEUED,
                 encoding='utf-8',
             )
         except Exception:

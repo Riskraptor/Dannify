@@ -981,6 +981,14 @@ def open_stream(video_id: str, start_seconds: float = 0.0) -> tuple[str, Iterato
     many concurrent pipes run so hundreds of requests degrade gracefully.
     """
 
+    from .osenv import IS_ANDROID
+
+    if IS_ANDROID:
+        # The phone's media tool reads files and pipes, not https (Android has
+        # no TLS for it: packaging/android/build-media.sh), and the phone's
+        # player seeks the proxied stream itself.
+        raise RuntimeError('no transcoded stream on Android')
+
     info = _extract_direct(video_id)
     mime, copy_args = _container_for(info['acodec'], info['ext'])
 

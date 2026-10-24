@@ -414,8 +414,8 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         assets = data.get('assets') or []
         own = release_assets.own_update(tag) if tag else None
         if own is not None:
-            # Linux and macOS: exactly this platform's file, by its full
-            # name, never something that merely looks like an update.
+            # Linux, macOS and Android: exactly this platform's file, by its
+            # full name, never something that merely looks like an update.
             installer = next((a for a in assets if str(a.get('name', '')) == own[0]), None)
             result['installer_kind'] = own[1]
         else:
@@ -518,15 +518,18 @@ class Progress:
 
 
 def self_updatable() -> bool:
-    """Whether this Linux or macOS copy can put a new version in place.
+    """Whether this Linux, macOS or Android copy can put a new version in place.
 
     The Linux package (DANNIFY_PACKAGED, under /opt/dannify) can, through the
     system's package manager. A macOS app can when it runs from a real
-    Dannify.app, not from a source checkout or a translocated copy.
+    Dannify.app, not from a source checkout or a translocated copy. The
+    Android app always can, through Android's own installer.
     """
 
     if osenv.IS_WINDOWS:
         return False
+    if osenv.IS_ANDROID:
+        return True
     if osenv.IS_MAC:
         import sys  # noqa: PLC0415
 
@@ -542,7 +545,7 @@ def self_updatable() -> bool:
 
 
 # The file types an update download may be saved as, per platform.
-_DOWNLOAD_TYPES = {'windows': '.exe', 'linux': '.deb', 'macos': '.zip'}
+_DOWNLOAD_TYPES = {'windows': '.exe', 'linux': '.deb', 'macos': '.zip', 'android': '.apk'}
 
 
 def download(
@@ -783,8 +786,8 @@ def discard_staged() -> None:
 
 
 _DOWNLOADED = re.compile(
-    r'^(?:delta-|Dannify-Setup-|linux-dannify_|macos-Dannify-)(\d+(?:\.\d+)*)'
-    r'(?:[_-](?:amd64|arm64|x64))?(?:\.exe|\.deb|\.zip)?(?:\.part(?:\.tag)?)?$'
+    r'^(?:delta-|Dannify-Setup-|linux-dannify_|macos-Dannify-|android-Dannify-)(\d+(?:\.\d+)*)'
+    r'(?:[_-](?:amd64|arm64|x64|x86_64))?(?:\.exe|\.deb|\.zip|\.apk)?(?:\.part(?:\.tag)?)?$'
 )
 
 

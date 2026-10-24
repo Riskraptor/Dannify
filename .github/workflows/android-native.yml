@@ -1,0 +1,151 @@
+# What the Android app carries that nobody publishes for Android, built for
+# phones (arm64-v8a) and the emulator on a PC (x86_64):
+#
+#   * pydantic-core (Rust), the one library of the backend's that is not pure
+#     Python, as wheels for the Python the app embeds (Chaquopy);
+#   * the media tool, FFmpeg with only what Dannify uses
+#     (packaging/android/build-media.sh);
+#   * QuickJS, the JavaScript engine yt-dlp needs
+#     (packaging/android/build-qjs.sh).
+#
+# All of it laid out for 16 KB memory pages, which newer phones need and
+# older ones do not mind. Each only changes with its version: android/native.txt
+# names the wheels, the scripts their programs. One artifact, android-native,
+# holds them the way android/native/ does on a PC (see android/README.md).
+name: Android native
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    paths:
+      - android/native.txt
+      - packaging/android/**
+      - .github/workflows/android-native.yml
+
+permissions:
+  contents: read
+  # gh run download, for what the other jobs of the run built.
+  actions: read
+
+# actions/checkout makes the repository with `git init`, and git then printed
+# a hint about the name of the first branch in every job.
+env:
+  GIT_CONFIG_COUNT: 1
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  pydantic-core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      # Built again only when what is built, or how, changes.
+      - name: Wheels (cached)
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: native/wheels
+          key: android-wheels-${{ hashFiles('android/native.txt', '.github/workflows/android-native.yml') }}
+      - name: What to build
+        if: steps.cache.outputs.cache-hit != 'true'
+        id: want
+        run: echo "spec=$(grep -E '^pydantic-core==' android/native.txt)" >> "$GITHUB_OUTPUT"
+      - name: Rust, for Android
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: rustup target add aarch64-linux-android x86_64-linux-android
+      - name: The source
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip download --quiet --no-binary :all: --no-deps "${{ steps.want.outputs.spec }}" -d sdist
+          mkdir src && tar -xzf sdist/*.tar.gz -C src --strip-components 1
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          CIBW_PLATFORM: android
+          CIBW_BUILD: cp314-*
+          CIBW_ARCHS: arm64_v8a x86_64
+          CIBW_BUILD_FRONTEND: build
+          # Laid out for 16 KB pages: Rust links through the NDK's clang,
+          # which left it at 4 KB. And pydantic-core's own lints are its own
+          # to fix, as cargo treats any library's.
+          CIBW_ENVIRONMENT: RUSTFLAGS="--cap-lints=allow -C link-arg=-Wl,-z,max-page-size=16384"
+          # Its tests need pydantic itself and an emulator; the app's own tests
+          # on a phone are what count.
+          CIBW_TEST_SKIP: '*'
+        run: pipx run cibuildwheel==4.3.4 src --output-dir native/wheels
+      - name: Check
+        run: |
+          ls -la native/wheels
+          test "$(ls native/wheels/*android*arm64_v8a.whl | wc -l)" = 1
+          test "$(ls native/wheels/*android*x86_64.whl | wc -l)" = 1
+          # Every library in them laid out for 16 KB pages.
+          bad=0
+          for wheel in native/wheels/*.whl; do
+            rm -rf unpacked && mkdir unpacked && python -m zipfile -e "$wheel" unpacked
+            for lib in $(find unpacked -name '*.so'); do
+              for align in $(readelf -lW "$lib" | awk '$1 == "LOAD" { print $NF }'); do
+                [ $((align)) -ge 16384 ] || { echo "$lib is not laid out for 16 KB pages" >&2; bad=1; }
+              done
+            done
+          done
+          [ "$bad" = 0 ]
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-wheels
+          path: native/
+          if-no-files-found: error
+          retention-days: 1
+
+  programs:
+    runs-on: ubuntu-24.04
+    strategy:
+      # One processor's build failing says nothing about the other's.
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Programs (cached)
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: native/${{ matrix.abi }}
+          key: android-programs-${{ matrix.abi }}-${{ hashFiles('packaging/android/*.sh') }}
+      - name: The media tool
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash packaging/android/build-media.sh ${{ matrix.abi }} native
+      - name: QuickJS
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash packaging/android/build-qjs.sh ${{ matrix.abi }} native
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-programs-${{ matrix.abi }}
+          path: native/
+          if-no-files-found: error
+          retention-days: 1
+
+  # The parts as one artifact, laid out as android/native/ is. Put together
+  # with gh: the artifact actions' merge printed Node's Buffer() deprecation.
+  android-native:
+    needs: [pydantic-core, programs]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Put together
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download ${{ github.run_id }} --repo ${{ github.repository }} --pattern 'native-*' --dir parts
+          mkdir native
+          for part in parts/*/; do cp -R "$part". native/; done
+          find native -type f | sort
+          test -f native/arm64-v8a/libdnfmedia.so && test -f native/arm64-v8a/libdnfjs.so
+          test -f native/x86_64/libdnfmedia.so && test -f native/x86_64/libdnfjs.so
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-native
+          path: native/
+          if-no-files-found: error

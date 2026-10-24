@@ -5,6 +5,7 @@ import { usePlayer } from '/src/model/player'
 import { useDownloadStats } from '/src/model/downloadStats'
 import { useProgressTracker } from '/src/model/download'
 import { toast } from '/src/model/toast'
+import { openLink } from '/src/model/links'
 import { t, currentLocale } from '/src/i18n'
 import en from '/src/i18n/locales/en.js'
 
@@ -14,7 +15,8 @@ const OCCASION_IDS = Object.keys(en.occasion).filter((id) => id !== 'national' &
 // Wires app state into the desktop: taskbar (or dock) progress while
 // downloading, the play/pause/next buttons under the Windows taskbar
 // thumbnail, the tray, the Linux media panel (MPRIS), and commands coming
-// back from all of them.
+// back from all of them. On Android, the same "now playing" drives the
+// phone's media notification, lock screen and headsets.
 
 let installed = false
 
@@ -83,21 +85,11 @@ export function installDesktopIntegration() {
     }
   )
 
-  if (!desktop.isDesktop) return
+  if (desktop.isAndroid) installAndroid()
+  if (!desktop.isDesktop && !desktop.isAndroid) return
 
-  // Taskbar button progress bar mirrors the download queue.
-  let lastProgress = ''
-  watch(
-    () => [stats.value.active, Math.round(stats.value.percent)],
-    ([active, percent]) => {
-      const key = active ? `n:${percent}` : 'none'
-      if (key === lastProgress) return
-      lastProgress = key
-      desktop.setTaskbarProgress(active ? Math.max(2, percent) / 100 : 0, active ? 'normal' : 'none')
-    }
-  )
-
-  // Thumbnail toolbar: keep the play/pause glyph and enabled states in sync.
+  // What is playing: the taskbar's buttons and media panels on a desktop,
+  // the media notification and lock screen on a phone.
   let lastPlayback = ''
   watch(
     () => ({
@@ -121,7 +113,7 @@ export function installDesktopIntegration() {
       lastPlayback = key
       // Where the song is now: read here, not watched, or every frame of
       // playback would send the whole state again.
-      desktop.setPlaybackState({ ...s, position: Math.floor(Number(player.currentTime.value) || 0) })
+      desktop.setPlaybackState({ ...s, position: Number(player.currentTime.value) || 0 })
     },
     { immediate: true }
   )
@@ -132,9 +124,34 @@ export function installDesktopIntegration() {
     () => {
       if (!player.currentTrack.value) return
       const s = JSON.parse(lastPlayback || '{}')
-      desktop.setPlaybackState({ ...s, position: Math.floor(player.currentTime.value || 0) })
+      desktop.setPlaybackState({ ...s, position: Number(player.currentTime.value) || 0 })
     }
   )
+
+  // Songs being saved: the taskbar (or dock) button's bar on a desktop. On a
+  // phone, a notification that also keeps them going with the app put away,
+  // in the interface's own words.
+  let lastProgress = ''
+  watch(
+    () => [stats.value.active, Math.round(stats.value.percent)],
+    ([active, percent]) => {
+      if (desktop.isAndroid) {
+        const key = active ? `n:${active}:${percent}` : 'none'
+        if (key === lastProgress) return
+        lastProgress = key
+        desktop.setDownloads(
+          active ? { active, percent, text: t('downloads.tooltipActive', { active, percent }) } : null
+        )
+        return
+      }
+      const key = active ? `n:${percent}` : 'none'
+      if (key === lastProgress) return
+      lastProgress = key
+      desktop.setTaskbarProgress(active ? Math.max(2, percent) / 100 : 0, active ? 'normal' : 'none')
+    }
+  )
+
+  if (!desktop.isDesktop) return
 
   // Tray menu strings, in the UI language. Re-sent when the language
   // changes so the notification area never falls back to English. The
@@ -165,12 +182,41 @@ export function installDesktopIntegration() {
 
 function mediaDetails(player) {
   const track = player.currentTrack.value
-  if (!track) return { album: '', cover: '', duration: 0, key: '' }
+  if (!track) return { album: '', cover: '', duration: 0, key: '', next: null }
   const song = track._song || {}
+  // The song after this one: the phone's notification offers "next" with it.
+  const coming = player.upcoming.value && player.upcoming.value[0]
   return {
     album: track.album || song.album_name || '',
     cover: track.cover || song.cover_url || '',
     duration: Math.floor(Number(player.duration.value) || Number(track.duration) || 0),
     key: String(track.id || track.src || song.song_id || ''),
+    next: coming ? { title: coming.title || '', artist: coming.artist || '' } : null,
+  }
+}
+
+// The Android app: links shared to it, and its back button.
+function installAndroid() {
+  // A Spotify or YouTube link shared to Dannify, or opened with it. The app
+  // keeps it until it is taken, so a link shared while the page was still
+  // loading is opened once it is up, and only once.
+  const openShared = () =>
+    desktop.takeSharedLink().then((link) => {
+      if (link) openLink(link)
+    })
+  window.__dannifyOpen = openShared
+  openShared()
+  // Back: whatever is open closes first (anything Escape closes), then the
+  // page goes back. Nothing left to close or go back to: the app steps
+  // aside and the music plays on.
+  window.__dannifyBack = () => {
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    ;(document.activeElement || document.body).dispatchEvent(escape)
+    if (escape.defaultPrevented) return true
+    if (window.history.state && window.history.state.back) {
+      router.back()
+      return true
+    }
+    return false
   }
 }

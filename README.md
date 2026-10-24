@@ -2,17 +2,19 @@
 
 [![Latest release](https://img.shields.io/github/v/release/Riskraptor/Dannify?label=release)](https://github.com/Riskraptor/Dannify/releases/latest)
 [![CI](https://github.com/Riskraptor/Dannify/actions/workflows/ci.yml/badge.svg)](https://github.com/Riskraptor/Dannify/actions/workflows/ci.yml)
-[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-informational)](#install)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-informational)](#install)
 [![Licence: all rights reserved](https://img.shields.io/badge/licence-all%20rights%20reserved-blue)](LICENSE)
 
-A music player for Windows, Linux and macOS. Search for anything, play it
-straight away, and save the songs you want to keep in your library, with
-artwork, tags and synced lyrics, to play offline.
+A music player for Windows, Linux, macOS and Android. Search for anything,
+play it straight away, and save the songs you want to keep in your library,
+with artwork, tags and synced lyrics, to play offline.
 
 I built it because every other option was either a browser tab pretending to
 be an app, or a downloader with no player attached. This is one program: a
 native window, a tray icon, media keys, and a backend on loopback that nothing
-outside the app can reach.
+outside the app can reach. On a phone it is the same program, running on the
+phone itself, with the lock screen, the notification and your headphones'
+buttons playing along.
 
 ![Dannify: Home, with the song playing and its lyrics beside it](docs/screenshots/home.png)
 
@@ -154,6 +156,9 @@ page](https://github.com/Riskraptor/Dannify/releases):
 - **macOS:** `macos-Dannify-<version>-arm64.dmg` for Apple silicon, `-x64` for
   Intel Macs. The app is not notarized by Apple, so the first time, right-click
   it and choose Open (see [packaging/macos](packaging/macos/README.md)).
+- **Android 7.0 and later:** `android-Dannify-<version>-arm64.apk` for phones
+  and tablets, `-x86_64` for Chromebooks. Android asks once whether your
+  browser may install apps (see [android](android/README.md)).
 
 Every copy updates itself from signed releases.
 

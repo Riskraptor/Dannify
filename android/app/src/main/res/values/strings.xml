@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Dannify</string>
+    <string name="backend_failed">Dannify could not start. Close it from your recent apps and open it again.</string>
+    <string name="sign_in_title">Sign in with Google</string>
+    <string name="webview_old">Dannify needs a newer Android System WebView, the part of Android that shows its pages. Update it, then open Dannify again.</string>
+    <string name="webview_update">Update WebView</string>
+    <string name="downloads_channel">Downloads</string>
+</resources>

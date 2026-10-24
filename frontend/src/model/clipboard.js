@@ -30,7 +30,7 @@ export async function copyText(text) {
 }
 
 export async function readText() {
-  if (desktop.isDesktop) {
+  if (desktop.isApp) {
     const text = await desktop.readClipboard()
     if (typeof text === 'string') return text
   }

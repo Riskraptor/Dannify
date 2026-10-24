@@ -190,9 +190,9 @@ def _dpapi(raw: bytes, entropy: Optional[bytes], unwrap: bool) -> bytes:
     return result
 
 
-# Linux and macOS wrap with a key from the system's secret store (see
-# keystore.py), tagged by where that key lives.
-_KEYSTORE_TAGS = {'secret-service': b'SSW1', 'keychain': b'KCW1', 'file': b'FKW1'}
+# Linux, macOS and Android wrap with a key from the system's secret store
+# (see keystore.py), tagged by where that key lives.
+_KEYSTORE_TAGS = {'secret-service': b'SSW1', 'keychain': b'KCW1', 'file': b'FKW1', 'android': b'AKW1'}
 _TAG_STORES = {v: k for k, v in _KEYSTORE_TAGS.items()}
 
 

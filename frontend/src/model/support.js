@@ -1,3 +1,4 @@
+import { navigate } from '/src/model/navigate'
 import { reactive, computed, ref } from 'vue'
 import API from '/src/model/api'
 import { desktop } from '/src/desktop/bridge'
@@ -84,9 +85,8 @@ function snooze(days) {
 }
 
 /** The ways to give, on their page in Settings. */
-export async function openSupport() {
-  const { default: router } = await import('/src/router')
-  router.push({ name: 'Settings', query: { pane: 'support' } })
+export function openSupport() {
+  return navigate({ name: 'Settings', query: { pane: 'support' } })
 }
 
 // Giving, and the nudge on Home rests a good while after.

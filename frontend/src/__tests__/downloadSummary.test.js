@@ -23,6 +23,7 @@ vi.mock('/src/desktop/bridge', () => ({ desktop: { isDesktop: false } }))
 vi.mock('/src/model/player', () => ({ usePlayer: () => ({}) }))
 vi.mock('/src/model/downloadStats', () => ({ useDownloadStats: () => ref({ active: 0 }) }))
 vi.mock('/src/model/download', () => ({ useProgressTracker: () => ({ downloadQueue: env.queue }) }))
+vi.mock('/src/model/links', () => ({ openLink: () => {} }))
 vi.mock('/src/model/toast', () => ({
   toast: (message, opts) => env.toasts.push({ message, opts }),
 }))

@@ -7,6 +7,7 @@ import { hasNotes, readNotes } from '/src/model/releaseNotes'
 import { isBigRelease } from '/src/model/occasions'
 import { t, currentLocale } from '/src/i18n'
 import { restartKindly } from '/src/model/restart'
+import { usePlayer } from '/src/model/player'
 
 // In-app updates.
 //
@@ -221,6 +222,7 @@ async function download({ quiet = false } = {}) {
 // only when it does not.
 function installSystem() {
   const kind = String(info.value.installer_kind || '')
+  if (/android/.test(kind)) return 'android'
   if (/linux/.test(kind)) return 'linux'
   if (/macos/.test(kind)) return 'macos'
   return (desktop.platform && desktop.platform.value) || 'windows'
@@ -230,6 +232,7 @@ const INSTALL_MESSAGE = {
   windows: 'update.installMessage',
   linux: 'update.installMessageLinux',
   macos: 'update.installMessageMac',
+  android: 'update.installMessageAndroid',
 }
 
 /** Apply the prepared update: restart into it. */
@@ -238,7 +241,8 @@ async function install({ ask = true } = {}) {
   if (updateKind.value === 'staged') return restartKindly(() => desktop.restart())
   // On Linux the package manager asks for the system password, and a
   // password prompt nobody was told about looks like something else asking.
-  // So it is said first there, and on macOS too, where the app reopens.
+  // So it is said first there, on macOS too, where the app reopens, and on
+  // Android, which asks to confirm and closes the app to install it.
   const system = installSystem()
   if (!ask && system === 'windows') return restartKindly(() => desktop.installUpdate(installerPath.value))
   const ok = await confirmDialog({
@@ -373,7 +377,6 @@ async function tryAutoDownload() {
   // streams all day still gets it within half an hour.
   let playing = false
   try {
-    const { usePlayer } = await import('/src/model/player')
     const player = usePlayer()
     const track = player.currentTrack.value
     playing = !!player.isPlaying.value && !!track && track.type !== 'local'

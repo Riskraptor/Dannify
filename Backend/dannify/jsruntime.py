@@ -27,7 +27,7 @@ from typing import Any, Optional
 
 from loguru import logger
 
-from .osenv import IS_WINDOWS, PLATFORM, exe_names
+from .osenv import IS_ANDROID, IS_WINDOWS, PLATFORM, exe_names
 
 # The oldest of each that yt-dlp's challenge solver accepts.
 _MINIMUM = {
@@ -79,14 +79,29 @@ def _bundled(folder: str, *names: str) -> Optional[Path]:
     return None
 
 
+def _native(name: str) -> Optional[Path]:
+    """A program the Android app carries. Android runs programs only from the
+    app's native library folder, where the app installs them as lib<name>.so."""
+
+    folder = os.getenv('DANNIFY_NATIVE_DIR')
+    if not folder:
+        return None
+    candidate = Path(folder) / f'lib{name}.so'
+    return candidate if candidate.is_file() else None
+
+
 def bundled_qjs() -> Optional[Path]:
     """The JS engine we ship. Named for this app, not for the project it
     came from, so the install folder gives nothing away."""
+    if IS_ANDROID:
+        return _native('dnfjs')
     return _bundled('jsruntime', *exe_names('dnfjs', 'qjs'))
 
 
 def media_tool() -> Optional[Path]:
     """The bundled media encoder (ffmpeg under our own name)."""
+    if IS_ANDROID:
+        return _native('dnfmedia')
     return _bundled('media', *exe_names('dnfmedia', 'ffmpeg'))
 
 

@@ -142,7 +142,12 @@ function onBlur() {
 }
 // Escape closes it even when the focus went somewhere else first.
 function onWindowKey(e) {
-  if (menu.value && e.key === 'Escape') close()
+  if (menu.value && e.key === 'Escape') {
+    // Said to have been dealt with: the Android app's back button closes
+    // the menu and goes no further back.
+    e.preventDefault()
+    close()
+  }
 }
 onMounted(() => {
   window.addEventListener('blur', onBlur)

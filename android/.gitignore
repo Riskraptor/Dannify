@@ -1,0 +1,11 @@
+# Gradle and the IDE
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+
+# Made before each build (tools/prepare.py) or by CI, never committed
+native/
+app/src/main/assets/dannify.res
+app/src/main/jniLibs/

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backend_failed">Dannify konnte nicht starten. Schließen Sie es in den letzten Apps und öffnen Sie es erneut.</string>
+    <string name="sign_in_title">Mit Google anmelden</string>
+    <string name="webview_old">Dannify braucht eine neuere Version von Android System WebView, dem Teil von Android, der seine Seiten anzeigt. Aktualisieren Sie sie und öffnen Sie Dannify dann erneut.</string>
+    <string name="webview_update">WebView aktualisieren</string>
+    <string name="downloads_channel">Downloads</string>
+</resources>
