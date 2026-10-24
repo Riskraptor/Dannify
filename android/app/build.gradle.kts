@@ -3,9 +3,11 @@ plugins {
     id("com.chaquo.python")
 }
 
-// The version all of Dannify is at, from the one place it lives.
+// The version all of Dannify is at, from the one place it lives. Read through
+// Gradle, so a new version is never built from a configuration kept from
+// before it (the configuration cache, gradle.properties).
 val appVersion: String = Regex("""__version__\s*=\s*'([^']+)'""")
-    .find(rootDir.resolve("../Backend/dannify/__init__.py").readText())!!
+    .find(providers.fileContents(rootProject.layout.projectDirectory.file("../Backend/dannify/__init__.py")).asText.get())!!
     .groupValues[1]
 
 // 4.15.0 is 4150000 and its first fix (4.15.0.1) 4150001: Android installs a
