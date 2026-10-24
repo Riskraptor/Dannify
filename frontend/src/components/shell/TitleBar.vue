@@ -79,7 +79,7 @@
           <Icon v-else icon="ph:user-circle" class="h-[19px] w-[19px]" />
           <!-- Signed out: the same button, saying what it does. Home used to
                carry a second "Sign in" button of its own for this. -->
-          <span v-if="!account.signedIn.value && desktop.isDesktop && !ui.isCompact.value" class="tb-signin">
+          <span v-if="!account.signedIn.value && desktop.isApp && !ui.isCompact.value" class="tb-signin">
             {{ t('account.connect') }}
           </span>
         </button>

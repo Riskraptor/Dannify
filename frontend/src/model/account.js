@@ -181,9 +181,9 @@ async function addToYouTubePlaylist(playlist, videoIds) {
   return res.data
 }
 
-/** Open the Google sign-in window (desktop only). */
+/** Open Google's sign-in window (in either app, not a browser). */
 async function signIn() {
-  if (!desktop.isDesktop) {
+  if (!desktop.isApp) {
     toast(t('account.desktopOnly'), { tone: 'error' })
     return false
   }

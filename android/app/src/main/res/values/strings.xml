@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Dannify</string>
+    <string name="backend_failed">Dannify could not start. Close it from your recent apps and open it again.</string>
+    <string name="sign_in_title">Sign in with Google</string>
+</resources>

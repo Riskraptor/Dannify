@@ -320,7 +320,14 @@ def solve_challenge(
         raise PublishError(f'Target must be 32 bytes, got {len(target)}')
 
     t0 = time.monotonic()
-    nonce = _solve_subproc(prefix, target_hex, deadline, workers)
+    # An Android app has no Python program to start beside it: the search
+    # runs here instead.
+    from .osenv import IS_ANDROID  # noqa: PLC0415
+
+    if IS_ANDROID:
+        nonce = _solve_inprocess(prefix, target_hex, deadline)
+    else:
+        nonce = _solve_subproc(prefix, target_hex, deadline, workers)
 
     # Self-verify before returning: catches the "off by one" or wrong
     # comparator-direction class of bugs before lrclib rejects us.

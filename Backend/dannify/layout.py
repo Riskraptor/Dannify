@@ -87,9 +87,45 @@ def pending() -> Optional[dict[str, Any]]:
     return _read_json(folder / READY)
 
 
+# The Android app is replaced by Android's own installer, with no launcher to
+# leave the marker: the note is left beside the downloaded update instead,
+# and is for the version it names once that version runs.
+ANDROID_NOTE = '.android-updated'
+
+
+def _android_note() -> Optional[Path]:
+    from . import osenv  # noqa: PLC0415
+
+    if not osenv.IS_ANDROID:
+        return None
+    raw = os.getenv('DANNIFY_DATA_DIR')
+    base = Path(raw).expanduser() if raw else osenv.default_data_dir()
+    return base / 'updates' / ANDROID_NOTE
+
+
+def note_android_update(version: str, notes: str) -> None:
+    """What the next start says it updated to, written as the update is
+    downloaded for Android's installer."""
+
+    note = _android_note()
+    if note is None or not version:
+        return
+    try:
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text(json.dumps({'version': version, 'notes': notes[:4000]}), encoding='utf-8')
+    except OSError:
+        logger.opt(exception=True).debug('could not keep the update note')
+
+
 def just_updated() -> Optional[dict[str, Any]]:
     """Set once, right after an update: the marker travels with the folder."""
 
+    note = _android_note()
+    if note is not None:
+        from . import __version__  # noqa: PLC0415
+
+        found = _read_json(note)
+        return found if found and found.get('version') == __version__ else None
     here = app_dir()
     if here is None or not managed():
         return None
@@ -97,6 +133,13 @@ def just_updated() -> Optional[dict[str, Any]]:
 
 
 def acknowledge_update() -> None:
+    note = _android_note()
+    if note is not None:
+        try:
+            note.unlink()
+        except OSError:
+            pass
+        return
     here = app_dir()
     if here is None:
         return

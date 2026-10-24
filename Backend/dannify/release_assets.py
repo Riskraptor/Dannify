@@ -3,8 +3,8 @@
 One release carries every platform's files, so the names decide who takes
 what. Copies of 4.7.0 on Windows pick their update by name shape: anything
 starting with ``package-``, and the first ``.exe`` with "setup" in its name.
-So no other platform's file may ever look like either. Linux and macOS files
-start with their platform's name instead.
+So no other platform's file may ever look like either. Linux, macOS and
+Android files start with their platform's name instead.
 
 Each kind of file is also signed as its own kind (see signing.statement),
 platform and processor included, so a signature made for one file can never
@@ -18,7 +18,7 @@ import platform as _platform
 import re
 from typing import Optional
 
-from .osenv import IS_MAC, IS_WINDOWS
+from .osenv import IS_ANDROID, IS_MAC, IS_WINDOWS
 
 WINDOWS_INSTALLER = 'installer'
 WINDOWS_PACKAGE = 'package'
@@ -34,6 +34,11 @@ def macos_arch() -> str:
     return 'arm64' if machine in ('arm64', 'aarch64') else 'x64'
 
 
+def android_arch() -> str:
+    machine = _platform.machine().lower()
+    return 'arm64' if machine in ('aarch64', 'arm64') else 'x86_64'
+
+
 def linux_deb(version: str, arch: str) -> str:
     return f'linux-dannify_{version}_{arch}.deb'
 
@@ -46,6 +51,10 @@ def macos_dmg(version: str, arch: str) -> str:
     return f'macos-Dannify-{version}-{arch}.dmg'
 
 
+def android_apk(version: str, arch: str) -> str:
+    return f'android-Dannify-{version}-{arch}.apk'
+
+
 _SHAPES = (
     (re.compile(r'^Dannify-Setup-(?P<v>[0-9][0-9A-Za-z.+-]*)\.exe$'), lambda m: WINDOWS_INSTALLER),
     (re.compile(r'^package-(?P<v>[0-9][0-9A-Za-z.+-]*)\.json$'), lambda m: WINDOWS_PACKAGE),
@@ -55,6 +64,8 @@ _SHAPES = (
      lambda m: f"app-macos-zip-{m['a']}"),
     (re.compile(r'^macos-Dannify-(?P<v>[0-9][0-9A-Za-z.+]*)-(?P<a>arm64|x64)\.dmg$'),
      lambda m: f"installer-macos-dmg-{m['a']}"),
+    (re.compile(r'^android-Dannify-(?P<v>[0-9][0-9A-Za-z.+]*)-(?P<a>arm64|x86_64)\.apk$'),
+     lambda m: f"app-android-apk-{m['a']}"),
 )
 
 
@@ -74,6 +85,9 @@ def own_update(version: str) -> Optional[tuple[str, str]]:
 
     if IS_WINDOWS:
         return None
+    if IS_ANDROID:
+        arch = android_arch()
+        return android_apk(version, arch), f'app-android-apk-{arch}'
     if IS_MAC:
         arch = macos_arch()
         return macos_zip(version, arch), f'app-macos-zip-{arch}'

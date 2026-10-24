@@ -42,7 +42,7 @@
       </div>
       <button
         class="btn-accent btn-pill press shrink-0 px-4"
-        :disabled="account.busy.value || !desktop.isDesktop"
+        :disabled="account.busy.value || !desktop.isApp"
         @click="account.signIn()"
       >
         <span v-if="account.busy.value" class="spinner h-4 w-4" />

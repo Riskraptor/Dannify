@@ -53,7 +53,8 @@ SUPPORT_FILE = Path(__file__).resolve().parent.parent / 'config' / 'support-live
 def _known_kind(kind: str) -> bool:
     return kind in KINDS or bool(
         __import__('re').fullmatch(
-            r'installer-linux-deb-(amd64|arm64)|app-macos-zip-(arm64|x64)|installer-macos-dmg-(arm64|x64)',
+            r'installer-linux-deb-(amd64|arm64)|app-macos-zip-(arm64|x64)|installer-macos-dmg-(arm64|x64)'
+            r'|app-android-apk-(arm64|x86_64)',
             kind,
         )
     )

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backend_failed">Dannify haikuweza kuanza. Ifunge kwenye programu za hivi karibuni kisha uifungue tena.</string>
+    <string name="sign_in_title">Ingia kwa Google</string>
+</resources>

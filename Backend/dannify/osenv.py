@@ -1,4 +1,4 @@
-"""What differs between Windows, Linux and macOS, in one place.
+"""What differs between Windows, Linux, macOS and Android, in one place.
 
 The rest of the backend asks here instead of testing ``os.name`` itself, so a
 new platform is a change to this file and not a hunt through every module.
@@ -19,11 +19,14 @@ from loguru import logger
 
 IS_WINDOWS = os.name == 'nt'
 IS_MAC = sys.platform == 'darwin'
-IS_LINUX = sys.platform.startswith('linux')
+# Python on Android (3.13 on, as the Android app embeds it) says 'android';
+# getandroidapilevel is there either way.
+IS_ANDROID = sys.platform == 'android' or hasattr(sys, 'getandroidapilevel')
+IS_LINUX = sys.platform.startswith('linux') and not IS_ANDROID
 
 # The name every platform knows this platform by in release files and in the
-# signed update statements ('windows', 'linux', 'macos').
-PLATFORM = 'windows' if IS_WINDOWS else 'macos' if IS_MAC else 'linux'
+# signed update statements ('windows', 'linux', 'macos', 'android').
+PLATFORM = 'windows' if IS_WINDOWS else 'macos' if IS_MAC else 'android' if IS_ANDROID else 'linux'
 
 
 def packaged() -> bool:
@@ -36,13 +39,16 @@ def packaged() -> bool:
     write to).
     """
 
-    return bool(getattr(sys, 'frozen', False)) or os.getenv('DANNIFY_PACKAGED') == '1'
+    return bool(getattr(sys, 'frozen', False)) or os.getenv('DANNIFY_PACKAGED') == '1' or IS_ANDROID
 
 
 def default_data_dir() -> Path:
     """Where an installed copy keeps its settings, caches and keys."""
 
     home = Path.home()
+    if IS_ANDROID:
+        # The app's own private folder, which the Android app names.
+        return Path(os.getenv('DANNIFY_DATA_DIR') or str(home / 'data'))
     if IS_WINDOWS:
         return Path(os.getenv('LOCALAPPDATA') or str(home / 'AppData' / 'Local')) / 'Dannify'
     if IS_MAC:
@@ -54,6 +60,10 @@ def default_music_dir() -> Path:
     """The folder new downloads go to unless the user picked another."""
 
     home = Path.home()
+    if IS_ANDROID:
+        # The app's own music folder on the phone's storage, which the Android
+        # app names (its external files, removed with the app).
+        return Path(os.getenv('DOWNLOAD_DIR') or str(home / 'Music'))
     if IS_LINUX:
         # The desktop's own idea of "Music", which is translated on
         # non-English systems (~/Musique, ~/Musik).
@@ -89,6 +99,9 @@ def trash(paths: list[Path]) -> bool:
     if not paths:
         return False
     try:
+        if IS_ANDROID:
+            # A phone has no Trash for an app's own files: the caller deletes.
+            return False
         if IS_WINDOWS:
             ok = _trash_windows(paths)
         elif IS_MAC:

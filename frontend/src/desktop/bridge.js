@@ -1,19 +1,23 @@
 import { computed, reactive, readonly, watch } from 'vue'
 
 // ---------------------------------------------------------------------------
-// Bridge to the native desktop shell (Backend/desktop.py → pywebview js_api).
+// Bridge to the native shell: the desktop window (Backend/desktop.py →
+// pywebview js_api) or the Android app (android/app/.../WebBridge.kt), which
+// answers the same calls under the same names.
 //
 // The same frontend is also served to plain browsers on the LAN, so every
-// call here degrades to a no-op when we're not inside the desktop window.
+// call here degrades to a no-op when we're not inside either.
 // ---------------------------------------------------------------------------
 
 const SHELL_KEY = 'dannify-shell'
 
-function detectDesktop() {
+// Which shell this page is in: 'desktop', 'android', or '' for a browser.
+function detectShell() {
   try {
     const params = new URLSearchParams(window.location.search)
-    if (params.get('shell') === 'desktop') {
-      sessionStorage.setItem(SHELL_KEY, 'desktop')
+    const named = params.get('shell')
+    if (named === 'desktop' || named === 'android') {
+      sessionStorage.setItem(SHELL_KEY, named)
       // Drop the markers from the address so the router never sees them,
       // and so the session key never sits in the visible URL. The server
       // has already traded it for a cookie by now.
@@ -25,18 +29,27 @@ function detectDesktop() {
         '',
         window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
       )
-      return true
+      return named
     }
-    if (sessionStorage.getItem(SHELL_KEY) === 'desktop') return true
+    const kept = sessionStorage.getItem(SHELL_KEY)
+    if (kept === 'desktop' || kept === 'android') return kept
   } catch {
     // storage blocked: fall through
   }
-  return !!window.pywebview
+  if (window.DannifyAndroid) return 'android'
+  return window.pywebview ? 'desktop' : ''
 }
 
-export const isDesktop = detectDesktop()
+const shell = detectShell()
+export const isDesktop = shell === 'desktop'
+// The Android app: a phone's screen, its own media controls, no window to
+// move or tray to sit in.
+export const isAndroid = shell === 'android'
+// Either app, as against a browser on the network: signing in, the first
+// run's welcome and the clipboard need one.
+export const isApp = isDesktop || isAndroid
 
-const PLATFORMS = ['windows', 'macos', 'linux']
+const PLATFORMS = ['windows', 'macos', 'linux', 'android']
 
 /**
  * Which system this is: 'windows', 'macos' or 'linux'. The shell says for
@@ -45,6 +58,7 @@ const PLATFORMS = ['windows', 'macos', 'linux']
  * (userAgentData) is asked first, the old ones after it.
  */
 export function detectPlatform(nav = typeof navigator !== 'undefined' ? navigator : null) {
+  if (isAndroid) return 'android'
   if (!nav) return 'windows'
   const reports = [nav.userAgentData && nav.userAgentData.platform, nav.platform, nav.userAgent]
   for (const report of reports) {
@@ -58,6 +72,7 @@ export function detectPlatform(nav = typeof navigator !== 'undefined' ? navigato
 }
 
 if (isDesktop) document.documentElement.classList.add('is-desktop')
+if (isAndroid) document.documentElement.classList.add('is-android')
 
 const state = reactive({
   ready: false, // js_api reachable
@@ -114,6 +129,7 @@ function apiReady() {
 }
 
 export function whenReady() {
+  if (isAndroid) return Promise.resolve(true)
   if (!isDesktop) return Promise.resolve(false)
   if (state.ready) return Promise.resolve(true)
   if (!readyPromise) {
@@ -146,7 +162,41 @@ if (isDesktop) {
   window.addEventListener('pagehide', () => (shuttingDown = true))
 }
 
+// The Android app's calls that take a while (a screen of their own, an
+// install): answered later, through window.__dannifyAndroidReply.
+const ANDROID_LATER = new Set(['account_sign_in', 'account_clear_session', 'app_install_update'])
+const androidWaiting = new Map()
+let androidCalls = 0
+if (isAndroid) {
+  window.__dannifyAndroidReply = (id, value) => {
+    const resolve = androidWaiting.get(id)
+    androidWaiting.delete(id)
+    if (resolve) resolve(value)
+  }
+}
+
+function callAndroid(name, args) {
+  const host = window.DannifyAndroid
+  if (!host) return Promise.resolve(undefined)
+  const argsJson = JSON.stringify(args)
+  if (ANDROID_LATER.has(name)) {
+    const id = `c${++androidCalls}`
+    return new Promise((resolve) => {
+      androidWaiting.set(id, resolve)
+      host.callAsync(id, name, argsJson)
+    })
+  }
+  try {
+    const answer = host.call(name, argsJson)
+    return Promise.resolve(answer == null || answer === 'null' ? undefined : JSON.parse(answer))
+  } catch (err) {
+    console.warn(`[android] ${name} failed`, err)
+    return Promise.resolve(undefined)
+  }
+}
+
 async function call(name, ...args) {
+  if (isAndroid) return callAndroid(name, args)
   if (!isDesktop || shuttingDown) return undefined
   await whenReady()
   const fn = window.pywebview && window.pywebview.api && window.pywebview.api[name]
@@ -159,7 +209,7 @@ async function call(name, ...args) {
   }
 }
 
-if (isDesktop) {
+if (isDesktop || isAndroid) {
   whenReady().then(async () => {
     applyState(await call('win_state'))
   })
@@ -220,6 +270,8 @@ const setTheme = (theme) => call('app_set_theme', theme)
 const setRegion = (code) => call('app_set_region', String(code || ''))
 const setSplashWords = (words) => call('app_set_splash_words', words)
 const readClipboard = () => call('clipboard_read')
+// A link shared to the Android app before the page could open it.
+const takeSharedLink = () => call('android_take_link')
 const setTaskbarProgress = (value, mode = 'normal') =>
   call('taskbar_progress', Number(value) || 0, mode)
 const setPlaybackState = (payload) => call('taskbar_playback', payload)
@@ -355,6 +407,8 @@ export function usePlatform() {
 
 export const desktop = {
   isDesktop,
+  isAndroid,
+  isApp,
   platform,
   state: readonly(state),
   whenReady,
@@ -389,6 +443,7 @@ export const desktop = {
   setRegion,
   setSplashWords,
   readClipboard,
+  takeSharedLink,
   setTaskbarProgress,
   setPlaybackState,
 }

@@ -31,7 +31,7 @@ from typing import Optional
 
 from loguru import logger
 
-from .osenv import IS_MAC, IS_WINDOWS, default_data_dir
+from .osenv import IS_ANDROID, IS_MAC, IS_WINDOWS, default_data_dir
 
 _SERVICE = 'Dannify'
 _NAME = 'store-wrap'
@@ -48,8 +48,10 @@ def _fallback_file() -> Path:
 
 def _backend() -> str:
     forced = os.getenv('DANNIFY_KEYSTORE', '').strip().lower()
-    if forced in ('file', 'secret-service', 'keychain'):
+    if forced in ('file', 'secret-service', 'keychain', 'android'):
         return forced
+    if IS_ANDROID:
+        return 'android'
     if IS_MAC and shutil.which('security'):
         return 'keychain'
     if not IS_WINDOWS and not IS_MAC and shutil.which('secret-tool') and (
@@ -123,10 +125,36 @@ def _file_set(value: str) -> bool:
         return False
 
 
+def _android_vault():  # noqa: ANN202
+    # The Android app's KeyVault (Kotlin): the value is kept sealed by a key
+    # that lives in the phone's Keystore and never leaves it.
+    from java import jclass  # noqa: PLC0415  (only inside the Android app)
+
+    return jclass('app.dannify.KeyVault')
+
+
+def _android_get() -> Optional[str]:
+    try:
+        value = _android_vault().get()
+    except Exception:
+        logger.opt(exception=True).debug('the Android key vault could not be read')
+        return None
+    return str(value) if value is not None else None
+
+
+def _android_set(value: str) -> bool:
+    try:
+        return bool(_android_vault().put(value))
+    except Exception:
+        logger.opt(exception=True).debug('the Android key vault could not be written')
+        return False
+
+
 _STORES = {
     'secret-service': (_secret_service_get, _secret_service_set),
     'keychain': (_keychain_get, _keychain_set),
     'file': (_file_get, _file_set),
+    'android': (_android_get, _android_set),
 }
 
 

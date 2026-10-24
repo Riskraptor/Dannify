@@ -99,6 +99,8 @@ async def update_download_endpoint(
     except Exception as exc:
         logger.opt(exception=True).info('update download failed')
         raise HTTPException(status_code=502, detail='update_failed') from exc
+    if osenv.IS_ANDROID:
+        layout.note_android_update(str(info.get('version') or ''), str(info.get('notes') or ''))
     return {
         'path': str(path),
         'version': info.get('version', ''),

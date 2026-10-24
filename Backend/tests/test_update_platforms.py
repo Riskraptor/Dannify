@@ -25,13 +25,16 @@ def _files(sig):
     macos = ['macos-Dannify-4.8.0-arm64.zip', 'macos-Dannify-4.8.0-arm64.zip' + sig,
              'macos-Dannify-4.8.0-x64.zip', 'macos-Dannify-4.8.0-x64.zip' + sig,
              'macos-Dannify-4.8.0-arm64.dmg', 'macos-Dannify-4.8.0-x64.dmg']
-    return windows, linux, macos
+    android = ['android-Dannify-4.8.0-arm64.apk', 'android-Dannify-4.8.0-arm64.apk' + sig,
+               'android-Dannify-4.8.0-x86_64.apk', 'android-Dannify-4.8.0-x86_64.apk' + sig]
+    return windows, linux, macos, android
 
 
 # A release as one is made now, and as 4.8.0 itself was: its signatures were
-# called .sig, which is the name copies of 4.7.0 and 4.8.0 look for.
-WINDOWS, LINUX, MACOS = _files(SIG)
-OLD_WINDOWS, OLD_LINUX, OLD_MACOS = _files('.sig')
+# called .sig, which is the name copies of 4.7.0 and 4.8.0 look for. (No
+# Android app then: its files come with releases signed the way they are now.)
+WINDOWS, LINUX, MACOS, ANDROID = _files(SIG)
+OLD_WINDOWS, OLD_LINUX, OLD_MACOS, _ = _files('.sig')
 
 
 def _release(order):
@@ -41,7 +44,8 @@ def _release(order):
         {'name': n, 'browser_download_url': BASE + n, 'size': 7} for n in order]}
 
 
-ORDERS = [LINUX + MACOS + WINDOWS, MACOS + WINDOWS + LINUX, WINDOWS + LINUX + MACOS]
+ORDERS = [LINUX + MACOS + ANDROID + WINDOWS, MACOS + WINDOWS + ANDROID + LINUX,
+          ANDROID + WINDOWS + LINUX + MACOS]
 OLD_ORDERS = [OLD_LINUX + OLD_MACOS + OLD_WINDOWS, OLD_MACOS + OLD_WINDOWS + OLD_LINUX,
               OLD_WINDOWS + OLD_LINUX + OLD_MACOS]
 
@@ -92,7 +96,7 @@ def test_a_copy_that_trusts_the_first_key_fetches_nothing_of_a_release_made_now(
 
 
 def test_no_other_platform_file_looks_like_a_windows_one():
-    for name in LINUX + MACOS:
+    for name in LINUX + MACOS + ANDROID:
         assert not name.startswith('package-')
         assert not (name.lower().endswith('.exe') and 'setup' in name.lower())
 
@@ -101,9 +105,11 @@ def _as(monkeypatch, platform, machine):
     monkeypatch.setattr(osenv, 'IS_WINDOWS', platform == 'windows')
     monkeypatch.setattr(osenv, 'IS_MAC', platform == 'macos')
     monkeypatch.setattr(osenv, 'IS_LINUX', platform == 'linux')
+    monkeypatch.setattr(osenv, 'IS_ANDROID', platform == 'android')
     monkeypatch.setattr(osenv, 'PLATFORM', platform)
     monkeypatch.setattr(release_assets, 'IS_WINDOWS', platform == 'windows')
     monkeypatch.setattr(release_assets, 'IS_MAC', platform == 'macos')
+    monkeypatch.setattr(release_assets, 'IS_ANDROID', platform == 'android')
     monkeypatch.setattr(release_assets._platform, 'machine', lambda: machine)
     monkeypatch.setattr(updates, 'self_updatable', lambda: True)
     monkeypatch.setattr(layout, 'skipped_version', lambda: '')
@@ -115,6 +121,8 @@ def _as(monkeypatch, platform, machine):
     ('linux', 'x86_64', 'linux-dannify_4.8.0_amd64.deb', 'installer-linux-deb-amd64'),
     ('macos', 'arm64', 'macos-Dannify-4.8.0-arm64.zip', 'app-macos-zip-arm64'),
     ('macos', 'x86_64', 'macos-Dannify-4.8.0-x64.zip', 'app-macos-zip-x64'),
+    ('android', 'aarch64', 'android-Dannify-4.8.0-arm64.apk', 'app-android-apk-arm64'),
+    ('android', 'x86_64', 'android-Dannify-4.8.0-x86_64.apk', 'app-android-apk-x86_64'),
     ('windows', 'AMD64', 'Dannify-Setup-4.8.0.exe', 'installer'),
 ])
 def test_each_platform_finds_only_its_own_update(monkeypatch, order, platform, machine, want, kind):
@@ -146,6 +154,7 @@ def test_a_release_without_this_platform_offers_nothing_to_download(monkeypatch)
     ('linux', 'x86_64', False),
     ('macos', 'arm64', False),
     ('macos', 'x86_64', False),
+    ('android', 'aarch64', False),
 ])
 def test_a_release_of_one_platform_is_offered_only_there(monkeypatch, platform, machine, offered):
     _as(monkeypatch, platform, machine)
@@ -160,13 +169,15 @@ def test_a_windows_release_with_nothing_to_install_is_not_offered(monkeypatch):
 
 
 def test_every_release_file_is_signed_as_its_own_platform_and_arch():
-    kinds = {name: release_assets.describe(name) for name in WINDOWS + LINUX + MACOS
+    kinds = {name: release_assets.describe(name) for name in WINDOWS + LINUX + MACOS + ANDROID
              if not name.endswith(SIG) and not name.endswith('.zip') or name.startswith('macos-')}
     assert kinds['Dannify-Setup-4.8.0.exe'] == ('installer', '4.8.0')
     assert kinds['package-4.8.0.json'] == ('package', '4.8.0')
     assert kinds['linux-dannify_4.8.0_amd64.deb'] == ('installer-linux-deb-amd64', '4.8.0')
     assert kinds['macos-Dannify-4.8.0-arm64.zip'] == ('app-macos-zip-arm64', '4.8.0')
     assert kinds['macos-Dannify-4.8.0-x64.dmg'] == ('installer-macos-dmg-x64', '4.8.0')
+    assert kinds['android-Dannify-4.8.0-arm64.apk'] == ('app-android-apk-arm64', '4.8.0')
+    assert kinds['android-Dannify-4.8.0-x86_64.apk'] == ('app-android-apk-x86_64', '4.8.0')
     assert release_assets.describe('linux-dannify_4.8.0_amd64.deb' + SIG) is None
 
 
@@ -176,7 +187,8 @@ def test_a_signature_never_carries_over_to_another_platform():
     digest = 'ab' * 32
     sig = signing.sign(secret, signing.statement('installer-linux-deb-amd64', '4.8.0', digest)).hex()
     assert signing.verify_release(public, 'installer-linux-deb-amd64', '4.8.0', digest, sig)
-    for other in ('installer', 'package', 'app-macos-zip-arm64', 'installer-linux-deb-arm64'):
+    for other in ('installer', 'package', 'app-macos-zip-arm64', 'installer-linux-deb-arm64',
+                  'app-android-apk-arm64'):
         assert not signing.verify_release(public, other, '4.8.0', digest, sig)
 
 
@@ -188,8 +200,32 @@ def test_the_windows_statements_are_unchanged():
 
 def test_old_platform_downloads_are_tidied(tmp_path):
     for name in ('linux-dannify_4.7.0_amd64.deb', 'macos-Dannify-4.7.0-arm64.zip.part',
-                 'linux-dannify_4.9.0_amd64.deb', 'Dannify-Setup-4.7.0.exe'):
+                 'linux-dannify_4.9.0_amd64.deb', 'Dannify-Setup-4.7.0.exe',
+                 'android-Dannify-4.7.0-x86_64.apk', 'android-Dannify-4.9.0-arm64.apk'):
         (tmp_path / name).write_bytes(b'x')
     gone = updates.prune_downloads(tmp_path, '4.8.0')
-    assert sorted(gone) == ['Dannify-Setup-4.7.0.exe', 'linux-dannify_4.7.0_amd64.deb',
-                            'macos-Dannify-4.7.0-arm64.zip.part']
+    assert sorted(gone) == ['Dannify-Setup-4.7.0.exe', 'android-Dannify-4.7.0-x86_64.apk',
+                            'linux-dannify_4.7.0_amd64.deb', 'macos-Dannify-4.7.0-arm64.zip.part']
+
+
+def test_the_android_app_says_once_what_it_updated_to(monkeypatch, tmp_path):
+    # Android's installer replaces the app with no launcher to leave a note:
+    # the one left beside the download is for the version it names, once
+    # that version runs, and only once.
+    import dannify
+
+    monkeypatch.setattr(osenv, 'IS_ANDROID', True)
+    monkeypatch.setenv('DANNIFY_DATA_DIR', str(tmp_path))
+    layout.note_android_update('9.9.9', 'Faster.')
+    monkeypatch.setattr(dannify, '__version__', '9.9.8')
+    assert layout.just_updated() is None
+    monkeypatch.setattr(dannify, '__version__', '9.9.9')
+    assert layout.just_updated() == {'version': '9.9.9', 'notes': 'Faster.'}
+    layout.acknowledge_update()
+    assert layout.just_updated() is None
+
+
+def test_the_android_app_updates_itself(monkeypatch):
+    monkeypatch.setattr(osenv, 'IS_WINDOWS', False)
+    monkeypatch.setattr(osenv, 'IS_ANDROID', True)
+    assert updates.self_updatable()

@@ -158,8 +158,14 @@ def is_sealed(line: str) -> bool:
 
 def _shipped() -> bool:
     # Windows and macOS run frozen; the Linux package runs its own Python,
-    # started by /usr/bin/dannify with DANNIFY_PACKAGED.
-    return bool(getattr(sys, 'frozen', False)) or os.getenv('DANNIFY_PACKAGED') == '1'
+    # started by /usr/bin/dannify with DANNIFY_PACKAGED; the Android app's
+    # Python is the only one there is.
+    return (
+        bool(getattr(sys, 'frozen', False))
+        or os.getenv('DANNIFY_PACKAGED') == '1'
+        or sys.platform == 'android'
+        or hasattr(sys, 'getandroidapilevel')
+    )
 
 
 def sealing() -> bool:

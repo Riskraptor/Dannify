@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { isDesktop } from '/src/desktop/bridge'
+import { isApp } from '/src/desktop/bridge'
 import { useLibrary } from '/src/model/library'
 import { tourAfterSetup } from '/src/model/tour'
 
@@ -32,7 +32,7 @@ function write(key, value) {
   }
 }
 
-const firstRun = isDesktop && !read(KEY) && !read('version')
+const firstRun = isApp && !read(KEY) && !read('version')
 const show = ref(false)
 
 export function startOnboarding() {
