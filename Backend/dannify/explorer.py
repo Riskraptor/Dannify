@@ -227,6 +227,59 @@ def moods() -> list[dict[str, Any]]:
     return sections
 
 
+def _mood_page_rows(params: str) -> list[dict[str, Any]]:
+    """The playlists on a mood or genre page, read one item at a time.
+
+    ytmusicapi reads every two-row item on the page as a playlist. Genre
+    pages now also carry shelves of songs and music videos in the same kind
+    of item, and the first of those stopped the whole page with a KeyError:
+    23 of the 36 categories would not open. Albums and episodes sit there
+    too, and read as a playlist they became a card that opened nothing. Here
+    only playlists are taken and the rest of the page is passed over.
+    """
+
+    from ytmusicapi.navigation import (  # noqa: PLC0415
+        CAROUSEL_CONTENTS,
+        GRID_ITEMS,
+        NAVIGATION_BROWSE_ID,
+        SECTION_LIST,
+        SINGLE_COLUMN_TAB,
+        TITLE,
+        nav,
+    )
+    from ytmusicapi.parsers.browsing import parse_playlist  # noqa: PLC0415
+
+    response = _ytm()._send_request(
+        'browse', {'browseId': 'FEmusic_moods_and_genres_category', 'params': params},
+    )
+    rows: list[dict[str, Any]] = []
+    for section in nav(response, SINGLE_COLUMN_TAB + SECTION_LIST, True) or []:
+        if not isinstance(section, dict):
+            continue
+        if 'gridRenderer' in section:
+            items = nav(section, GRID_ITEMS, True)
+        elif 'musicCarouselShelfRenderer' in section:
+            items = nav(section, CAROUSEL_CONTENTS, True)
+        elif 'musicImmersiveCarouselShelfRenderer' in section:
+            items = nav(section, ['musicImmersiveCarouselShelfRenderer', 'contents'], True)
+        else:
+            continue
+        for item in items or []:
+            data = item.get('musicTwoRowItemRenderer') if isinstance(item, dict) else None
+            if not isinstance(data, dict):
+                continue
+            # A playlist's id is VL and the playlist's own; an album's is
+            # MPRE, an episode's MPED, and a song or video has none.
+            browse_id = nav(data, TITLE + NAVIGATION_BROWSE_ID, True)
+            if not (isinstance(browse_id, str) and browse_id.startswith('VL')):
+                continue
+            try:
+                rows.append(parse_playlist(data))
+            except (KeyError, IndexError, TypeError):
+                continue
+    return rows
+
+
 def mood_playlists(params: str) -> list[dict[str, Any]]:
     """The playlists for one mood or genre, as playlist cards."""
 
@@ -234,7 +287,7 @@ def mood_playlists(params: str) -> list[dict[str, Any]]:
     hit = _cache.get(key)
     if hit and time.time() - hit[0] < _MOODS_TTL:
         return hit[1]
-    rows = _ytm().get_mood_playlists(params) or []
+    rows = _mood_page_rows(params)
     cards = []
     for r in rows[:_MOOD_PLAYLISTS]:
         pid = r.get('playlistId') if isinstance(r, dict) else None

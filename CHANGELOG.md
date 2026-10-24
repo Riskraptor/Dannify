@@ -12,6 +12,12 @@ page](https://github.com/Riskraptor/Dannify/releases).
   pauses and Alt with the arrows goes back and forward, keys that never get
   in the way of typing. Each time it plays again, it goes back 2 seconds so
   you catch the last words (this can be turned off).
+- **Every Browse category opens again.** Family, Pop, Rock and most other
+  genres said "This could not be opened" since YouTube Music added songs and
+  albums to those pages. They open with their playlists again.
+- **Safer restarts on Windows.** If the old copy does not close during a
+  restart into an update, the new one now stops cleanly instead of carrying
+  on beside it.
 
 ## 4.14.1
 
