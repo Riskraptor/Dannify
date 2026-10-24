@@ -106,7 +106,9 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=[],
+    # Hooks of our own, ahead of the ones yt-dlp and pyinstaller-hooks-contrib
+    # carry (see pyinstaller_hooks/): those warned on every build.
+    hookspath=[str(Path(SPECPATH) / 'pyinstaller_hooks')],  # noqa: F821  (set by PyInstaller)
     hooksconfig={},
     runtime_hooks=[],
     excludes=[

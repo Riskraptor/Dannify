@@ -7,6 +7,7 @@ import { hasNotes, readNotes } from '/src/model/releaseNotes'
 import { isBigRelease } from '/src/model/occasions'
 import { t, currentLocale } from '/src/i18n'
 import { restartKindly } from '/src/model/restart'
+import { usePlayer } from '/src/model/player'
 
 // In-app updates.
 //
@@ -373,7 +374,6 @@ async function tryAutoDownload() {
   // streams all day still gets it within half an hour.
   let playing = false
   try {
-    const { usePlayer } = await import('/src/model/player')
     const player = usePlayer()
     const track = player.currentTrack.value
     playing = !!player.isPlaying.value && !!track && track.type !== 'local'
