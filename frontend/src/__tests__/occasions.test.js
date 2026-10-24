@@ -172,3 +172,29 @@ describe('greetings', () => {
     expect(O.isBigRelease('garbage')).toBe(false)
   })
 })
+
+describe('a day’s own page', () => {
+  it('is found again from its id and date, and nothing else is', () => {
+    const jamhuri = O.upcoming(day('2026-10-24'), 'KE', data, 20).find((o) => o.names && o.names.en === 'Jamhuri Day')
+    const to = O.dayRoute(jamhuri)
+    expect(to).toEqual({ name: 'SpecialDay', params: { id: jamhuri.rowId, date: '2026-12-12' } })
+    expect(O.findOccasion(to.params.id, to.params.date, 'KE', data).tag).toBe(jamhuri.tag)
+    expect(O.findOccasion('nothing', '2026-12-12', 'KE', data)).toBe(null)
+    expect(O.findOccasion(jamhuri.rowId, 'December', 'KE', data)).toBe(null)
+    expect(O.findOccasion(jamhuri.rowId, '2026-12-12', 'KE', null)).toBe(null)
+  })
+
+  it('knows the same day a year before, on its own date that year', () => {
+    const easter = O.occasionsOn(day('2027-03-28'), 'KE', data).find((o) => o.id === 'easter')
+    expect(O.isoDay(O.previousOf(easter, 'KE', data).day)).toBe('2026-04-05')
+    const xmas = O.occasionOn(day('2026-12-25'), 'KE', data)
+    expect(O.isoDay(O.previousOf(xmas, 'KE', data).day)).toBe('2025-12-25')
+    expect(O.previousOf(null, 'KE', data)).toBe(null)
+  })
+
+  it('says a country’s day only on the day; good wishes any time', () => {
+    const [jamhuri] = O.occasionsOn(day('2026-12-12'), 'KE', data)
+    expect(O.lineBefore(jamhuri)).toBe(false)
+    expect(O.lineBefore(O.occasionOn(day('2026-12-25'), 'KE', data))).toBe(true)
+  })
+})

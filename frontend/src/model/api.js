@@ -321,6 +321,10 @@ function saveShareImage(name, data) {
 function getListenHistory(limit = 100, before = 0) {
   return API.get('/api/listens/history', { params: { limit, before } })
 }
+// What was played between two times (seconds): a special day, a year on.
+function getListensBetween(start, end, top = 20) {
+  return API.get('/api/listens/between', { params: { start, end, top } })
+}
 function forgetListen(at, key) {
   return API.delete('/api/listens/item', { params: { at, key } })
 }
@@ -619,6 +623,7 @@ export default {
   recordListen,
   getListenStats,
   getListenHistory,
+  getListensBetween,
   getMixes,
   getRecap,
   getStory,

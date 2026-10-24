@@ -1826,4 +1826,21 @@ export default {
     newDoneTitle: 'Eso es todo por ahora',
     newDoneText: 'Disfruta la nueva versión. Puedes volver a verlo cuando quieras desde Ajustes.',
   },
+  // A special day’s own page.
+  day: {
+    today: 'Es hoy',
+    startsIn: 'Faltan',
+    days: 'días',
+    hours: 'horas',
+    minutes: 'min',
+    seconds: 's',
+    past: 'Terminado por este año',
+    play: 'Escuchar la música del día',
+    songs: 'Canciones para el día',
+    nothing: 'Ahora mismo no apareció música para este día.',
+    lastTime: 'Tu {day} del año pasado',
+    lastTimeText: 'El {date} escuchaste durante {time}.',
+    lost: 'Este día no está en tu calendario',
+    lostText: 'Puede que se celebre en otro lugar. Elige dónde estás en Ajustes, Días especiales.',
+  },
 }

@@ -31,7 +31,7 @@
         </span>
         <h3 class="sd-hero-title">{{ words(next).title }}</h3>
         <p class="sd-hero-date">{{ longDate(next) }}</p>
-        <p class="sd-hero-text">{{ words(next).text }}</p>
+        <p v-if="isToday(next) || lineBefore(next)" class="sd-hero-text">{{ words(next).text }}</p>
         <button v-if="words(next).music" class="sd-hero-btn press" @click="listen(next)">
           <Icon icon="ph:music-notes-fill" class="h-4 w-4" />
           {{ t('occasion.musicFor', { day: words(next).name }) }}
@@ -72,13 +72,15 @@ import {
   calendar,
   countryChoices,
   countryName,
+  dayColors,
+  dayRoute,
   detectedRegion,
+  lineBefore,
   loadCalendar,
   prefersStill,
   region,
   regionChoice,
   setRegion,
-  toneList,
   upcoming,
   wordsFor,
 } from '/src/model/occasions'
@@ -103,18 +105,7 @@ function words(o) {
   return wordsFor(o, t, locale.value)
 }
 
-// A day's colours, as a card. Snow is white on white: Christmas takes the
-// season's red and green, and any day with no colour of its own the accent.
-const SEASON = {
-  christmas: ['#b91c1c', '#166534'],
-  orthodox_christmas: ['#b91c1c', '#166534'],
-}
-function paint(o) {
-  let tones = toneList((o.look && o.look.palette) || [])
-  if (tones.length < 2) tones = SEASON[o.id] || (tones.length ? [tones[0], tones[0]] : null)
-  if (!tones) return { '--sd-a': 'rgb(var(--c-accent))', '--sd-b': 'rgb(var(--c-accent))' }
-  return { '--sd-a': tones[0], '--sd-b': tones[1] || tones[0], '--sd-c': tones[2] || tones[0] }
-}
+const paint = dayColors
 function flagOf(code) {
   const flag = calendar.value && calendar.value.flags && calendar.value.flags[code]
   return flag && flag.length ? flag.slice(0, 3) : ['rgb(var(--c-accent))']
@@ -141,9 +132,9 @@ function shortWhen(o) {
   const days = daysTo(o)
   return days <= 7 ? `${date} · ${t('settings.countdown', { count: days })}` : date
 }
+// Each day has a page of its own: its music, its countdown, last year's.
 function listen(o) {
-  const query = words(o).music
-  if (query) router.push({ name: 'Search', params: { query } })
+  router.push(dayRoute(o))
 }
 </script>
 

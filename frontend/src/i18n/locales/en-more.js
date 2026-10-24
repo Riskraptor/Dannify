@@ -547,4 +547,21 @@ export default {
     newDoneTitle: 'That is all for now',
     newDoneText: 'Enjoy the new version. You can see this again any time from Settings.',
   },
+  // A special day’s own page.
+  day: {
+    today: 'It is today',
+    startsIn: 'Starts in',
+    days: 'days',
+    hours: 'hours',
+    minutes: 'min',
+    seconds: 'sec',
+    past: 'Over for this year',
+    play: 'Play the day’s music',
+    songs: 'Songs for the day',
+    nothing: 'No music turned up for this day just now.',
+    lastTime: 'Your {day} last year',
+    lastTimeText: 'On {date} you listened for {time}.',
+    lost: 'This day is not on your calendar',
+    lostText: 'It may be kept somewhere else. Choose where you are in Settings, Special days.',
+  },
 }

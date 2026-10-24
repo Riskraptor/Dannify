@@ -1860,4 +1860,21 @@ export default {
     newDoneTitle: 'C’est tout pour le moment',
     newDoneText: 'Profitez de la nouvelle version. Vous pouvez revoir ceci à tout moment depuis les Paramètres.',
   },
+  // A special day’s own page.
+  day: {
+    today: 'C’est aujourd’hui',
+    startsIn: 'Dans',
+    days: 'jours',
+    hours: 'heures',
+    minutes: 'min',
+    seconds: 's',
+    past: 'Terminé pour cette année',
+    play: 'Écouter la musique du jour',
+    songs: 'Titres pour ce jour',
+    nothing: 'Aucune musique trouvée pour ce jour pour le moment.',
+    lastTime: 'Votre {day} l’an dernier',
+    lastTimeText: 'Le {date}, vous avez écouté pendant {time}.',
+    lost: 'Ce jour n’est pas dans votre calendrier',
+    lostText: 'Il est peut-être célébré ailleurs. Choisissez où vous êtes dans Paramètres, Jours spéciaux.',
+  },
 }

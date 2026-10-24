@@ -294,7 +294,7 @@ import { useI18n } from '/src/i18n'
 import { useSupport } from '/src/model/support'
 import { listensEpoch } from '/src/model/listens'
 import { mixCovers, MIXES, useMixes } from '/src/model/mixes'
-import { loadCalendar, today, toneOf, wordsFor } from '/src/model/occasions'
+import { dayRoute, loadCalendar, today, toneOf, wordsFor } from '/src/model/occasions'
 // Only on a special day: fetched then.
 const Particles = defineAsyncComponent(() => import('/src/components/ui/Particles.vue'))
 import Shelf from '/src/components/ui/Shelf.vue'
@@ -364,8 +364,7 @@ watch(
   { immediate: true }
 )
 function openDayMusic() {
-  const query = festiveWords.value.music
-  if (query) router.push({ name: 'Search', params: { query } })
+  if (festive.value) router.push(dayRoute(festive.value))
 }
 
 

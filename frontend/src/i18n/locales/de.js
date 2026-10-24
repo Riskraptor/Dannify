@@ -1826,4 +1826,21 @@ export default {
     newDoneTitle: 'Das war’s fürs Erste',
     newDoneText: 'Viel Spaß mit der neuen Version. Du kannst dir das jederzeit in den Einstellungen wieder ansehen.',
   },
+  // A special day’s own page.
+  day: {
+    today: 'Heute ist es so weit',
+    startsIn: 'Noch',
+    days: 'Tage',
+    hours: 'Std.',
+    minutes: 'Min.',
+    seconds: 'Sek.',
+    past: 'Für dieses Jahr vorbei',
+    play: 'Musik zum Tag abspielen',
+    songs: 'Songs für den Tag',
+    nothing: 'Für diesen Tag wurde gerade keine Musik gefunden.',
+    lastTime: 'Dein {day} im letzten Jahr',
+    lastTimeText: 'Am {date} hast du {time} lang gehört.',
+    lost: 'Dieser Tag steht nicht in deinem Kalender',
+    lostText: 'Vielleicht wird er woanders gefeiert. Wähle in den Einstellungen unter Besondere Tage, wo du bist.',
+  },
 }

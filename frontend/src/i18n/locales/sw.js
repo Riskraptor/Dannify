@@ -1826,4 +1826,21 @@ export default {
     newDoneTitle: 'Ni hayo kwa sasa',
     newDoneText: 'Furahia toleo jipya. Unaweza kuona haya tena wakati wowote kutoka Mipangilio.',
   },
+  // A special day’s own page.
+  day: {
+    today: 'Ni leo',
+    startsIn: 'Inaanza baada ya',
+    days: 'siku',
+    hours: 'saa',
+    minutes: 'dak',
+    seconds: 'sek',
+    past: 'Imeisha kwa mwaka huu',
+    play: 'Cheza muziki wa siku',
+    songs: 'Nyimbo za siku hii',
+    nothing: 'Hakuna muziki uliopatikana kwa siku hii kwa sasa.',
+    lastTime: '{day} yako mwaka jana',
+    lastTimeText: 'Tarehe {date} ulisikiliza kwa {time}.',
+    lost: 'Siku hii haipo kwenye kalenda yako',
+    lostText: 'Huenda inaadhimishwa mahali pengine. Chagua ulipo katika Mipangilio, Siku maalum.',
+  },
 }

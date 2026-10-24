@@ -345,6 +345,28 @@ def history(limit: int = 100, before: int = 0) -> dict[str, Any]:
         return {'items': items, 'more': start > 0, 'total': len(_plays)}
 
 
+def between(start: int, end: int, top: int = 20) -> dict[str, Any]:
+    """What was played from *start* up to *end* (times in seconds): how much,
+    and the songs and artists played most. A special day's music, a year on.
+    """
+
+    top = max(1, min(int(top), 100))
+    with _lock:
+        _load()
+        low = bisect.bisect_left(_plays, (int(start), -1, ''))
+        high = bisect.bisect_left(_plays, (int(end), -1, ''))
+        chosen = list(_plays[low:high])
+        songs = dict(_songs)
+    by_song, by_artist, by_album, _by_hour, total_seconds = _tally(chosen, songs)
+    top_songs, top_artists, _top_albums = _ranked(songs, by_song, by_artist, by_album, top)
+    return {
+        'plays': len(chosen),
+        'seconds': total_seconds,
+        'songs': top_songs,
+        'artists': top_artists[:8],
+    }
+
+
 def _day_start(day: date) -> int:
     """Midnight at the start of *day*, here: days are the listener's own."""
 

@@ -124,6 +124,20 @@ def test_history_carries_on_from_where_it_stopped():
     assert not rest['more'] and rest['total'] == 7
 
 
+def test_what_was_played_between_two_times():
+    listens.record(song(1), 100, at(12, 9), now=NOW)  # the day before
+    listens.record(song(2), 120, at(13, 9), now=NOW)
+    listens.record(song(2), 150, at(13, 20), now=NOW)
+    listens.record(song(3), 90, at(13, 23, 30), now=NOW)
+    listens.record(song(4), 100, at(14, 0, 30), now=NOW)  # the day after
+    day = listens.between(at(13, 0), at(14, 0))
+    assert day['plays'] == 3 and day['seconds'] == 360
+    assert [s['title'] for s in day['songs']] == ['Song 2', 'Song 3']
+    assert day['songs'][0]['plays'] == 2
+    assert day['artists'][0]['name'] == 'Sauti Sol'
+    assert listens.between(at(1, 0), at(2, 0)) == {'plays': 0, 'seconds': 0, 'songs': [], 'artists': []}
+
+
 def test_one_listen_can_be_forgotten_and_so_can_all_of_them(fresh):
     listens.record(song(1), 100, at(13, 9), now=NOW)
     listens.record(song(2), 100, at(14, 9), now=NOW)
