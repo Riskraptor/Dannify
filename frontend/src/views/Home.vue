@@ -93,6 +93,7 @@
            there signed out and offline, unlike the feed. -->
       <Shelf
         v-if="mixes.length"
+        data-tour="mixes"
         :title="t('mixes.shelf')"
         :more-label="t('stats.nav')"
         @more="router.push({ name: 'Stats' })"
@@ -109,6 +110,10 @@
           @play="playRows(mix.rows, 0)"
         />
       </Shelf>
+
+      <!-- YouTube Music's charts where you are: for everyone, signed in or
+           not (its feed below has the new releases). A file of its own. -->
+      <YtmCharts :releases="false" />
 
       <!-- Your YouTube Music picks (personalized once signed in) -->
       <template v-for="(section, si) in feedSections" :key="section.title + si">
@@ -141,10 +146,7 @@
       </template>
 
       <!-- No feed and no connection: said, rather than an empty page. -->
-      <p v-if="feedOffline" class="feed-note">
-        <Icon icon="ph:wifi-slash" class="h-4 w-4 shrink-0" />
-        {{ t('net.offlineHome') }}
-      </p>
+      <OfflineCard v-if="feedOffline" compact class="feed-offline" :text="t('net.offlineHome')" />
 
       <!-- Loading. Shaped like the shelves it stands in for: bare grey slabs
            read as a broken page, not a loading one. -->
@@ -258,9 +260,6 @@
         <div class="min-w-0 flex-1">
           <p class="give-title">{{ t('support.nudgeTitle') }}</p>
           <p class="give-text">{{ support.config.message || t('support.nudgeText') }}</p>
-          <p v-if="region === 'KE' && support.config.mpesa && support.config.mpesa.number" class="give-till">
-            <b>M-PESA</b> {{ t('support.mpesaChip', { number: support.config.mpesa.number }) }}
-          </p>
         </div>
         <div class="give-actions">
           <button class="btn-ghost btn-pill h-8 px-3 text-xs" @click="support.notNow()">
@@ -296,13 +295,15 @@ import { useI18n } from '/src/i18n'
 import { useSupport } from '/src/model/support'
 import { listensEpoch } from '/src/model/listens'
 import { mixCovers, MIXES, useMixes } from '/src/model/mixes'
-import { loadCalendar, region, today, toneOf, wordsFor } from '/src/model/occasions'
+import { dayRoute, loadCalendar, today, toneOf, wordsFor } from '/src/model/occasions'
 // Only on a special day: fetched then.
 const Particles = defineAsyncComponent(() => import('/src/components/ui/Particles.vue'))
 import Shelf from '/src/components/ui/Shelf.vue'
 import SongTile from '/src/components/ui/SongTile.vue'
 import MediaCard from '/src/components/MediaCard.vue'
 import MixCard from '/src/components/MixCard.vue'
+import OfflineCard from '/src/components/ui/OfflineCard.vue'
+const YtmCharts = defineAsyncComponent(() => import('/src/components/YtmCharts.vue'))
 import AnimatedName from '/src/components/ui/AnimatedName.vue'
 // Fetched with the page's first paint out of the way.
 const MusicLately = defineAsyncComponent(() => import('/src/components/MusicLately.vue'))
@@ -364,8 +365,7 @@ watch(
   { immediate: true }
 )
 function openDayMusic() {
-  const query = festiveWords.value.music
-  if (query) router.push({ name: 'Search', params: { query } })
+  if (festive.value) router.push(dayRoute(festive.value))
 }
 
 
@@ -567,26 +567,6 @@ function submitWelcome() {
 </script>
 
 <style scoped>
-.give-till {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  padding: 3px 10px 3px 4px;
-  border-radius: 999px;
-  background: rgb(0 166 81 / 0.14);
-  color: rgb(var(--c-fg));
-  font-size: 12px;
-  font-weight: 700;
-}
-.give-till b {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: #00a651;
-  color: #fff;
-  font-style: italic;
-  font-weight: 900;
-}
 .welcome {
   position: relative;
   display: flex;
@@ -683,16 +663,8 @@ function submitWelcome() {
   color: rgb(var(--c-fg));
   text-decoration: underline;
 }
-.feed-note {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 8px 0 28px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  background: rgb(var(--c-tint) / 0.05);
-  font-size: 13px;
-  color: rgb(var(--c-fg) / 0.7);
+.feed-offline {
+  margin-bottom: 28px;
 }
 .feed-skeleton {
   padding-bottom: 28px;

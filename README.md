@@ -30,7 +30,21 @@ outside the app can reach.
 ## What it does
 
 Search the YouTube Music catalogue and play anything in about a third of a
-second. Suggestions and results come in as you type.
+second. Suggestions and results come in as you type. Search opens on YouTube
+Music's charts and top artists where you are, what is newly out, and its
+moods and genres.
+
+Paste a Spotify link anywhere in the window (a song, an album, a playlist or
+an artist) and it opens on a page of its own, each song paired with the same
+one on YouTube Music: play it, save it, or keep the lot as a playlist of your
+own in one click. YouTube and YouTube Music links open the same way, a
+channel by its @name too. A Spotify podcast or episode opens the same show on
+YouTube Music, and long plays get steps of 15 and 30 seconds and the
+listening speed right in the player.
+
+The first time, Dannify walks you round itself: a spotlight on one thing at a
+time, an arrow to it, and a few steps you try yourself. After a big update a
+short tour shows what is new. Either is in Settings, General any time.
 
 Save whatever you want to keep. Saved songs live in your library, tagged
 properly, with their artwork and lyrics, and play without a connection. They
@@ -42,15 +56,17 @@ lists its songs in album order with their real track numbers, and one click
 opens the whole album to save the rest of it.
 
 It keeps a listening history, if you want it to. History shows what you
-played day by day, and Your stats shows time listened, streaks, the hours you
-listen at and your top songs, artists and albums. It stays on your computer;
+played day by day, and Your stats shows time listened, streaks, the hours and
+days of the week you listen at, your top songs, artists and albums, the songs
+new to you, and highlights such as your biggest day and longest sitting. It stays on your computer;
 connect ListenBrainz in Settings, Accounts and your listens go to your profile
 there too. Signed in with Google, what you play on YouTube Music elsewhere
 (your phone, the web, a speaker) counts here as well, so a copy installed
 today starts with all your listening. It comes in by itself whenever you
 open Your stats, History or Your Soundtrack, with nothing to press.
 
-From that history Home makes you mixes that keep themselves up to date: On
+From that history Home makes you mixes that keep themselves up to date:
+Right About Now (what you tend to play at this hour, on this kind of day), On
 Repeat, Top This Month, Forgotten Favourites and Recently Added. Your
 Soundtrack tells the story of your year in music in up to fourteen pages:
 your minutes against last year, your top artist and song and albums, your
@@ -69,9 +85,9 @@ Lyrics scroll in a side panel and follow the song, lighting up word by word
 as each line is sung. If they run early or late, click the line you are
 hearing and they line up; if there are several versions, pick the one that
 fits best, for a saved song too, and it is kept beside the song. If a track
-has none, there is an editor for writing them (a chorus
-typed once and repeated) and tapping the timing in, and what you write goes
-out to everyone else playing that song.
+has none, there is an editor for writing them (pasted, or typed as the
+song plays beside them, a chorus typed once and repeated) and tapping the
+timing in, and what you write goes out to everyone else playing that song.
 
 When the queue runs out, the music keeps going with songs like the last one,
 and from your own library when there is no connection.
@@ -91,7 +107,9 @@ Christmas and many more on your country's own dates, and your country's own
 days in its flag's colours. Each has its own look (snow drifting in depth,
 fireworks that climb and burst, glowing lanterns and lamps, shooting stars,
 petals, confetti) in the app, on the startup screen and in the installer, a
-greeting, and music for the day on Home. It works it all out offline, from
+greeting, music for the day on Home, and a page of its own with a countdown
+ticking to it, its playlists and songs, and what you played on it last year.
+It works it all out offline, from
 this computer's time zone and region. Setting Dannify up asks where you
 are, and Settings, Special days lets you change it, with the next special
 day shown in its own colours and the rest of the year after it.
@@ -106,8 +124,16 @@ It picks up where you left off. Close it and the queue and the track you were
 on come back next launch, paused at the second you stopped. Restart it into
 an update and the song plays on from the same second.
 
-Closing the window keeps the music going. It drops to the tray instead of
-quitting.
+Offline, it is at ease: a small "Offline" sign says so, your saved music is a
+click away from any page that needs the internet, and those pages come back
+by themselves when the connection does.
+
+Closing the window quits. Turn on "Keep playing when I close the window" in
+Settings, General and it drops to the tray instead, the music still going.
+
+Important fixes reach you without waiting for a release, and an urgent update
+says so and asks first. A problem report shows exactly what it would send,
+and the activity log in it is sealed so only the developer can read it.
 
 When something goes wrong it says so, with the fix beside it: a song that
 will not play can be repaired (downloaded again in the same place), a music

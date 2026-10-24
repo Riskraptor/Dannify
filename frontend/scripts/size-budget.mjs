@@ -17,8 +17,10 @@ const BUDGET = {
   mainScript: 620,
   // KB, compressed as it travels.
   mainScriptGzip: 210,
-  // KB: every script and style together, compressed.
-  totalGzip: 520,
+  // KB: every script and style together, compressed. Every language is
+  // counted though one is ever read; raised from 520 for the guided tour and
+  // the special days' pages, which say everything in all six.
+  totalGzip: 560,
 }
 
 const assets = join(import.meta.dirname, '..', 'dist', 'assets')

@@ -10,10 +10,19 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from loguru import logger
 
 from .. import osenv
-from .. import layout, updates
+from .. import layout, live, updates
 from .common import state
 
 router = APIRouter()
+
+
+@router.get('/api/live')
+def live_endpoint() -> dict[str, Any]:
+    """What the signed live file says for this copy (see live.py): an
+    important fix to take now, and a notice for everyone."""
+
+    return live.status(state.version or '0.0.0')
+
 
 @router.get('/api/check_update')
 def check_update() -> Optional[dict[str, Any]]:

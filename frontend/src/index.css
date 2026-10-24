@@ -952,6 +952,24 @@
   }
 }
 
+/* Into Now Playing and out (smoothChange.travel): the cover travels from the
+   player bar to the page and back, springing a little, while the rest of the
+   screen cross-fades under it. */
+::view-transition-group(np-cover) {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.2, 0.85, 0.25, 1.05);
+}
+::view-transition-old(np-cover),
+::view-transition-new(np-cover) {
+  /* The two covers are the same picture: stretched to the box as it grows. */
+  height: 100%;
+  object-fit: cover;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.26s;
+}
+
 /* A fade for small inline bits that come and go, like the search indicator. */
 .soft-enter-active,
 .soft-leave-active {

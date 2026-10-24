@@ -60,6 +60,13 @@ _DAILY_UP_TO = 92
 _FORGOTTEN_AFTER_DAYS = 30
 _REDISCOVER_MIN_PLAYS = 3
 _REDISCOVER = 12
+# One sitting: songs that follow each other with no more than this between
+# the end of one and the start of the next.
+_SESSION_GAP = 10 * 60
+# A song played this many times in one day is "on repeat" that day.
+_REPEAT_MIN = 3
+# Songs first heard in the stretch, shown on the Stats page.
+_DISCOVERIES = 20
 
 
 def init(data_dir: Path) -> None:
@@ -338,6 +345,28 @@ def history(limit: int = 100, before: int = 0) -> dict[str, Any]:
         return {'items': items, 'more': start > 0, 'total': len(_plays)}
 
 
+def between(start: int, end: int, top: int = 20) -> dict[str, Any]:
+    """What was played from *start* up to *end* (times in seconds): how much,
+    and the songs and artists played most. A special day's music, a year on.
+    """
+
+    top = max(1, min(int(top), 100))
+    with _lock:
+        _load()
+        low = bisect.bisect_left(_plays, (int(start), -1, ''))
+        high = bisect.bisect_left(_plays, (int(end), -1, ''))
+        chosen = list(_plays[low:high])
+        songs = dict(_songs)
+    by_song, by_artist, by_album, _by_hour, total_seconds = _tally(chosen, songs)
+    top_songs, top_artists, _top_albums = _ranked(songs, by_song, by_artist, by_album, top)
+    return {
+        'plays': len(chosen),
+        'seconds': total_seconds,
+        'songs': top_songs,
+        'artists': top_artists[:8],
+    }
+
+
 def _day_start(day: date) -> int:
     """Midnight at the start of *day*, here: days are the listener's own."""
 
@@ -459,6 +488,87 @@ def _ranked(songs, by_song, by_artist, by_album, top: int) -> tuple[list, list, 
     return top_songs, top_artists, top_albums
 
 
+def _highlights(chosen: list, plays: list, songs: dict, since: float) -> tuple[list, dict, list]:
+    """The week, the moments worth telling, and what was new, for a stretch.
+
+    ``(by_weekday, highlights, discoveries)``: seconds for each day of the
+    week (Monday first); the biggest day, the longest sitting, the song
+    played most in one day, the average day and how much was new; and the
+    songs first heard in the stretch, the most played first. Nothing is new
+    in "ever".
+    """
+
+    by_weekday = [0] * 7
+    by_day: dict[date, int] = {}
+    day_song: dict[tuple[date, str], int] = {}
+    for at, seconds, key in chosen:
+        day = date.fromtimestamp(at)
+        by_weekday[day.weekday()] += seconds
+        by_day[day] = by_day.get(day, 0) + seconds
+        day_song[(day, key)] = day_song.get((day, key), 0) + 1
+
+    best_day = None
+    if by_day:
+        day, seconds = max(by_day.items(), key=lambda kv: (kv[1], kv[0]))
+        best_day = {'date': day.isoformat(), 'seconds': seconds}
+
+    # The longest sitting: plays one after another, each starting no more
+    # than _SESSION_GAP after the one before ended.
+    session = None
+    start = end = heard = count = 0
+    for at, seconds, _key in chosen:
+        if count and at - end <= _SESSION_GAP:
+            heard += seconds
+            count += 1
+            end = max(end, at + seconds)
+        else:
+            start, end, heard, count = at, at + seconds, seconds, 1
+        if session is None or heard > session['seconds']:
+            session = {'start': start, 'seconds': heard, 'plays': count}
+
+    repeat = None
+    if day_song:
+        (day, key), n = max(day_song.items(), key=lambda kv: (kv[1], kv[0][0]))
+        if n >= _REPEAT_MIN:
+            repeat = {'date': day.isoformat(), 'plays': n, 'song': _entry(songs, key)}
+
+    new_songs = new_artists = 0
+    discoveries: list[dict[str, Any]] = []
+    if since:
+        first_song: dict[str, int] = {}
+        first_artist: dict[str, int] = {}
+        for at, _seconds, key in plays:
+            first_song.setdefault(key, at)
+            for name in songs.get(key, {}).get('artists') or []:
+                first_artist.setdefault(name.casefold().strip(), at)
+        fresh = {key for key, at in first_song.items() if at >= since}
+        new_songs = len(fresh)
+        new_artists = sum(1 for name, at in first_artist.items() if name and at >= since)
+        tally: dict[str, list[int]] = {}
+        for at, seconds, key in chosen:
+            if key in fresh:
+                t = tally.setdefault(key, [0, 0, 0])
+                t[0] += 1
+                t[1] += seconds
+                t[2] = max(t[2], at)
+        discoveries = [
+            _entry(songs, key, plays=n, seconds=secs, last=last)
+            for key, (n, secs, last) in sorted(tally.items(), key=lambda kv: (-kv[1][0], -kv[1][1], kv[0]))
+        ][:_DISCOVERIES]
+
+    active_days = len(by_day)
+    highlights = {
+        'best_day': best_day,
+        'session': session,
+        'repeat': repeat,
+        'active_days': active_days,
+        'per_day': round(sum(by_day.values()) / active_days) if active_days else 0,
+        'new_songs': new_songs,
+        'new_artists': new_artists,
+    }
+    return by_weekday, highlights, discoveries
+
+
 def stats(days: int = 0, top: int = 50, now: Optional[float] = None) -> dict[str, Any]:
     """What was listened to in the last *days* days (0: ever), summed up.
 
@@ -527,7 +637,9 @@ def stats(days: int = 0, top: int = 50, now: Optional[float] = None) -> dict[str
         previous = {
             'seconds': sum(p[1] for p in plays[lo:hi]),
             'plays': hi - lo,
+            'songs': len({p[2] for p in plays[lo:hi]}),
         }
+    by_weekday, highlights, discoveries = _highlights(chosen, plays, songs, since)
 
     current, longest = _streaks({date.fromtimestamp(p[0]) for p in plays}, today)
 
@@ -561,6 +673,9 @@ def stats(days: int = 0, top: int = 50, now: Optional[float] = None) -> dict[str
         'bucket': 'month' if monthly else 'day',
         'buckets': buckets,
         'by_hour': by_hour,
+        'by_weekday': by_weekday,
+        'highlights': highlights,
+        'discoveries': discoveries,
         'top_songs': top_songs,
         'top_artists': top_artists,
         'top_albums': top_albums,
@@ -578,9 +693,49 @@ _MIX_MIN = 4
 _ON_REPEAT_DAYS = 21
 
 
+# Right about now: this time of day, give or take, on this kind of day.
+_NOW_WINDOW = 90  # minutes either side
+_NOW_DAYS = 90
+_NOW_HALF_LIFE = 30  # days: a play a month old counts half
+_NOW_FRESH = 6 * 3600  # just played: left for later
+
+
+def _right_now(plays: list[tuple[int, int, str]], now: float) -> list[tuple[str, list[int]]]:
+    """The songs played around this time of day on the same kind of day (a
+    weekday, or the weekend), the last few months, the nearer in time and in
+    the day the more they count, without what was played in the last hours."""
+
+    here = time.localtime(now)
+    minute = here.tm_hour * 60 + here.tm_min
+    weekend = here.tm_wday >= 5
+    score: dict[str, float] = {}
+    rows: dict[str, list[int]] = {}
+    just_played: set[str] = set()
+    for at, seconds, key in plays[bisect.bisect_left(plays, (int(now - _NOW_DAYS * 86400), -1, '')):]:
+        if at > now - _NOW_FRESH:
+            just_played.add(key)
+            continue
+        then = time.localtime(at)
+        if (then.tm_wday >= 5) != weekend:
+            continue
+        apart = abs(then.tm_hour * 60 + then.tm_min - minute)
+        apart = min(apart, 1440 - apart)
+        if apart > _NOW_WINDOW:
+            continue
+        age = (now - at) / 86400
+        score[key] = score.get(key, 0.0) + 0.5 ** (age / _NOW_HALF_LIFE) * (1 - apart / (2 * _NOW_WINDOW))
+        row = rows.setdefault(key, [0, 0, 0])
+        row[0] += 1
+        row[1] += seconds
+        row[2] = max(row[2], at)
+    ranked = sorted((k for k in score if k not in just_played), key=lambda k: (-score[k], k))
+    return [(k, rows[k]) for k in ranked]
+
+
 def mixes(now: Optional[float] = None) -> dict[str, Any]:
-    """``{mixes: [{id, songs}]}``: On repeat, Forgotten favourites and Top
-    this month, each left out while it has too few songs to be a mix."""
+    """``{mixes: [{id, songs}]}``: On repeat, Forgotten favourites, Top this
+    month and Right about now, each left out while it has too few songs to be
+    a mix."""
 
     now = time.time() if now is None else now
     with _lock:
@@ -623,7 +778,11 @@ def mixes(now: Optional[float] = None) -> dict[str, Any]:
     first_of_month = _day_start(date.fromtimestamp(now).replace(day=1))
     month = sorted(tally(since(first_of_month)).items(), key=lambda kv: (-kv[1][1], -kv[1][0], kv[0]))
 
-    for mix_id, rows in (('on_repeat', on_repeat), ('forgotten', forgotten), ('top_month', month)):
+    right_now = _right_now(plays, now)
+
+    for mix_id, rows in (
+        ('on_repeat', on_repeat), ('forgotten', forgotten), ('top_month', month), ('right_now', right_now)
+    ):
         if len(rows) >= _MIX_MIN:
             found.append({'id': mix_id, 'songs': listed(rows)})
     return {'mixes': found}

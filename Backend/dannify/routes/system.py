@@ -324,10 +324,29 @@ async def support_report_status_endpoint() -> dict[str, Any]:
     }
 
 
+@router.get('/api/support/report/preview')
+async def support_report_preview_endpoint() -> dict[str, Any]:
+    """Each part that can go with a report, exactly as it would go, so the
+    person can read it before choosing."""
+
+    if not state.data_dir:
+        raise HTTPException(status_code=503, detail='No data folder')
+    log_file = os.getenv('DANNIFY_LOG_FILE')
+    return await asyncio.to_thread(
+        report_mod.preview,
+        Path(state.data_dir),
+        str(state.version or ''),
+        settings=dict(state.settings or {}),
+        facts=_report_facts(),
+        window_errors=list(_window_errors),
+        log_file=Path(log_file) if log_file else None,
+    )
+
+
 @router.post('/api/support/report/send')
 async def support_report_send_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
     """Send a problem report (see report.py): what the person wrote, and the
-    diagnostics if they chose to include them. Queued when it cannot go now."""
+    parts of the diagnostics they chose. Queued when it cannot go now."""
 
     if not report_mod.enabled():
         raise HTTPException(status_code=503, detail='Reporting is not open yet')
@@ -340,13 +359,15 @@ async def support_report_send_endpoint(payload: dict[str, Any] = Body(default={}
         return {'id': report_mod.new_id(), 'status': 'sent'}
     try:
         fields = report_mod.clean_fields(
-            payload.get('description'), payload.get('category'), payload.get('contact')
+            payload.get('description'), payload.get('category'), payload.get('contact'),
+            payload.get('context'),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     data = Path(state.data_dir)
     report: dict[str, Any] = {'id': report_mod.new_id(), 'version': str(state.version or ''), **fields}
-    if payload.get('include_diagnostics', True):
+    parts = report_mod.chosen_parts(payload)
+    if any(parts.values()):
         log_file = os.getenv('DANNIFY_LOG_FILE')
         report['diagnostics'] = await asyncio.to_thread(
             report_mod.pack,
@@ -356,6 +377,7 @@ async def support_report_send_endpoint(payload: dict[str, Any] = Body(default={}
             facts=_report_facts(),
             window_errors=list(_window_errors),
             log_file=Path(log_file) if log_file else None,
+            parts=parts,
         )
     if report_mod.mode() == 'email':
         # The window sends it: a free form takes submissions from a browser.

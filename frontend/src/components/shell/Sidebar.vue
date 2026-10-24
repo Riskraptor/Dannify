@@ -19,6 +19,7 @@
       <!-- What you played, added up: a place to go, not something you own,
            so up here with Home and Search rather than in your library. -->
       <SideLink
+        data-tour="nav-stats"
         :to="{ name: 'Stats' }"
         icon="ph:chart-bar"
         active-icon="ph:chart-bar-fill"
@@ -31,7 +32,7 @@
     <!-- Your Library, the way a music app has it: one list of what is yours
          (your songs, liked songs, playlists, artists) with chips to narrow
          it, rather than three headed lists and a column of links. -->
-    <div class="sb-lib">
+    <div class="sb-lib" data-tour="library">
       <div class="sb-lib-head" :class="{ 'is-rail': rail }">
         <button
           class="sb-lib-title"
@@ -180,7 +181,7 @@
 
     <div class="sb-group sb-foot">
       <div class="sb-foot-row" :class="{ 'is-rail': rail }">
-        <SideLink :to="{ name: 'Settings' }" icon="ph:gear-six" active-icon="ph:gear-six-fill" :label="t('nav.settings')" :rail="rail" :active="route.name === 'Settings'" />
+        <SideLink data-tour="nav-settings" :to="{ name: 'Settings' }" icon="ph:gear-six" active-icon="ph:gear-six-fill" :label="t('nav.settings')" :rail="rail" :active="route.name === 'Settings'" />
         <!-- Supporting the app: always here, never in the way. -->
         <button
           v-if="support.config.configured"

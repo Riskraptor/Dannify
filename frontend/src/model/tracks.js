@@ -8,7 +8,6 @@ import { albumOf, albumRoute } from '/src/model/library'
 import { toast } from '/src/model/toast'
 import { confirmDialog } from '/src/model/dialog'
 import { desktop } from '/src/desktop/bridge'
-import { copyText } from '/src/model/clipboard'
 import { repairFiles, repairStateOf } from '/src/model/repair'
 import { refreshDetailsFor } from '/src/model/details'
 import { t } from '/src/i18n'
@@ -449,16 +448,6 @@ export function songVideoId(row) {
   return id || ''
 }
 
-export function youtubeLink(row) {
-  const raw = row.raw || {}
-  const id = [raw.video_id, raw.song_id, row.track && row.track.video_id].find(
-    (v) => typeof v === 'string' && YT_ID.test(v)
-  )
-  if (id) return `https://music.youtube.com/watch?v=${id}`
-  if (raw.url && /^https?:\/\//.test(raw.url)) return raw.url
-  return ''
-}
-
 // ---------------------------------------------------------------------------
 // The song in the player (keyboard shortcuts and the command palette)
 // ---------------------------------------------------------------------------
@@ -506,7 +495,6 @@ export function trackMenu(rows, ctx = {}) {
   const pendingDownloads = rows.filter(
     (r) => r.kind === 'song' && !isRowDownloaded(r)
   )
-  const link = single ? youtubeLink(single) : ''
   const videoId = single ? songVideoId(single) : ''
   const broken = ctx.queue ? [] : locals.filter(needsRepair)
 
@@ -622,13 +610,6 @@ export function trackMenu(rows, ctx = {}) {
         icon: 'ph:folder-open',
         action: () => desktop.revealInFolder(single.file),
       },
-    link && {
-      label: t('actions.copyLink'),
-      icon: 'ph:link',
-      action: async () => {
-        if (await copyText(link)) toast(t('actions.linkCopied'), { icon: 'ph:link' })
-      },
-    },
     locals.length > 0 &&
       !ctx.queue && {
         label:

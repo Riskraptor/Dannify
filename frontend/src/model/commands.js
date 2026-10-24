@@ -1,3 +1,4 @@
+import { startTour } from '/src/model/tour'
 import router from '/src/router'
 import { usePlayer } from '/src/model/player'
 import { useUi } from '/src/model/ui'
@@ -211,6 +212,20 @@ export function buildCommands() {
       icon: 'ph:corners-out',
       keys: ['F11'],
       run: () => desktop.toggleFullscreen(),
+    },
+    {
+      id: 'view.tour',
+      group: view,
+      title: t('tour.paletteWelcome'),
+      icon: 'ph:compass',
+      run: () => startTour('welcome'),
+    },
+    {
+      id: 'view.tourNew',
+      group: view,
+      title: t('tour.paletteNew'),
+      icon: 'ph:sparkle',
+      run: () => startTour('new'),
     },
     {
       id: 'view.shortcuts',

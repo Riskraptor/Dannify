@@ -1,10 +1,10 @@
-// small file used as placeholder/settings for API calls via axios to server-side
-import axios from 'axios' // used to connect to server backend in ./server folder
+// Every call the window makes to Dannify's own server, in one place.
 import { ref } from 'vue'
 import config from '/src/config.js'
+import { createClient } from '/src/model/http'
 import { pageIsStale } from '/src/model/staleness'
 
-const API = axios.create({
+const API = createClient({
   baseURL: `${config.PROTOCOL}//${config.BACKEND}:${config.PORT}${config.BASEURL}`,
 })
 
@@ -147,6 +147,13 @@ function preview(url) {
   return API.get('/api/preview', { params: { url } })
 }
 
+// A pasted Spotify link as a page of songs, and those songs on YouTube Music.
+function spotifyLink(url) {
+  return API.get('/api/links/spotify', { params: { url }, timeout: 60000 })
+}
+function matchLinkSongs(tracks) {
+  return API.post('/api/links/match', { tracks }, { timeout: 90000 })
+}
 function resolveStream(url) {
   return API.get('/api/resolve', { params: { url } })
 }
@@ -247,6 +254,9 @@ function reportClientError(payload) {
 function getReportStatus() {
   return API.get('/api/support/report/status')
 }
+function getReportPreview() {
+  return API.get('/api/support/report/preview')
+}
 function sendReport(payload) {
   return API.post('/api/support/report/send', payload, { timeout: 90000 })
 }
@@ -310,6 +320,10 @@ function saveShareImage(name, data) {
 }
 function getListenHistory(limit = 100, before = 0) {
   return API.get('/api/listens/history', { params: { limit, before } })
+}
+// What was played between two times (seconds): a special day, a year on.
+function getListensBetween(start, end, top = 20) {
+  return API.get('/api/listens/between', { params: { start, end, top } })
 }
 function forgetListen(at, key) {
   return API.delete('/api/listens/item', { params: { at, key } })
@@ -391,6 +405,9 @@ function getSupportConfig() {
 function netCheck() {
   return API.get('/api/net', { timeout: 8000 })
 }
+function getLive() {
+  return API.get('/api/live')
+}
 function checkForUpdate(force = false) {
   return API.get('/api/update/check', { params: { force: force ? 1 : 0 } })
 }
@@ -431,6 +448,13 @@ function searchSuggest(q, signal) {
 // Moods and genres (Search before anything is typed).
 function getMoods() {
   return API.get('/api/explore/moods')
+}
+// YouTube Music's charts where the listener is, and its new releases.
+function exploreCharts(country) {
+  return API.get('/api/explore/charts', { params: { country } })
+}
+function exploreNew() {
+  return API.get('/api/explore/new')
 }
 function getMoodPlaylists(params) {
   return API.get('/api/explore/moods/playlists', { params: { params } })
@@ -583,6 +607,9 @@ export default {
   getAlbum,
   reportClientError,
   getReportStatus,
+  getReportPreview,
+  spotifyLink,
+  matchLinkSongs,
   sendReport,
   holdReport,
   heldReports,
@@ -596,6 +623,7 @@ export default {
   recordListen,
   getListenStats,
   getListenHistory,
+  getListensBetween,
   getMixes,
   getRecap,
   getStory,
@@ -617,6 +645,8 @@ export default {
   exploreArtist,
   getMoods,
   getMoodPlaylists,
+  exploreCharts,
+  exploreNew,
   exploreAlbum,
   explorePlaylist,
   // account + personalization
@@ -635,6 +665,7 @@ export default {
   // support + updates
   getSupportConfig,
   checkForUpdate,
+  getLive,
   netCheck,
   downloadUpdate,
   updateStatus,

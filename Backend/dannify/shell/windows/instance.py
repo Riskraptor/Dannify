@@ -162,7 +162,13 @@ def _acquire_single_instance() -> bool:
     """
     if not _WIN:
         return True
-    _wait_for_parent_exit()
+    # A restart whose old copy never left: this one goes, and the old copy
+    # (still running, still holding the files) stays the one there is.
+    # Going on used to depend on timing: an old copy that had let go of the
+    # mutex but not exited let this one start beside it.
+    if not _wait_for_parent_exit():
+        logger_print('restart abandoned: the old copy did not exit')
+        return False
     suffix = os.environ.get('DANNIFY_INSTANCE', '')
     name = f'Local\\DannifyAppMutex{suffix}'
 

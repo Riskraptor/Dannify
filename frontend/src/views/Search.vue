@@ -78,6 +78,8 @@
           </span>
         </div>
       </section>
+      <!-- What is played now where you are, before the moods and genres. -->
+      <div class="search-shelves"><YtmCharts /></div>
       <!-- Browse all: YouTube Music's moods and genres, as a music app's
            search page opens on. -->
       <section v-if="moods.sections.value.length" class="view-pad browse">
@@ -98,6 +100,9 @@
           </div>
         </template>
       </section>
+      <div v-else-if="moods.offline.value" class="view-pad browse">
+        <OfflineCard compact :text="t('net.offlineBrowse')" />
+      </div>
       <div v-else-if="!moods.loaded.value" class="view-pad browse">
         <div class="browse-grid">
           <div v-for="n in 12" :key="n" class="skeleton browse-tile" />
@@ -265,7 +270,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, inject, onMounted, onActivated, onDeactivated } from 'vue'
+import { ref, computed, watch, inject, onMounted, onActivated, onDeactivated, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import API from '/src/model/api'
@@ -273,7 +278,7 @@ import { useExplore, useSearchState } from '/src/model/explore'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 import { useSearchManager } from '/src/model/search'
 import { useRecent } from '/src/model/recent'
-import { failedForNetwork, whenOnline } from '/src/model/connectivity'
+import { failedForNetwork, useConnectivity, whenOnline } from '/src/model/connectivity'
 import { useUi } from '/src/model/ui'
 import { songRow, localRow, playRows, trackMenu } from '/src/model/tracks'
 import { useArtistLinks } from '/src/model/artistLinks'
@@ -285,6 +290,8 @@ import MediaCard from '/src/components/MediaCard.vue'
 import Shelf from '/src/components/ui/Shelf.vue'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
+import OfflineCard from '/src/components/ui/OfflineCard.vue'
+const YtmCharts = defineAsyncComponent(() => import('/src/components/YtmCharts.vue'))
 import CoverImage from '/src/components/ui/CoverImage.vue'
 import { useDeferred } from '/src/model/deferred'
 import { useMoods, moodColour, moodGlyph } from '/src/model/moods'
@@ -298,6 +305,7 @@ const libraryIndex = useLibraryIndex()
 const sm = useSearchManager()
 const recent = useRecent()
 const moods = useMoods()
+const connectivity = useConnectivity()
 moods.load()
 function openMood(m) {
   router.push({ name: 'Mood', params: { params: m.params }, query: { title: m.title } })
@@ -485,6 +493,22 @@ async function load(q, force = false) {
   // Resetting to the "All" tab mid-typing yanks the user out of the tab they
   // chose. Only do it when the results they were looking at are gone anyway.
   if (!refreshing && !hadResults) state.value.activeTab = 'all'
+  // Known to be offline: said at once, with what is saved above it, rather
+  // than after the search has waited the seconds it takes to give up. It
+  // runs by itself once the connection is back, and a look is taken now in
+  // case it already is.
+  if (connectivity.isOffline.value && !refreshing) {
+    offline.value = true
+    failed.value = true
+    loading.value = false
+    searching.value = false
+    state.value.searching = false
+    whenOnline(() => {
+      if (token === loadToken && failed.value) load(query, true)
+    })
+    connectivity.probe()
+    return
+  }
   try {
     const res = await API.exploreSearch(query)
     if (token !== loadToken) return // a newer keystroke won
@@ -739,6 +763,16 @@ onRefresh(() => {
 }
 .browse {
   padding-top: 8px;
+}
+/* A shelf's cards have padding of their own: pulled in by less than a
+   page's edge, their pictures line up with the page (as on Home). */
+.search-shelves {
+  padding: 8px 14px 0;
+}
+@media (min-width: 1024px) {
+  .search-shelves {
+    padding: 8px 22px 0;
+  }
 }
 .browse-head {
   margin: 8px 0 4px;

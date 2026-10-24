@@ -21,12 +21,14 @@ const ExploreArtist = () => import('/src/views/ExploreArtist.vue')
 const ExploreCollection = () => import('/src/views/ExploreCollection.vue')
 const Settings = () => import('/src/views/Settings.vue')
 const Mood = () => import('/src/views/Mood.vue')
+const LinkPage = () => import('/src/views/LinkPage.vue')
 const Stats = () => import('/src/views/Stats.vue')
 const History = () => import('/src/views/History.vue')
 const Albums = () => import('/src/views/Albums.vue')
 const Album = () => import('/src/views/Album.vue')
 const Mix = () => import('/src/views/Mix.vue')
 const Recap = () => import('/src/views/Recap.vue')
+const SpecialDay = () => import('/src/views/SpecialDay.vue')
 
 const routes = [
   { path: '/', name: 'Home', component: Home },
@@ -59,6 +61,8 @@ const routes = [
   },
   { path: '/settings', name: 'Settings', component: Settings },
   { path: '/browse/:params', name: 'Mood', component: Mood },
+  { path: '/link', name: 'Link', component: LinkPage },
+  { path: '/day/:id/:date', name: 'SpecialDay', component: SpecialDay },
   { path: '/:pathMatch(.*)*', redirect: { name: 'Home' } },
 ]
 

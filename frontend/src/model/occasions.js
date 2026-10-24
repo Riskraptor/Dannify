@@ -317,6 +317,51 @@ export function toneList(palette) {
   })
 }
 
+// Snow is white on white: Christmas takes the season's red and green.
+const SEASON = {
+  christmas: ['#b91c1c', '#166534'],
+  orthodox_christmas: ['#b91c1c', '#166534'],
+}
+/** A day's colours as CSS variables (--sd-a, --sd-b, --sd-c), for a card. */
+export function dayColors(occasion) {
+  let tones = toneList((occasion && occasion.look && occasion.look.palette) || [])
+  if (tones.length < 2) tones = SEASON[occasion && occasion.id] || (tones.length ? [tones[0], tones[0]] : null)
+  if (!tones) return { '--sd-a': 'rgb(var(--c-accent))', '--sd-b': 'rgb(var(--c-accent))' }
+  return { '--sd-a': tones[0], '--sd-b': tones[1] || tones[0], '--sd-c': tones[2] || tones[0] }
+}
+
+// ----- a day's own page (views/SpecialDay.vue) --------------------------------
+const pad = (n) => String(n).padStart(2, '0')
+/** A day as 2026-12-12, in the listener's own time. */
+export function isoDay(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+// The days whose line is said on the day ("Kenya celebrates today"): before
+// it comes, they are better left unsaid.
+const SAID_ON_THE_DAY = new Set(['national', 'world_music_day'])
+/** Whether a day's line can be shown before the day. */
+export function lineBefore(occasion) {
+  return !!occasion && !SAID_ON_THE_DAY.has(occasion.id)
+}
+/** Where a day's page is. */
+export function dayRoute(occasion) {
+  return { name: 'SpecialDay', params: { id: occasion.rowId, date: isoDay(occasion.day) } }
+}
+/** The day a page is about, from its id and date, or null. */
+export function findOccasion(id, iso, code = region.value, data = calendar.value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''))
+  if (!m || !data) return null
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return occasionsOn(date, code, data).find((o) => o.rowId === id) || null
+}
+/** The same day the year before (moving feasts move): or null. */
+export function previousOf(occasion, code = region.value, data = calendar.value) {
+  if (!occasion || !data) return null
+  const from = new Date(occasion.day.getTime() - 400 * DAY)
+  const year = occasion.day.getFullYear() - 1
+  return upcoming(from, code, data, 500).find((o) => o.rowId === occasion.rowId && o.day.getFullYear() === year) || null
+}
+
 /** Every country the calendar knows of, by its name in *locale*, in order. */
 export function countryChoices(data = calendar.value, locale = 'en') {
   if (!data) return []

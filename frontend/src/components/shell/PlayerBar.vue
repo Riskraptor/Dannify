@@ -6,23 +6,33 @@
     </div>
 
     <!-- LEFT: what's playing -->
-    <div class="pb-left" @contextmenu="onTrackMenu">
+    <div class="pb-left" data-tour="player" @contextmenu="onTrackMenu">
       <template v-if="cur">
         <button
           class="pb-cover"
-          :title="t('player.openNowPlaying')"
+          :class="{ 'is-shared': !onNowPlaying }"
+          :title="`${t('player.openNowPlaying')} (Ctrl+E)`"
           :aria-label="t('player.openNowPlaying')"
+          data-tour="np-cover"
           @click="openNowPlaying"
         >
-          <CoverImage :src="cur.cover" radius="sm" :size="56" class="h-full w-full" eager />
+          <!-- A new song comes in: the cover settles into place. -->
+          <CoverImage :key="songKey" :src="cur.cover" radius="sm" :size="56" class="h-full w-full pb-song-cover" eager />
           <span v-if="player.isBuffering.value" class="pb-cover-overlay is-visible">
             <span class="spinner h-5 w-5 text-white" />
           </span>
           <span v-else class="pb-cover-overlay">
-            <Icon icon="ph:caret-up-bold" class="h-5 w-5 text-white" />
+            <Icon icon="ph:arrows-out-simple-bold" class="h-5 w-5 text-white" />
           </span>
         </button>
-        <div class="min-w-0">
+        <!-- Once, for whoever has never opened the big player: where it is. -->
+        <Transition name="pb-hint">
+          <button v-if="showHint" class="pb-hint" @click="openNowPlaying">
+            <Icon icon="ph:arrows-out-simple-bold" class="h-3.5 w-3.5" />
+            {{ t('player.hintNowPlaying') }}
+          </button>
+        </Transition>
+        <div :key="songKey" class="min-w-0 pb-song-words">
           <button class="pb-title" :title="cur.title" @click="openNowPlaying">
             {{ cur.title }}
           </button>
@@ -31,20 +41,21 @@
           </div>
         </div>
         <button
-          v-if="!ui.isCompact.value && videoId"
+          v-if="!ui.isCompact.value && videoId && !onNowPlaying"
           class="icon-btn is-round press shrink-0 pb-like"
-          :class="{ 'is-liked': liked }"
+          :class="{ 'is-liked': liked, 'is-popping': popping }"
           :title="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
           :aria-label="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
           :aria-pressed="liked"
-          @click="account.toggleLike(row.raw)"
+          @click="like"
         >
           <Icon :icon="liked ? 'ph:heart-fill' : 'ph:heart'" class="h-[18px] w-[18px]" />
+          <span v-if="popping" class="pb-like-burst" aria-hidden="true"><i v-for="n in 6" :key="n" :style="{ '--n': n }" /></span>
         </button>
         <!-- A download arrow, filled once saved, a ring while it saves. A
              green tick beside the heart read as a second "liked", not as
              "on this PC". -->
-        <SaveSongButton v-if="!ui.isCompact.value" :row="row" class="shrink-0 pb-save" />
+        <SaveSongButton v-if="!ui.isCompact.value && !onNowPlaying" :row="row" class="shrink-0 pb-save" />
       </template>
       <div v-else class="pb-idle">
         <span class="pb-idle-art"><Icon icon="ph:music-notes" class="h-5 w-5" /></span>
@@ -66,6 +77,17 @@
           @click="player.toggleShuffle()"
         >
           <Icon icon="ph:shuffle-bold" class="h-[18px] w-[18px]" />
+        </button>
+        <!-- A podcast or a long mix: a step back and a step on, in seconds. -->
+        <button
+          v-if="long"
+          class="icon-btn is-round pb-jump"
+          :title="t('player.back15')"
+          :aria-label="t('player.back15')"
+          @click="jump(-15)"
+        >
+          <Icon icon="ph:arrow-counter-clockwise-bold" class="h-[18px] w-[18px]" />
+          <span class="pb-jump-n">15</span>
         </button>
         <button
           class="icon-btn is-round"
@@ -90,12 +112,22 @@
         <button
           class="icon-btn is-round"
           :disabled="!cur"
-          :title="`${t('player.next')} (N)`"
+          :title="nextTitle"
           :aria-label="t('player.next')"
           aria-keyshortcuts="N"
           @click="player.next()"
         >
           <Icon icon="ph:skip-forward-fill" class="h-5 w-5" />
+        </button>
+        <button
+          v-if="long"
+          class="icon-btn is-round pb-jump"
+          :title="t('player.forward30')"
+          :aria-label="t('player.forward30')"
+          @click="jump(30)"
+        >
+          <Icon icon="ph:arrow-clockwise-bold" class="h-[18px] w-[18px]" />
+          <span class="pb-jump-n">30</span>
         </button>
         <button
           class="icon-btn is-round"
@@ -113,7 +145,7 @@
           />
         </button>
       </div>
-      <div class="pb-seek">
+      <div class="pb-seek" @wheel="onSeekWheel">
         <span class="pb-time">{{ formatTime(player.currentTime.value) }}</span>
         <RangeSlider
           :value="player.progressPct.value / 100"
@@ -125,6 +157,19 @@
           @change="(r) => player.seekRatio(r)"
         />
         <span class="pb-time">{{ formatTime(player.duration.value) }}</span>
+        <!-- The listening speed (Sound): to hand for a long play, and shown
+             whenever it is not the usual. Right-click puts it back. -->
+        <button
+          v-if="long || speedShown !== 1"
+          class="pb-speed"
+          :class="{ 'is-on': speedShown !== 1 }"
+          :title="t('player.speedTitle')"
+          :aria-label="t('player.speedTitle')"
+          @click="nextSpeed"
+          @contextmenu.prevent="player.setSpeed(1)"
+        >
+          {{ speedText }}
+        </button>
       </div>
     </div>
 
@@ -170,6 +215,7 @@
         :aria-label="t('lyrics.title')"
         :aria-pressed="shows('lyrics')"
         aria-keyshortcuts="Control+L"
+        data-tour="lyrics-btn"
         @click="ui.showPane('lyrics', onNowPlaying)"
       >
         <Icon icon="ph:microphone-stage" class="h-[18px] w-[18px]" />
@@ -194,12 +240,13 @@
         :aria-label="t('sound.title')"
         :aria-expanded="soundOpen"
         aria-haspopup="dialog"
+        data-tour="sound"
         @click="soundOpen = !soundOpen"
       >
         <Icon icon="ph:sliders-horizontal" class="h-[18px] w-[18px]" />
       </button>
       <SoundPanel v-if="soundWanted" :open="soundOpen" :anchor="soundBtn" @close="soundOpen = false" />
-      <div class="pb-volume">
+      <div class="pb-volume" @wheel="onVolumeWheel">
         <button
           class="icon-btn is-round"
           :title="`${player.isMuted.value ? t('player.unmute') : t('player.mute')} (M)`"
@@ -236,6 +283,7 @@
         :aria-label="t('player.openNowPlaying')"
         :aria-pressed="onNowPlaying"
         aria-keyshortcuts="Control+E"
+        data-tour="np-button"
         @click="toggleNowPlaying"
       >
         <Icon :icon="onNowPlaying ? 'ph:arrows-in-simple' : 'ph:arrows-out-simple'" class="h-[18px] w-[18px]" />
@@ -255,6 +303,7 @@ import { queueRow, trackMenu, songVideoId } from '/src/model/tracks'
 import { openContextMenu, openMenuAt, lastMenuPoint } from '/src/model/contextMenu'
 import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
+import { nowPlayingSeen, openNowPlaying, closeNowPlaying, toggleNowPlaying } from '/src/model/nowPlaying'
 import CoverImage from '../ui/CoverImage.vue'
 import ArtistLinks from '../ui/ArtistLinks.vue'
 import RangeSlider from '../ui/RangeSlider.vue'
@@ -272,6 +321,36 @@ const ui = useUi()
 const account = useAccount()
 
 const cur = computed(() => player.currentTrack.value)
+// What names a song, for its cover and words to come in anew when it changes.
+const songKey = computed(() => {
+  const c = cur.value
+  return c ? c.video_id || c.file || c.url || c.title || '' : ''
+})
+// A heart that pops when a song is liked (not when it is unliked).
+const popping = ref(false)
+let popTimer = 0
+function like() {
+  const was = liked.value
+  account.toggleLike(row.value.raw)
+  if (!was) {
+    popping.value = true
+    clearTimeout(popTimer)
+    popTimer = setTimeout(() => (popping.value = false), 650)
+  }
+}
+
+// Long plays (a podcast, a long mix) get steps of seconds and the speed.
+const long = computed(() => !!cur.value && (player.duration.value || 0) >= 20 * 60)
+function jump(seconds) {
+  player.seek((player.currentTime.value || 0) + seconds)
+}
+const SPEEDS = [1, 1.25, 1.5, 2, 0.75]
+const speedShown = computed(() => Math.round((player.speed.value || 1) * 100) / 100)
+const speedText = computed(() => `${speedShown.value.toFixed(2).replace(/\.?0+$/, '')}×`)
+function nextSpeed() {
+  const at = SPEEDS.findIndex((s) => Math.abs(s - speedShown.value) < 0.01)
+  player.setSpeed(SPEEDS[(at + 1) % SPEEDS.length])
+}
 
 // --- Sleep timer ---
 // A clock for the minutes left, ticking only while a timer is set.
@@ -357,7 +436,7 @@ function onMoreMenu(e) {
         action: () => {
           // Now Playing has no room for it: the side panel, beside the page
           // that was there before.
-          if (onNowPlaying.value) router.back()
+          if (onNowPlaying.value) closeNowPlaying()
           ui.openPanel('about')
         },
       },
@@ -399,13 +478,48 @@ const volumeIcon = computed(() => {
   return 'ph:speaker-high'
 })
 
-function openNowPlaying() {
-  if (!onNowPlaying.value) router.push({ name: 'NowPlaying' })
+// "Next: Chikwere · Bien", when there is a next.
+const nextTitle = computed(() => {
+  const at = player.upcoming.value[0]
+  const next = at != null ? player.playlist.value[at] : null
+  if (!next || !next.title) return `${t('player.next')} (N)`
+  return `${t('player.nextIs', { title: next.title, artist: next.artist || '' })} (N)`
+})
+
+// The wheel over the song's bar moves through it five seconds a notch; over
+// the volume, five per cent.
+function onSeekWheel(e) {
+  if (!cur.value || !player.duration.value) return
+  e.preventDefault()
+  const step = e.deltaY < 0 ? 5 : -5
+  player.seek(Math.max(0, Math.min(player.duration.value - 1, (player.currentTime.value || 0) + step)))
 }
-function toggleNowPlaying() {
-  if (onNowPlaying.value) router.back()
-  else openNowPlaying()
+function onVolumeWheel(e) {
+  e.preventDefault()
+  const v = player.isMuted.value ? 0 : player.volume.value
+  player.setVolume(Math.max(0, Math.min(1, Math.round((v + (e.deltaY < 0 ? 0.05 : -0.05)) * 20) / 20)))
 }
+
+// The tip, for whoever has never opened Now Playing: a few seconds into a
+// song, once a run, and never again once they have.
+const showHint = ref(false)
+let hintShown = false
+let hintTimer = 0
+watch(
+  () => [player.isPlaying.value, cur.value && cur.value.title],
+  ([playing]) => {
+    if (hintShown || nowPlayingSeen.value || !playing || ui.isCompact.value) return
+    clearTimeout(hintTimer)
+    hintTimer = setTimeout(() => {
+      if (nowPlayingSeen.value || onNowPlaying.value || !player.isPlaying.value) return
+      hintShown = true
+      showHint.value = true
+      hintTimer = setTimeout(() => (showHint.value = false), 9000)
+    }, 12000)
+  }
+)
+watch(nowPlayingSeen, (seen) => seen && (showHint.value = false))
+onBeforeUnmount(() => clearTimeout(hintTimer))
 function onTrackMenu(e) {
   if (!row.value) return
   openContextMenu(e, trackMenu([row.value], { queue: true }))
@@ -438,18 +552,68 @@ function onTrackMenu(e) {
   border-radius: 4px;
   box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
 }
+/* The cover grows into Now Playing's (smoothChange.travel). */
+.pb-cover.is-shared {
+  view-transition-name: np-cover;
+}
+.pb-cover {
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.pb-cover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.45);
+}
 .pb-cover-overlay {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgb(0 0 0 / 0.5);
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.15), rgb(0 0 0 / 0.55));
   opacity: 0;
   transition: opacity 0.12s ease;
 }
 .pb-cover:hover .pb-cover-overlay,
+.pb-cover:focus-visible .pb-cover-overlay,
 .pb-cover-overlay.is-visible {
   opacity: 1;
+}
+.pb-hint {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgb(var(--c-accent));
+  color: rgb(var(--c-accent-fg));
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.35);
+}
+.pb-hint::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 22px;
+  border: 7px solid transparent;
+  border-top-color: rgb(var(--c-accent));
+}
+.pb-hint-enter-active,
+.pb-hint-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s cubic-bezier(0.2, 0.9, 0.2, 1.2);
+}
+.pb-hint-enter-from,
+.pb-hint-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
 }
 .pb-title {
   display: block;
@@ -529,6 +693,105 @@ function onTrackMenu(e) {
   gap: 8px;
   width: 100%;
   max-width: 600px;
+}
+.pb-song-cover {
+  animation: pb-cover-in 0.42s var(--ease-out) both;
+}
+.pb-song-words {
+  animation: pb-words-in 0.38s var(--ease-out) both;
+}
+@keyframes pb-cover-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+}
+@keyframes pb-words-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+}
+.pb-like {
+  position: relative;
+}
+.pb-like.is-popping svg {
+  animation: pb-heart 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes pb-heart {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.3);
+  }
+}
+.pb-like-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pb-like-burst i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px;
+  border-radius: 999px;
+  background: rgb(var(--c-accent));
+  transform: rotate(calc(var(--n) * 60deg)) translateY(0);
+  animation: pb-burst 0.55s var(--ease-out) both;
+}
+@keyframes pb-burst {
+  to {
+    opacity: 0;
+    transform: rotate(calc(var(--n) * 60deg)) translateY(-15px) scale(0.4);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pb-song-cover,
+  .pb-song-words,
+  .pb-like.is-popping svg,
+  .pb-like-burst i {
+    animation: none;
+  }
+}
+.pb-jump {
+  position: relative;
+}
+.pb-jump-n {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-top: 1px;
+  font-size: 7.5px;
+  font-weight: 800;
+  pointer-events: none;
+}
+.pb-speed {
+  flex: none;
+  min-width: 38px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--c-fg) / var(--fg-55));
+  background: rgb(var(--c-tint) / 0.07);
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+.pb-speed:hover {
+  color: rgb(var(--c-fg));
+  background: rgb(var(--c-tint) / 0.14);
+}
+.pb-speed.is-on {
+  color: rgb(var(--c-accent));
+  background: rgb(var(--c-accent) / 0.14);
 }
 .pb-time {
   min-width: 38px;

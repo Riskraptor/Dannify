@@ -1,10 +1,7 @@
 {
-  "version": 5,
+  "version": 6,
   "paypal": "",
-  "mpesa": {
-    "kind": "till",
-    "number": "8496746"
-  },
+  "mpesa": {},
   "message": "",
   "link": "",
   "github": "Riskraptor"

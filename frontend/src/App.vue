@@ -42,7 +42,12 @@
                is leaving, and a page with one that never ends (Your year in
                music's moving background) held the next one back for its
                full length, eighteen seconds of an empty window. -->
-          <transition name="view" mode="out-in" :duration="{ enter: 260, leave: 100 }">
+          <transition
+            name="view"
+            :mode="traveling ? 'default' : 'out-in'"
+            :css="!traveling"
+            :duration="traveling ? 0 : { enter: 260, leave: 100 }"
+          >
             <keep-alive :include="cachedViews" :max="12">
               <component :is="Component" :key="viewKey(r)" />
             </keep-alive>
@@ -70,11 +75,14 @@
   <ReportDialog v-if="wanted.report" />
   <LyricsEditor v-if="wanted.editor" :open="submitOpen" @close="submitOpen = false" />
   <Onboarding v-if="wanted.onboarding" />
+  <!-- The tour: fetched when it starts, gone when it ends. -->
+  <TourHost v-if="tour" :key="tour.name + tour.at" />
   <!-- A special day's greeting: its code is fetched on such a day only. -->
   <OccasionGreeting v-if="greetToday" :occasion="greetToday" />
 </template>
 
 <script setup>
+import { traveling } from '/src/model/smoothChange'
 import { ensureFullWindow } from '/src/desktop/fullWindow'
 import { ref, reactive, computed, provide, nextTick, onMounted, onUnmounted, watch, watchEffect, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -93,6 +101,7 @@ import { loadCalendar, region, shouldGreet, systemRegion, today } from './model/
 import { startYtmSync } from './model/ytmSync'
 import { useReporting } from './model/problems'
 import { whatsNew } from './model/updates'
+import { tour } from './model/tour'
 
 // What most sessions never open stays out of the first download: the mini
 // player, the dialogs, the lyrics editor and the first-run welcome are each
@@ -104,6 +113,7 @@ const WhatsNewDialog = defineAsyncComponent(() => import('./components/ui/WhatsN
 const ReportDialog = defineAsyncComponent(() => import('/src/components/ui/ReportDialog.vue'))
 const LyricsEditor = defineAsyncComponent(() => import('./components/lyrics/LyricsEditor.vue'))
 const Onboarding = defineAsyncComponent(() => import('./components/Onboarding.vue'))
+const TourHost = defineAsyncComponent(() => import('./components/tour/TourHost.vue'))
 const OccasionGreeting = defineAsyncComponent(() => import('./components/ui/OccasionGreeting.vue'))
 // Fetched only when a restart into an update begins.
 const RestartScreen = defineAsyncComponent(() => import('./components/shell/RestartScreen.vue'))

@@ -448,7 +448,10 @@ def track_from_id(track_id: str) -> dict[str, Any]:
 
 def album_tracks_from_id(album_id: str) -> list[dict[str, Any]]:
     payload = _fetch_embed_json('album', album_id)
-    entity = _entity_from(payload)
+    return _album_songs(album_id, _entity_from(payload))
+
+
+def _album_songs(album_id: str, entity: dict[str, Any]) -> list[dict[str, Any]]:
     album_name = entity.get('name') or ''
     cover = _cover_url(entity)
     track_items = (
@@ -689,7 +692,12 @@ def playlist_info_and_tracks(
 ) -> tuple[str, list[dict[str, Any]]]:
     """Return ``(playlist_name, tracks)`` fetching all tracks via partner GraphQL."""
     payload = _fetch_embed_json('playlist', playlist_id)
-    entity = _entity_from(payload)
+    return _playlist_songs(playlist_id, payload, _entity_from(payload))
+
+
+def _playlist_songs(
+    playlist_id: str, payload: dict[str, Any], entity: dict[str, Any]
+) -> tuple[str, list[dict[str, Any]]]:
     embed_name = entity.get('name') or entity.get('title') or playlist_id
     token = _token_from_embed_payload(payload)
     if token:
@@ -709,6 +717,111 @@ def _id_from_uri(uri: str) -> str:
         return ''
     parts = uri.split(':')
     return parts[-1] if parts else ''
+
+
+class Unsupported(ValueError):
+    """A Spotify link to something that is not music (a podcast, an episode)."""
+
+
+def _artist_line(entity: dict[str, Any]) -> str:
+    names = [
+        a.get('name') if isinstance(a, dict) else str(a)
+        for a in (entity.get('artists') or [])
+    ]
+    names = [n for n in names if n]
+    if names:
+        return ', '.join(names)
+    sub = entity.get('subtitle')
+    return sub.strip() if isinstance(sub, str) else ''
+
+
+def link_page(url: str) -> dict[str, Any]:
+    """What a pasted Spotify link opens as, the same shape for every kind:
+    ``{source, kind, id, url, title, subtitle, cover, year, tracks, total,
+    duration}``.
+
+    A track is one song; an album and a playlist their songs; an artist their
+    top songs, as Spotify's own embed shows them. Podcasts are not music and
+    raise :class:`Unsupported`.
+    """
+
+    parsed = parse_spotify_url(url)
+    if parsed is None:
+        raise ValueError('Not a Spotify link')
+    kind, sid = parsed
+    if kind in ('episode', 'show'):
+        return _podcast_page(kind, sid)
+    if kind not in ('track', 'album', 'playlist', 'artist'):
+        raise Unsupported(kind)
+    year = ''
+    if kind == 'track':
+        song = track_from_id(sid)
+        tracks = [song]
+        title, subtitle, cover, year = song['name'], song['artist'], song['cover_url'], song.get('year') or ''
+    else:
+        payload = _fetch_embed_json(kind, sid)
+        entity = _entity_from(payload)
+        title = entity.get('name') or entity.get('title') or ''
+        cover = _cover_url(entity)
+        subtitle = _artist_line(entity)
+        if kind == 'album':
+            tracks = _album_songs(sid, entity)
+            year = tracks[0].get('year', '') if tracks else ''
+            if tracks and not subtitle:
+                subtitle = tracks[0].get('artist') or ''
+        elif kind == 'playlist':
+            name, tracks = _playlist_songs(sid, payload, entity)
+            title = title or name
+        else:
+            # An artist's page is their top songs; "Top tracks" is not who
+            # they are by.
+            tracks = _parse_playlist_tracks(entity)
+            subtitle = ''
+    return {
+        'source': 'spotify',
+        'kind': kind,
+        'id': sid,
+        'url': f'https://open.spotify.com/{kind}/{sid}',
+        'title': title,
+        'subtitle': subtitle,
+        'cover': cover,
+        'year': year,
+        'tracks': tracks,
+        'total': len(tracks),
+        'duration': sum(int(t.get('duration') or 0) for t in tracks),
+    }
+
+
+def _podcast_page(kind: str, sid: str) -> dict[str, Any]:
+    """A Spotify podcast or episode, as where it is on YouTube Music: the
+    show (``open: {kind: 'podcast', id}``) or the episode, to play
+    (``open: {kind: 'episode', song}``). Spotify's own audio is never used;
+    :class:`Unsupported` when YouTube Music does not have it."""
+
+    from . import explorer  # noqa: PLC0415
+
+    entity = _entity_from(_fetch_embed_json(kind, sid))
+    # A show's embed is its newest episode: the show's name is its subtitle.
+    show = entity.get('subtitle') if isinstance(entity.get('subtitle'), str) else ''
+    if kind == 'show' and not show:
+        show = entity.get('name') or ''
+    title = entity.get('name') or entity.get('title') or ''
+    page = {
+        'source': 'spotify',
+        'kind': kind,
+        'id': sid,
+        'url': f'https://open.spotify.com/{kind}/{sid}',
+        'title': show if kind == 'show' else title,
+        'subtitle': show,
+    }
+    if kind == 'episode':
+        song = explorer.find_episode(show, title)
+        if song:
+            return {**page, 'open': {'kind': 'episode', 'song': song}}
+    found = explorer.find_podcast(show)
+    if found:
+        return {**page, 'open': {'kind': 'podcast', 'id': found['browse_id']}}
+    raise Unsupported(kind)
 
 
 def resolve(url: str) -> Any:

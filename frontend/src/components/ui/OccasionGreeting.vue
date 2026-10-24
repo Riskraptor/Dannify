@@ -30,7 +30,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
-import { markGreeted, shouldGreet, toneList, wordsFor } from '/src/model/occasions'
+import { dayRoute, markGreeted, shouldGreet, toneList, wordsFor } from '/src/model/occasions'
 import { rememberFocus } from '/src/model/focusTrap'
 import { useI18n } from '/src/i18n'
 import Particles from './Particles.vue'
@@ -84,9 +84,8 @@ function close() {
 }
 
 function listen() {
-  const query = words.value.music
   close()
-  if (query) router.push({ name: 'Search', params: { query } })
+  router.push(dayRoute(props.occasion))
 }
 
 onMounted(() => timers.push(setTimeout(show, 1600)))

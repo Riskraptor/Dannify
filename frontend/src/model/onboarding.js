@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { isDesktop } from '/src/desktop/bridge'
 import { useLibrary } from '/src/model/library'
+import { tourAfterSetup } from '/src/model/tour'
 
 // The first time Dannify opens after a fresh install, a short walk through
 // the three choices worth making up front: how it looks, where saved music
@@ -54,6 +55,8 @@ export function startOnboarding() {
 export function finishOnboarding() {
   show.value = false
   write(KEY, '1')
+  // Set up: now the walk round it.
+  tourAfterSetup()
 }
 
 export function useOnboarding() {

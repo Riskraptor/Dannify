@@ -1,8 +1,8 @@
 """Problem reports, sent from inside the app.
 
-Somebody whose app misbehaves says what happened in a few words; the app adds
-what the developer needs to see it (its logs, the errors the window ran into,
-versions and settings) and sends the lot. Nothing is saved for the person to
+Somebody whose app misbehaves says what happened in a few words, and
+chooses what goes with it: the app's version and settings, the errors the
+window ran into, and, only when asked for, its logs (``PARTS``). Nothing is saved for the person to
 find and attach: the report goes, or waits in the app's own data folder and
 goes when the connection is back.
 
@@ -24,9 +24,10 @@ its window sends it (``prepare``); one that cannot go yet waits in the outbox
 
 The server's side, for whoever writes it: an HTTPS ``POST`` of
 ``multipart/form-data`` with the fields ``id``, ``version``, ``category``,
-``description`` and ``contact`` (may be empty), and, when the person chose to
-include it, a file field ``diagnostics`` holding a zip (``about.txt``,
-``logs/*``, ``window-errors.json``). Any 2xx answer means received.
+``description``, ``contact`` and ``context`` (the last two may be empty), and,
+when the person chose to include any of it, a file field ``diagnostics``
+holding a zip (``about.txt``, ``logs/*``, ``window-errors.json``, each only
+when chosen). Any 2xx answer means received.
 """
 
 from __future__ import annotations
@@ -44,6 +45,8 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from loguru import logger
+
+from . import sealed
 
 # Where reports go. Empty: not open yet (see the module notes).
 REPORT_ENDPOINT = ''
@@ -64,6 +67,12 @@ EMAIL_DIAGNOSTICS_MAX = 60_000
 DESCRIPTION_MIN = 10
 DESCRIPTION_MAX = 5000
 CONTACT_MAX = 200
+CONTEXT_MAX = 300
+
+# What can go with a report, each chosen on its own. The logs are the most
+# detailed and the least often needed, so they go only when asked for.
+PARTS = ('about', 'errors', 'logs')
+PREVIEW_LOG_LINES = 60
 
 MAX_LOG_BYTES = 2 * 1024 * 1024  # per file, newest end kept
 MAX_DIAGNOSTICS = 6 * 1024 * 1024  # the packed zip, at most
@@ -168,8 +177,8 @@ def _about(version: str, settings: dict[str, Any], facts: dict[str, Any]) -> str
     lines = [
         f'Dannify {version}',
         f'Made {time.strftime("%Y-%m-%d %H:%M:%S %z")}',
-        f'Windows: {platform.platform()} ({platform.machine()})',
-        f'Python: {sys.version.split()[0]}, packaged: {bool(getattr(sys, "frozen", False))}',
+        f'System: {platform.platform()} ({platform.machine()})',
+        f'Core: {platform.python_version()}, {"installed" if getattr(sys, "frozen", False) else "source"}',
         '',
     ]
     for key, value in facts.items():
@@ -191,16 +200,19 @@ def pack(
     window_errors: Iterable[Any] = (),
     log_file: Optional[Path] = None,
     limit: int = MAX_DIAGNOSTICS,
+    parts: Optional[dict[str, bool]] = None,
 ) -> bytes:
-    """The diagnostics, as a zip in memory. Logs are dropped oldest first
-    when the whole would be bigger than ``limit``."""
+    """The diagnostics, as a zip in memory: the *parts* chosen (all of them
+    when not said). Logs are dropped oldest first when the whole would be
+    bigger than ``limit``."""
 
-    about = scrub(_about(version, settings or {}, facts or {}))
-    errors = [e for e in window_errors if e]
+    chosen = {p: True for p in PARTS} if parts is None else {p: bool(parts.get(p)) for p in PARTS}
+    about = scrub(_about(version, settings or {}, facts or {})) if chosen['about'] else ''
+    errors = [e for e in window_errors if e] if chosen['errors'] else []
     error_text = scrub(json.dumps(errors, ensure_ascii=False, indent=2, default=str)) if errors else ''
     logs = []
     used: set[str] = set()
-    for log in _logs(Path(data_dir), log_file):
+    for log in _logs(Path(data_dir), log_file) if chosen['logs'] else []:
         try:
             text = scrub(_tail(log))
         except OSError:
@@ -217,7 +229,8 @@ def pack(
     while True:
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as z:
-            z.writestr('about.txt', about)
+            if about:
+                z.writestr('about.txt', about)
             if error_text:
                 z.writestr('window-errors.json', error_text)
             for name, text in logs:
@@ -228,14 +241,70 @@ def pack(
         logs.pop(0)
 
 
+def chosen_parts(payload: dict[str, Any]) -> dict[str, bool]:
+    """Which parts go with a report, as the person chose them.
+
+    ``include`` holds a yes or no for each of ``PARTS``; anything not
+    plainly yes is no. A window from before the choice sent one
+    ``include_diagnostics`` for all of it.
+    """
+
+    include = payload.get('include')
+    if isinstance(include, dict):
+        return {p: include.get(p) is True for p in PARTS}
+    every = payload.get('include_diagnostics') is True
+    return {p: every for p in PARTS}
+
+
+def preview(
+    data_dir: Path,
+    version: str,
+    *,
+    settings: Optional[dict[str, Any]] = None,
+    facts: Optional[dict[str, Any]] = None,
+    window_errors: Iterable[Any] = (),
+    log_file: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Each part as it would go, scrubbed the same way, for the person to
+    read before choosing: the details in full, the errors, and the newest
+    lines of the log with how much of it there is."""
+
+    errors = [e for e in window_errors if e]
+    logs = _logs(Path(data_dir), log_file)
+    tail = ''
+    closed = False
+    if logs:
+        try:
+            lines = _tail(logs[-1], 256 * 1024).splitlines()
+            # A shipped copy's log is sealed (sealed.py): only the developer
+            # can read it, so it is said to be, not shown as letters.
+            plain = [line for line in lines if not sealed.is_sealed(line)]
+            closed = len(plain) < len(lines)
+            tail = scrub('\n'.join(plain[-PREVIEW_LOG_LINES:]))
+        except OSError:
+            tail = ''
+    return {
+        'about': scrub(_about(version, settings or {}, facts or {})),
+        'errors': len(errors),
+        'errors_text': scrub(json.dumps(errors[-5:], ensure_ascii=False, indent=2, default=str))[:6000]
+        if errors else '',
+        'logs': [{'name': p.name, 'bytes': p.stat().st_size} for p in logs],
+        'logs_tail': tail,
+        'logs_sealed': closed,
+    }
+
+
 def new_id() -> str:
     """Short enough to read out to someone: 8 letters and digits."""
 
     return secrets.token_hex(4).upper()
 
 
-def clean_fields(description: Any, category: Any, contact: Any) -> dict[str, str]:
-    """What the person typed, checked. Raises ValueError with a reason."""
+def clean_fields(description: Any, category: Any, contact: Any, context: Any = '') -> dict[str, str]:
+    """What the person typed, checked. Raises ValueError with a reason.
+
+    *context* is what was playing, when they let it go with the report.
+    """
 
     text = str(description or '').strip()
     if len(text) < DESCRIPTION_MIN:
@@ -247,7 +316,8 @@ def clean_fields(description: Any, category: Any, contact: Any) -> dict[str, str
     who = str(contact or '').strip()[:CONTACT_MAX]
     if who and not _EMAIL.match(who):
         raise ValueError('contact is not an email address')
-    return {'description': text, 'category': kind, 'contact': who}
+    about = ' '.join(str(context or '').split())[:CONTEXT_MAX]
+    return {'description': text, 'category': kind, 'contact': who, 'context': about}
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +343,8 @@ def email_text(report: dict[str, Any]) -> str:
         f"Report {report.get('id', '')} · Dannify {report.get('version', '')} · {report.get('category', '')}",
         f"Reply to: {report.get('contact') or 'not given'}",
     ]
+    if report.get('context'):
+        lines.append(f"Playing: {report['context']}")
     zipped = report.get('diagnostics')
     if zipped:
         lines += ['', '=== Diagnostics ===', '']
@@ -370,7 +442,7 @@ def post(report: dict[str, Any], url: str, timeout: float = 30.0) -> None:
 
     import requests
 
-    fields = {k: str(report.get(k) or '') for k in ('id', 'version', 'category', 'description', 'contact')}
+    fields = {k: str(report.get(k) or '') for k in ('id', 'version', 'category', 'description', 'contact', 'context')}
     files = None
     if report.get('diagnostics'):
         files = {'diagnostics': (f'dannify-{fields["id"]}.zip', report['diagnostics'], 'application/zip')}
@@ -395,7 +467,7 @@ def queue(data_dir: Path, report: dict[str, Any]) -> None:
     box = _outbox(data_dir)
     box.mkdir(parents=True, exist_ok=True)
     rid = re.sub(r'[^A-Z0-9]', '', str(report['id']))[:16] or new_id()
-    fields = {k: report.get(k, '') for k in ('id', 'version', 'category', 'description', 'contact')}
+    fields = {k: report.get(k, '') for k in ('id', 'version', 'category', 'description', 'contact', 'context')}
     fields['queued'] = time.time()
     if report.get('diagnostics'):
         (box / f'{rid}.zip').write_bytes(report['diagnostics'])

@@ -16,6 +16,12 @@
                                                    reads between releases (support.py);
                                                    their "version" must go up each time
     python packaging/release_key.py verify-support [config/support-live.json]
+    python packaging/release_key.py log-public     print the public key logs are
+                                                   sealed for (sealed.LOG_PUBLIC)
+    python packaging/release_key.py read-logs <file>...
+                                                   open a sealed log: a .log file,
+                                                   a report's diagnostics .zip, or
+                                                   a report email saved as text
 
 The private key is read from the DANNIFY_RELEASE_KEY environment variable
 (64 hex characters) or else from .dannify/release-signing.key in the home
@@ -36,11 +42,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'Backend'))
 
-from dannify import release_assets, signing  # noqa: E402
+from dannify import release_assets, sealed, signing  # noqa: E402
 
 KEY_FILE = Path.home() / '.dannify' / 'release-signing.key'
 # Windows' two kinds, and every platform kind release_assets names.
-KINDS = ('package', 'installer', 'support')
+KINDS = ('package', 'installer', 'support', 'live')
 SUPPORT_FILE = Path(__file__).resolve().parent.parent / 'config' / 'support-live.json'
 
 
@@ -123,6 +129,26 @@ def main(argv: list[str]) -> int:
         return 0
     if command == 'public':
         print(signing.public_key(load_secret()).hex())
+        return 0
+    if command == 'log-public':
+        print(sealed.public_of(sealed.log_private(load_secret())).hex())
+        return 0
+    if command == 'read-logs' and len(argv) > 1:
+        opener = sealed.Opener(sealed.log_private(load_secret()))
+        if opener.public.hex() != sealed.LOG_PUBLIC:
+            raise SystemExit('this key is not the one logs are sealed for (LOG_PUBLIC)')
+        for name in argv[1:]:
+            path = Path(name)
+            if path.suffix.lower() == '.zip':
+                import zipfile  # noqa: PLC0415
+
+                with zipfile.ZipFile(path) as z:
+                    for member in z.namelist():
+                        print(f'--- {path.name}: {member} ---')
+                        print(opener.read(z.read(member).decode('utf-8', errors='replace')))
+            else:
+                print(f'--- {path.name} ---')
+                print(opener.read(path.read_text(encoding='utf-8', errors='replace')))
         return 0
     if command == 'sign-release' and len(argv) > 1:
         secret = load_secret()

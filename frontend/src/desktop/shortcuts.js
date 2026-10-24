@@ -131,8 +131,7 @@ function onKeyDown(e) {
     ui.showPane('queue', router.currentRoute.value.name === 'NowPlaying')
   } else if (ctrl && !e.shiftKey && key === 'e') {
     e.preventDefault()
-    if (router.currentRoute.value.name === 'NowPlaying') router.back()
-    else router.push({ name: 'NowPlaying' })
+    import('/src/model/nowPlaying').then((m) => m.toggleNowPlaying())
   } else if (ctrl && e.shiftKey && key === 'm' && desktop.isDesktop) {
     e.preventDefault()
     desktop.setMini(!desktop.state.mini)

@@ -30,6 +30,13 @@ def _unsigned_test_releases(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _every_forced_check_asks(monkeypatch):
+    # The update tests force check after check on purpose; the pause that
+    # keeps a mashed "Check now" from asking GitHub again is tested on its own.
+    monkeypatch.setattr(updates, 'FORCE_GAP', 0)
+
+
+@pytest.fixture(autouse=True)
 def _windows_updater(request, monkeypatch):
     # The older updater tests are about the Windows updater (its setup and
     # package files), so on Linux and macOS they run as Windows would.

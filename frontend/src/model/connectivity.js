@@ -100,7 +100,7 @@ export async function reportNetworkFailure() {
   }
   if (!online.value && !announced) {
     announced = true
-    toast(t('net.offline'), { tone: 'error', icon: 'ph:wifi-slash', timeout: 6000, key: 'net' })
+    toast(t('net.offline'), { icon: 'ph:wifi-slash', timeout: 6000, key: 'net' })
   }
   return online.value
 }

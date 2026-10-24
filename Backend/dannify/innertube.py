@@ -114,6 +114,41 @@ _BUILTIN_CLIENTS: dict[str, dict[str, str]] = {
 }
 
 _clients: dict[str, dict[str, str]] = dict(_BUILTIN_CLIENTS)
+# From the signed live file (live.py), over everything else: when YouTube
+# changes what it accepts, every copy is put right without an update.
+_live_clients: dict[str, dict[str, str]] = {}
+_live_order: tuple[str, ...] = ()
+# The table as built or as read from clients.json, before the live file.
+_base_clients: dict[str, dict[str, str]] = dict(_BUILTIN_CLIENTS)
+
+
+def use_live(clients: Any) -> int:
+    """Take client identities from the live file. ``_order`` names the
+    order streams are asked for in. Returns how many identities it set."""
+
+    global _clients, _live_clients, _live_order
+    if not isinstance(clients, dict):
+        clients = {}
+    clean: dict[str, dict[str, str]] = {}
+    for key, value in clients.items():
+        if not isinstance(key, str) or key.startswith('_') or not isinstance(value, dict):
+            continue
+        entry = {str(k): str(v) for k, v in value.items() if isinstance(v, (str, int))}
+        if entry.get('clientName') and entry.get('clientVersion') and entry.get('userAgent'):
+            clean[key[:60]] = entry
+    order = clients.get('_order')
+    with _state_lock:
+        _live_clients = clean
+        _live_order = tuple(o for o in order if isinstance(o, str))[:8] if isinstance(order, list) else ()
+        _clients = {**_base_clients, **clean}
+    if clean or _live_order:
+        logger.info('YouTube client identities from the live file: {}', ', '.join(clean) or 'order only')
+    return len(clean)
+
+
+def _stream_order() -> tuple[str, ...]:
+    order = tuple(k for k in _live_order if k in _clients)
+    return order or _STREAM_ORDER
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +205,13 @@ def _load_clients(data_dir: Optional[Path]) -> None:
     _clients = dict(_BUILTIN_CLIENTS)
 
 
+def _with_live() -> None:
+    global _clients, _base_clients
+    _base_clients = dict(_clients)
+    if _live_clients:
+        _clients = {**_base_clients, **_live_clients}
+
+
 def _build_session() -> requests.Session:
     """One keep-alive session for the process.
 
@@ -202,6 +244,7 @@ def init(data_dir: Optional[Path] = None) -> None:
 
     global _visitor_path
     _load_clients(data_dir)
+    _with_live()
     if data_dir is None:
         return
     try:
@@ -473,7 +516,7 @@ def resolve(video_id: str) -> Optional[dict[str, Any]]:
     started = time.perf_counter()
     visitor = _visitor_data()
     blocked_reason = ''
-    for key in _STREAM_ORDER:
+    for key in _stream_order():
         try:
             data = _player(key, video_id, visitor)
         except Exception as exc:  # noqa: BLE001

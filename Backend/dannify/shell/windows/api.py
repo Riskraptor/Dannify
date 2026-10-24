@@ -44,10 +44,10 @@ class DesktopApi(WindowMixin, ActionsMixin):
         self._pre_mini: dict | None = None
         self._on_top = False
         self._theme = 'dark'
-        # On by default: closing the window on a music player is
-        # 'get out of my way', not 'stop the music'. Settings can turn
-        # it off, and that choice is remembered.
-        self._close_to_tray = bool(prefs.get('close_to_tray', True))
+        # Off unless asked for: closing the window quits, as it does in any
+        # program. Settings, System keeps the music playing in the tray
+        # instead, and that choice is remembered.
+        self._close_to_tray = bool(prefs.get('close_to_tray', False))
         # Minimising minimises. The close button is what sends the app to
         # the tray, and a switch that made minimise do the same thing just
         # meant people turned it on once and then could not work out why

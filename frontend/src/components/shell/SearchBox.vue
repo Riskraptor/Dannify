@@ -1,5 +1,5 @@
 <template>
-  <div class="sbx" :class="{ 'is-focused': focused }" data-no-drag>
+  <div class="sbx" :class="{ 'is-focused': focused }" data-no-drag data-tour="search">
     <Icon icon="ph:magnifying-glass" class="sbx-icon" />
     <input
       ref="input"
@@ -34,6 +34,7 @@
     <div
       v-if="focused && suggestions.length"
       class="sbx-pop menu-surface"
+      data-tour-grow
       @mousedown.prevent
     >
       <p v-if="!needle" class="sbx-pop-head">{{ t('search.recent') }}</p>
@@ -80,6 +81,7 @@ import { useSearchManager } from '/src/model/search'
 import { useSearchState } from '/src/model/explore'
 import { useI18n } from '/src/i18n'
 import { platform } from '/src/desktop/bridge'
+import { linkLabel, openLink, parseLink } from '/src/model/links'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -131,7 +133,19 @@ function askSuggestions(text) {
 }
 
 const MAX_SUGGESTIONS = 6
+// A Spotify or YouTube link is opened, not searched for as words.
+const link = computed(() => parseLink(query.value))
 const suggestions = computed(() => {
+  if (link.value) {
+    return [
+      {
+        value: query.value,
+        label: linkLabel(link.value),
+        icon: link.value.source === 'spotify' ? 'ph:spotify-logo' : 'ph:youtube-logo',
+        removable: false,
+      },
+    ]
+  }
   const typed = needle.value
   const recents = recent.searches.value
     .filter((s) => !typed || (s.toLowerCase().includes(typed) && s.toLowerCase() !== typed))
@@ -164,6 +178,12 @@ function submit(value) {
   const q = String(value ?? query.value ?? '').trim()
   clearTimeout(liveTimer)
   if (!q) return
+  if (parseLink(q)) {
+    query.value = ''
+    input.value?.blur()
+    openLink(q)
+    return
+  }
   query.value = q
   recent.rememberSearch(q)
   goSearch(q, false)
@@ -182,6 +202,10 @@ watch(query, (q) => {
   active.value = -1
   clearTimeout(liveTimer)
   const text = (q || '').trim()
+  if (parseLink(text)) {
+    online.value = []
+    return
+  }
   askSuggestions(text)
   if (!focused.value || text.length < 2) return
   liveTimer = setTimeout(

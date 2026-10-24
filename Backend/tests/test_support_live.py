@@ -30,13 +30,19 @@ def _restore(monkeypatch):
     support._live_dir = None
 
 
-NEW = {'version': 3, 'paypal': 'https://www.paypal.com/ncp/payment/PLB-NEWLINK123', 'mpesa': {'kind': 'till', 'number': '1234567'}}
+NEW = {'version': 3, 'paypal': 'https://www.paypal.com/ncp/payment/PLB-NEWLINK123', 'message': 'Thanks a million'}
 
 
 def test_signed_details_are_believed():
     raw, sig = signed(NEW)
     found = support.accept_live(raw, sig, PUBLIC)
-    assert found == {'paypal': NEW['paypal'], 'mpesa': NEW['mpesa'], 'version': 3}
+    assert found == {'paypal': NEW['paypal'], 'message': NEW['message'], 'version': 3}
+
+
+def test_an_mpesa_number_in_the_file_is_not_taken():
+    # It is there for copies from before M-Pesa was taken out.
+    raw, sig = signed({**NEW, 'mpesa': {'kind': 'till', 'number': '8496746'}})
+    assert 'mpesa' not in support.accept_live(raw, sig, PUBLIC)
 
 
 def test_a_changed_file_is_not():
@@ -77,11 +83,11 @@ def test_kept_details_are_used_and_still_checked(tmp_path):
     support.init(tmp_path)
     out = support.config()
     assert out['paypal_link'] == NEW['paypal']
-    assert out['mpesa']['number'] == '1234567'
+    assert out['message'] == 'Thanks a million'
     # Edited on disk: not believed, the built-in details again.
-    (tmp_path / support.LIVE_NAME).write_bytes(raw.replace(b'1234567', b'7654321'))
+    (tmp_path / support.LIVE_NAME).write_bytes(raw.replace(b'a million', b'a billion'))
     support.init(tmp_path)
-    assert support.config()['mpesa']['number'] == '8496746'
+    assert support.config()['message'] == '' and support.config()['paypal_link'] == ''
 
 
 def test_signed_details_are_still_checked_like_any(tmp_path):
@@ -118,7 +124,7 @@ def test_nothing_reachable_changes_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(support.urllib.request, 'urlopen', offline)
     support.init(tmp_path)
     assert support.refresh_live() is False
-    assert support.config()['mpesa']['number'] == '8496746'
+    assert support.config()['sponsors_link'] == 'https://github.com/sponsors/Riskraptor'
 
 
 def test_the_ko_fi_page_can_change_too_but_only_to_an_https_page(tmp_path):
@@ -140,7 +146,7 @@ def test_a_way_to_give_can_be_taken_away(tmp_path):
     (tmp_path / (support.LIVE_NAME + signing.SIGNATURE_SUFFIX)).write_text(sig)
     support.init(tmp_path)
     out = support.config()
-    assert out['mpesa'] == {} and out['paypal_link'] == ''
+    assert 'mpesa' not in out and out['paypal_link'] == ''
     assert out['sponsors_link'] == 'https://github.com/sponsors/Riskraptor'
 
 

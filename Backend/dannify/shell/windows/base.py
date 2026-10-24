@@ -200,7 +200,9 @@ def logger_print(*args) -> None:  # noqa: D401, ANN001
     when the main file refuses.
     """
 
-    line = '[desktop] ' + ' '.join(str(a) for a in args) + '\n'
+    from ... import sealed  # noqa: PLC0415
+
+    line = sealed.line('[desktop] ' + ' '.join(str(a) for a in args)) + '\n'
     try:
         with open(_DATA_DIR / 'dannify.log', 'a', encoding='utf-8') as f:
             f.write(line)
@@ -257,7 +259,21 @@ def _install_crash_hooks() -> None:
     try:
         import faulthandler
 
-        _crash_file = open(_DATA_DIR / 'crash.log', 'a', encoding='utf-8')  # noqa: SIM115
+        from ... import sealed  # noqa: PLC0415
+
+        crash = _DATA_DIR / 'crash.log'
+        if sealed.sealing():
+            # A hard crash is written plain, by Python itself, as it goes
+            # down: at the next start it is sealed into the log and cleared.
+            try:
+                trace = crash.read_text(encoding='utf-8', errors='replace').strip()
+            except OSError:
+                trace = ''
+            if trace:
+                logger_print('crash trace from the last run:\n' + trace)
+            _crash_file = open(crash, 'w', encoding='utf-8')  # noqa: SIM115
+        else:
+            _crash_file = open(crash, 'a', encoding='utf-8')  # noqa: SIM115
         faulthandler.enable(_crash_file)
     except Exception:
         _crash_file = None

@@ -18,12 +18,16 @@ const MIN = 4
 
 const fromListening = shallowRef({})
 let loadedFor = -1
+let loadedHour = -1
 let loading = null
 
 async function load(force = false) {
-  if (!force && loadedFor === listensEpoch.value) return
+  // Right About Now is of the hour: a new hour, a new mix.
+  const hour = new Date().getHours()
+  if (!force && loadedFor === listensEpoch.value && loadedHour === hour) return
   if (loading) return loading
   const epoch = listensEpoch.value
+  loadedHour = hour
   loading = API.getMixes()
     .then((res) => {
       const found = {}

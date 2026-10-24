@@ -66,7 +66,7 @@
             </template>
           </template>
           <span class="opacity-50">•</span>
-          <span>{{ t('explore.songCount', { count: rows.length }) }}</span>
+          <span>{{ isPodcast ? t('explore.episodeCount', { count: rows.length }) : t('explore.songCount', { count: rows.length }) }}</span>
           <template v-if="totalDuration">
             <span class="opacity-50">•</span>
             <span class="text-fg/60">{{ totalDuration }}</span>
@@ -107,7 +107,7 @@
         <TrackTable
           :rows="rows"
           :show-cover="isPlaylist"
-          :show-album="isPlaylist"
+          :show-album="isPlaylist && !isPodcast"
           :sticky-offset="56"
           selectable
           selection-bar
@@ -138,8 +138,6 @@ import {
   isRowDownloading,
 } from '/src/model/tracks'
 import { openContextMenu } from '/src/model/contextMenu'
-import { copyText } from '/src/model/clipboard'
-import { toast } from '/src/model/toast'
 import { onRefresh } from '/src/model/useRefresh'
 import { usePlaylists } from '/src/model/playlists'
 import { useI18n } from '/src/i18n'
@@ -171,7 +169,10 @@ function ghostWidth(n) {
 
 
 const isPlaylist = computed(() => props.mode === 'playlist')
+// A podcast opens as a playlist of its episodes (explorer.podcast).
+const isPodcast = computed(() => !!(album.value && album.value.podcast))
 const label = computed(() => {
+  if (isPodcast.value) return t('explore.podcast')
   if (isPlaylist.value) return t('explore.playlist')
   const type = album.value && album.value.album_type
   return type && typeof type === 'string' ? type : t('explore.album')
@@ -229,9 +230,6 @@ function playAll() {
 const playlists = usePlaylists()
 
 function openMore(e) {
-  const link = isPlaylist.value
-    ? `https://music.youtube.com/playlist?list=${String(route.params.id).replace(/^VL/, '')}`
-    : `https://music.youtube.com/browse/${route.params.id}`
   openContextMenu(
     e,
     [
@@ -254,13 +252,6 @@ function openMore(e) {
         label: t('explore.downloadAll'),
         icon: 'ph:download-simple',
         action: () => downloadRows(rows.value),
-      },
-      {
-        label: t('actions.copyLink'),
-        icon: 'ph:link',
-        action: async () => {
-          if (await copyText(link)) toast(t('actions.linkCopied'), { icon: 'ph:link' })
-        },
       },
     ],
     { anchor: true }

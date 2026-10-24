@@ -173,6 +173,15 @@ async def listens_history_endpoint(
     return await asyncio.to_thread(listens_mod.history, limit, before)
 
 
+@router.get('/api/listens/between')
+async def listens_between_endpoint(
+    start: int = Query(..., ge=0),
+    end: int = Query(..., ge=0),
+    top: int = Query(20, ge=1, le=100),
+) -> dict[str, Any]:
+    return await asyncio.to_thread(listens_mod.between, start, end, top)
+
+
 @router.delete('/api/listens/item')
 async def listen_forget_endpoint(
     at: int = Query(..., ge=0), key: str = Query(..., min_length=1, max_length=2100)

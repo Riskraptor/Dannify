@@ -39,7 +39,7 @@ class LinuxApi:
         self._port, self._token = port, token
         self._native_frame = bool(prefs.get('native_frame'))
         self._native_frame_pref = self._native_frame
-        self._close_to_tray = bool(prefs.get('close_to_tray', True))
+        self._close_to_tray = bool(prefs.get('close_to_tray', False))
         self._global_hotkeys = bool(prefs.get('global_hotkeys', False))
         self._hotkeys_taken: list[str] = []
         self._theme = 'light' if prefs.get('theme') == 'light' else 'dark'

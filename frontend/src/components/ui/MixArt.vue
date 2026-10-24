@@ -23,7 +23,7 @@ import CoverImage from './CoverImage.vue'
 const props = defineProps({
   covers: { type: Array, default: () => [] },
   icon: { type: String, default: 'ph:sparkle' },
-  // mix-repeat | mix-top | mix-forgotten | mix-recent | mix-year
+  // mix-repeat | mix-top | mix-forgotten | mix-recent | mix-now | mix-year
   tone: { type: String, default: 'mix-recent' },
   title: { type: String, default: '' },
   // The size it is drawn at, for the covers' small copies.
@@ -110,6 +110,10 @@ const shown = computed(() => (unique.value.length >= 4 ? unique.value.slice(0, 4
 .mix-recent {
   --mix-a: rgb(64 156 255 / 0.85);
   --mix-b: rgb(14 40 110 / 0.95);
+}
+.mix-now {
+  --mix-a: rgb(255 122 69 / 0.88);
+  --mix-b: rgb(52 34 120 / 0.95);
 }
 .mix-year {
   --mix-a: rgb(168 85 247 / 0.9);

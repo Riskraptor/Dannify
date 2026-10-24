@@ -141,9 +141,10 @@ export { VOLUME_LEVELS } from '/src/model/player/sound'
 export function formatTime(seconds) {
   if (!isFinite(seconds) || seconds < 0) return '0:00'
   const total = Math.floor(seconds)
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
+  const s = String(total % 60).padStart(2, '0')
+  // An hour or more (a podcast, a long mix): 2:43:00, not 163:00.
+  if (total >= 3600) return `${Math.floor(total / 3600)}:${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${s}`
+  return `${Math.floor(total / 60)}:${s}`
 }
 
 export function trackInfoFromFile(file) {
