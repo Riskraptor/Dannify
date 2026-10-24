@@ -313,7 +313,7 @@ jobs:
         working-directory: android
         env:
           DANNIFY_BUILD_PYTHON: python
-        run: ./gradlew --no-daemon --console=plain assembleArm64Release assembleX86_64Release
+        run: ./gradlew --console=plain assembleArm64Release assembleX86_64Release
       # Unsigned: the release machine signs them (packaging/publish.ps1).
       - name: Name them
         run: |

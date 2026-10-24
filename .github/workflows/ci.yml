@@ -172,4 +172,4 @@ jobs:
         working-directory: android
         env:
           DANNIFY_BUILD_PYTHON: python
-        run: ./gradlew --no-daemon --console=plain assembleX86_64Debug assembleArm64Debug
+        run: ./gradlew --console=plain assembleX86_64Debug assembleArm64Debug
