@@ -5,8 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -14,41 +12,25 @@ import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
 /**
- * Being a good music app while the music plays: it holds the audio focus
- * (a call pauses it, and it comes back after; another app taking over for
- * good pauses it for good), it pauses when the headphones come out, and it
- * keeps the phone and the Wi-Fi awake enough to fetch the next song. All of
- * it only while playing.
+ * Being a good music app while the music plays: it pauses when the
+ * headphones come out, and keeps the phone and the Wi-Fi awake enough to
+ * fetch the next song. Only while playing.
+ *
+ * The audio focus is the page's own. The WebView asks Android for it
+ * whenever its music plays (Chromium's AudioFocusDelegate), pauses for a call
+ * and plays on after it, turns itself down under a navigation prompt, and
+ * stops for good when another app's music starts; the page follows its
+ * player either way (desktop/integration.js). Asking for the focus here as
+ * well took it from the WebView, which then paused the music it had just
+ * started.
  */
 object PlaybackGuard {
     private var playing = false
-    private var pausedForAWhile = false
-    private var focus: AudioFocusRequest? = null
     private var wake: PowerManager.WakeLock? = null
     private var wifi: WifiManager.WifiLock? = null
     private var listening = false
 
     private val app get() = DannifyApp.instance
-    private val audio get() = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
-    private val onFocus = AudioManager.OnAudioFocusChangeListener { change ->
-        when (change) {
-            AudioManager.AUDIOFOCUS_LOSS -> {
-                pausedForAWhile = false
-                MediaLink.command("pause")
-            }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> if (playing) {
-                pausedForAWhile = true
-                MediaLink.command("pause")
-            }
-            AudioManager.AUDIOFOCUS_GAIN -> if (pausedForAWhile) {
-                pausedForAWhile = false
-                MediaLink.command("play")
-            }
-            // A short interruption that only lowers the music (a navigation
-            // prompt): Android turns it down by itself.
-        }
-    }
 
     private val headphones = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -60,47 +42,8 @@ object PlaybackGuard {
     fun playing(on: Boolean) {
         if (on == playing) return
         playing = on
-        if (on) {
-            pausedForAWhile = false
-            requestFocus()
-            listen(true)
-            locks(true)
-        } else {
-            // Paused by a call: keep the focus, so it comes back afterwards.
-            if (!pausedForAWhile) abandonFocus()
-            listen(false)
-            locks(false)
-        }
-    }
-
-    private fun requestFocus() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                .setOnAudioFocusChangeListener(onFocus)
-                .setWillPauseWhenDucked(false)
-                .build()
-            focus = request
-            audio.requestAudioFocus(request)
-        } else {
-            @Suppress("DEPRECATION")
-            audio.requestAudioFocus(onFocus, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
-        }
-    }
-
-    private fun abandonFocus() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            focus?.let { audio.abandonAudioFocusRequest(it) }
-            focus = null
-        } else {
-            @Suppress("DEPRECATION")
-            audio.abandonAudioFocus(onFocus)
-        }
+        listen(on)
+        locks(on)
     }
 
     private fun listen(on: Boolean) {
