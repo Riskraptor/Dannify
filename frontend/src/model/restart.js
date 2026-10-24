@@ -1,6 +1,10 @@
 import { ref } from 'vue'
 import { toast } from '/src/model/toast'
 import { t } from '/src/i18n'
+import { usePlayer } from '/src/model/player'
+import * as decks from '/src/model/player/decks'
+import { applyVolume } from '/src/model/player/sound'
+import { saveSession } from '/src/model/player/session'
 
 // Restarting into an update, kindly. The music fades instead of cutting, a
 // screen says sorry and that it will only be a moment, and the app that
@@ -22,14 +26,12 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function player() {
-  const { usePlayer } = await import('/src/model/player')
+function player() {
   return usePlayer()
 }
 
 // Turn the music down to nothing, without touching the volume setting.
-async function fadeAway() {
-  const decks = await import('/src/model/player/decks')
+function fadeAway() {
   if (decks.engine) decks.engine.rampVolume(0, FADE_S)
   else if (decks.audio) {
     const a = decks.audio
@@ -38,8 +40,7 @@ async function fadeAway() {
   }
 }
 
-async function fadeBack() {
-  const { applyVolume } = await import('/src/model/player/sound')
+function fadeBack() {
   applyVolume()
 }
 
@@ -59,7 +60,6 @@ export async function restartKindly(run) {
     // storage blocked: the app comes back paused, as it always did
   }
   try {
-    const { saveSession } = await import('/src/model/player/session')
     saveSession()
   } catch {
     // the throttled save from a few seconds ago stands

@@ -20,15 +20,22 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
 
+# actions/checkout makes the repository with `git init`, and git then printed
+# a hint about the name of the first branch in every job.
+env:
+  GIT_CONFIG_COUNT: 1
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
 jobs:
   linux-deb:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Version
         id: version
         run: echo "version=$(sed -n "s/^__version__ = '\(.*\)'/\1/p" Backend/dannify/__init__.py)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '26'
           cache: npm
@@ -46,7 +53,7 @@ jobs:
           dpkg-deb --contents "out/linux-dannify_${{ steps.version.outputs.version }}_amd64.deb" | grep -q 'opt/dannify/jsruntime/dnfjs'
       - name: Install, start, quit and remove it
         run: sudo bash packaging/linux/smoke_test.sh "out/linux-dannify_${{ steps.version.outputs.version }}_amd64.deb"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-dannify_${{ steps.version.outputs.version }}_amd64.deb
           path: out/linux-dannify_${{ steps.version.outputs.version }}_amd64.deb
@@ -59,10 +66,10 @@ jobs:
   windows-media:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Media tool (cached)
         id: media
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: packaging/media
           key: dnfmedia-windows-${{ hashFiles('packaging/mediatool/build.sh') }}
@@ -70,10 +77,11 @@ jobs:
         if: steps.media.outputs.cache-hit != 'true'
         run: |
           mkdir -p packaging/media "$RUNNER_TEMP/media-out"
+          docker pull -q ubuntu:24.04 >/dev/null
           docker run --rm -v "$PWD/packaging/mediatool:/src:ro" -v "$RUNNER_TEMP/media-out:/out" \
             ubuntu:24.04 bash /src/build.sh
           cp "$RUNNER_TEMP/media-out/dnfmedia.exe" packaging/media/dnfmedia.exe
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dnfmedia-windows
           path: packaging/media/dnfmedia.exe
@@ -82,24 +90,24 @@ jobs:
 
   windows:
     needs: windows-media
-    runs-on: windows-latest
+    runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Version
         id: version
         shell: bash
         run: echo "version=$(sed -n "s/^__version__ = '\(.*\)'/\1/p" Backend/dannify/__init__.py)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
           cache: pip
           cache-dependency-path: Backend/requirements.txt
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '26'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
       - name: Python libraries
@@ -109,7 +117,7 @@ jobs:
       - name: Interface libraries
         working-directory: frontend
         run: npm ci
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dnfmedia-windows
           path: packaging/media
@@ -159,19 +167,19 @@ jobs:
           $env:LIFE_NAME = 'over'
           $env:LIFE_FROM = $previous
           python packaging/lifecycle.py setup_over_previous
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Dannify-Setup-${{ steps.version.outputs.version }}.exe
           path: packaging/out/Dannify-Setup-${{ steps.version.outputs.version }}.exe
           if-no-files-found: error
           # Already compressed.
           compression-level: 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: package-${{ steps.version.outputs.version }}.json
           path: packaging/out/package-${{ steps.version.outputs.version }}.json
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: package-${{ steps.version.outputs.version }}.zip
           path: packaging/out/package-${{ steps.version.outputs.version }}.zip
@@ -192,16 +200,16 @@ jobs:
     env:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Version
         id: version
         run: echo "version=$(sed -n "s/^__version__ = '\(.*\)'/\1/p" Backend/dannify/__init__.py)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: Backend/requirements.txt
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '26'
           cache: npm
@@ -219,7 +227,7 @@ jobs:
       # FFmpeg takes a while to build and only changes with its script.
       - name: Media tool (cached)
         id: media
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: packaging/macos/media
           key: dnfmedia-${{ matrix.arch }}-${{ env.MACOSX_DEPLOYMENT_TARGET }}-${{ hashFiles('packaging/macos/build-media.sh') }}
@@ -235,20 +243,20 @@ jobs:
         env:
           DANNIFY_SMOKE_SHOTS: shots
         run: python packaging/macos/smoke_test.py "out/macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: screenshots-${{ matrix.arch }}
           path: shots
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.zip
           path: out/macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.zip
           if-no-files-found: error
           # Already compressed.
           compression-level: 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.dmg
           path: out/macos-Dannify-${{ steps.version.outputs.version }}-${{ matrix.arch }}.dmg

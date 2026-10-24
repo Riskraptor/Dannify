@@ -7,6 +7,7 @@
 # it is a folder build, inside an app bundle: instant starts, and the whole
 # bundle is what an update replaces.
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -104,13 +105,25 @@ hiddenimports = (
     + ['yt_dlp_ejs']
 )
 
+class _LinuxOnly(logging.Filter):
+    """yt-dlp loads libc.so.6 with ctypes, on Linux only (yt_dlp/utils). A Mac
+    has no such library, and PyInstaller said so on every build."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return 'libc.so.6' not in record.getMessage()
+
+
+logging.getLogger('PyInstaller.depend.utils').addFilter(_LinuxOnly())
+
 a = Analysis(
     [str(BACKEND / 'boot.py')],
     pathex=[str(BACKEND)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=[],
+    # Hooks of our own, ahead of the ones yt-dlp and pyinstaller-hooks-contrib
+    # carry (see Backend/pyinstaller_hooks/): those warned on every build.
+    hookspath=[str(BACKEND / 'pyinstaller_hooks')],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
