@@ -34,6 +34,7 @@ from .win32 import (
     WM_NCLBUTTONUP,
     WM_NCMOUSELEAVE,
     WM_NCMOUSEMOVE,
+    WINDOWPLACEMENT,
     WPARAM,
     WS_CAPTION,
     _frame_thickness,
@@ -54,6 +55,19 @@ from .win32 import (
 # window: the caption strip is reclaimed for the web UI's own title bar,
 # while the left/right/bottom resize borders stay native (and invisible).
 # ---------------------------------------------------------------------------
+# Restoring a maximized window: the toolkit under the window works out the
+# restored size from a client area plus the frame it thinks the window has,
+# caption and all. The caption is part of the page here, so every maximize
+# and restore made the window a caption taller (928, 958, 971 CSS pixels on a
+# 912 pixel screen) until the player at the bottom was under the taskbar. The
+# frame keeps the restored size itself and puts it back.
+WM_SIZE = 0x0005
+WM_WINDOWPOSCHANGED = 0x0047
+SIZE_RESTORED, SIZE_MAXIMIZED = 0, 2
+# Asked for after a restore, once the toolkit has finished moving things.
+_WM_FIX_RESTORE = 0x8000 + 0x51  # WM_APP + 0x51
+
+
 class _CustomFrame:
     def __init__(
         self,
@@ -78,6 +92,10 @@ class _CustomFrame:
         # to the client area. None until the interface reports it.
         self._max_rect: tuple[int, int, int, int] | None = None
         self._max_hover = False
+        # The restored window's size, and whether it is maximized now.
+        self._normal: tuple[int, int] | None = None
+        self._zoomed = False
+        self._fixing = False
 
     def install(self) -> bool:
         """Must run on the window's UI thread."""
@@ -94,6 +112,15 @@ class _CustomFrame:
 
             def proc(hwnd, msg, wparam, lparam, uid, ref):  # noqa: ANN001
                 try:
+                    if msg == WM_SIZE:
+                        self._on_size(hwnd, wparam)
+                    elif msg == WM_WINDOWPOSCHANGED:
+                        result = comctl.DefSubclassProc(hwnd, msg, wparam, lparam)
+                        self._note_normal(hwnd)
+                        return result
+                    elif msg == _WM_FIX_RESTORE:
+                        self._fix_restore(hwnd)
+                        return 0
                     if msg == WM_NCCALCSIZE and wparam:
                         return self._nccalcsize(hwnd, msg, wparam, lparam)
                     if msg == WM_NCHITTEST:
@@ -134,6 +161,17 @@ class _CustomFrame:
             if not comctl.SetWindowSubclass(self.hwnd, self._proc, 1, 0):
                 return False
             self.installed = True
+            # Started maximized: the size to restore to is the one it was
+            # placed with.
+            self._zoomed = bool(user32.IsZoomed(self.hwnd))
+            if self._zoomed:
+                wp = WINDOWPLACEMENT()
+                wp.length = ctypes.sizeof(WINDOWPLACEMENT)
+                if user32.GetWindowPlacement(self.hwnd, ctypes.byref(wp)):
+                    r = wp.rcNormalPosition
+                    self._normal = (r.right - r.left, r.bottom - r.top)
+            else:
+                self._note_normal(self.hwnd)
             # Re-run WM_NCCALCSIZE now so the caption disappears before the
             # window is ever painted.
             user32.SetWindowPos(
@@ -149,6 +187,40 @@ class _CustomFrame:
         except Exception as exc:
             logger_print('custom frame unavailable:', exc)
             return False
+
+    # --- Restoring to the size it was ---------------------------------------
+    def _on_size(self, hwnd, kind) -> None:  # noqa: ANN001
+        if kind == SIZE_MAXIMIZED:
+            self._zoomed = True
+        elif kind == SIZE_RESTORED and self._zoomed:
+            self._zoomed = False
+            if self._normal:
+                # After the toolkit has had its say, not in the middle of it.
+                self._fixing = True
+                user32.PostMessageW(hwnd, _WM_FIX_RESTORE, 0, 0)
+
+    def _note_normal(self, hwnd) -> None:  # noqa: ANN001
+        """The restored size, whenever the window is restored and not on its
+        way back from maximized (that size is the wrong one)."""
+
+        if self._fixing or self._zoomed or user32.IsZoomed(hwnd) or user32.IsIconic(hwnd):
+            return
+        r = RECT()
+        if user32.GetWindowRect(hwnd, ctypes.byref(r)) and r.right > r.left and r.bottom > r.top:
+            self._normal = (r.right - r.left, r.bottom - r.top)
+
+    def _fix_restore(self, hwnd) -> None:  # noqa: ANN001
+        try:
+            if not self._normal or user32.IsZoomed(hwnd) or user32.IsIconic(hwnd):
+                return
+            r = RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(r)):
+                return
+            width, height = self._normal
+            if abs((r.right - r.left) - width) > 1 or abs((r.bottom - r.top) - height) > 1:
+                user32.SetWindowPos(hwnd, None, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)
+        finally:
+            self._fixing = False
 
     def _nccalcsize(self, hwnd, msg, wparam, lparam):  # noqa: ANN001
         style = user32.GetWindowLongW(hwnd, GWL_STYLE)

@@ -1,4 +1,4 @@
-import { nextTick } from 'vue'
+import { nextTick, ref } from 'vue'
 
 // Appearance changes, made gently. The new look cross-fades over the old one
 // instead of snapping, and the control that was clicked stays where it was
@@ -55,6 +55,48 @@ export function restyle(change, anchor = null) {
     return document.startViewTransition(run).finished.catch(() => {})
   } catch {
     return run()
+  }
+}
+
+/**
+ * From one page to another with what they share moving between them: an
+ * element named the same on both (`view-transition-name`) travels from where
+ * it was to where it is, and the rest cross-fades. `go` changes the page and
+ * resolves once it has.
+ */
+/**
+ * True while a page change is being carried by the browser (travel): the
+ * pages' own fade steps aside, swapping at once. It is timed with frames, and
+ * the browser holds frames back while it captures, so the swap stalled.
+ */
+export const traveling = ref(false)
+
+export function travel(go, arrived = () => true) {
+  if (
+    typeof document === 'undefined' ||
+    typeof document.startViewTransition !== 'function' ||
+    reduced() ||
+    document.visibilityState !== 'visible'
+  ) {
+    return Promise.resolve(go())
+  }
+  traveling.value = true
+  try {
+    return document
+      // The new page is waited for, so what is captured is the page arrived
+      // at. Timers, not frames: the browser holds frames back meanwhile.
+      .startViewTransition(async () => {
+        await go()
+        await nextTick()
+        for (let waited = 0; !arrived() && waited < 900; waited += 25) await wait(25)
+      })
+      .finished.catch(() => {})
+      .finally(() => {
+        traveling.value = false
+      })
+  } catch {
+    traveling.value = false
+    return Promise.resolve(go())
   }
 }
 

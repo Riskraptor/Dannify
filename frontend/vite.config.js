@@ -90,6 +90,11 @@ export default defineConfig({
   },
   define: {
     'process.env': {},
+    // Every component is written with <script setup>: the older way of
+    // writing them, and the developer tools' hooks, are left out of the build.
+    __VUE_OPTIONS_API__: 'false',
+    __VUE_PROD_DEVTOOLS__: 'false',
+    __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false',
     __APP_VERSION__: JSON.stringify(APP_VERSION),
   },
   build: {

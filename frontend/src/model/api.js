@@ -1,10 +1,10 @@
-// small file used as placeholder/settings for API calls via axios to server-side
-import axios from 'axios' // used to connect to server backend in ./server folder
+// Every call the window makes to Dannify's own server, in one place.
 import { ref } from 'vue'
 import config from '/src/config.js'
+import { createClient } from '/src/model/http'
 import { pageIsStale } from '/src/model/staleness'
 
-const API = axios.create({
+const API = createClient({
   baseURL: `${config.PROTOCOL}//${config.BACKEND}:${config.PORT}${config.BASEURL}`,
 })
 

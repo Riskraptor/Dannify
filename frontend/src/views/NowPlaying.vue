@@ -107,6 +107,7 @@ import LyricsView from '/src/components/lyrics/LyricsView.vue'
 import LyricsToolbar from '/src/components/lyrics/LyricsToolbar.vue'
 import QueueList from '/src/components/shell/QueueList.vue'
 import SaveSongButton from '/src/components/ui/SaveSongButton.vue'
+import { closeNowPlaying } from '/src/model/nowPlaying'
 import { useUi } from '/src/model/ui'
 
 const { t } = useI18n()
@@ -120,8 +121,7 @@ const cur = computed(() => player.currentTrack.value)
 const row = computed(() => (cur.value ? queueRow(cur.value, player.currentIndex.value) : null))
 
 function close() {
-  if (window.history.state && window.history.state.back) router.back()
-  else router.push({ name: 'Home' })
+  closeNowPlaying()
 }
 
 function onMenu(e) {
@@ -283,6 +283,9 @@ function onMore(e) {
 .np-cover-wrap.is-resting {
   transform: scale(0.94);
   filter: saturate(0.85);
+}
+.np-cover-wrap {
+  view-transition-name: np-cover;
 }
 .np-cover {
   width: 100%;

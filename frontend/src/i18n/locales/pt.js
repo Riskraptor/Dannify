@@ -584,6 +584,8 @@ export default {
     inLibrary: 'Na sua biblioteca',
     streaming: 'Por streaming',
     upNext: 'A seguir',
+    hintNowPlaying: 'Clique na capa para o player completo',
+    nextIs: 'A seguir: {title} · {artist}',
   },
   lyrics: {
     addInFullWindow: 'Adicione na janela completa',

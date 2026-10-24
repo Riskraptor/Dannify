@@ -584,6 +584,8 @@ export default {
     inLibrary: 'Kwenye maktaba yako',
     streaming: 'Inatiririka',
     upNext: 'Unaofuata',
+    hintNowPlaying: 'Bofya picha ya jalada kwa kicheza kikubwa',
+    nextIs: 'Kinachofuata: {title} · {artist}',
   },
   lyrics: {
     addInFullWindow: 'Yaongeze kwenye dirisha zima',

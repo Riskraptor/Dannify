@@ -605,6 +605,8 @@ export default {
     inLibrary: 'In your library',
     streaming: 'Streaming',
     upNext: 'Next up',
+    hintNowPlaying: 'Click the cover for the full player',
+    nextIs: 'Next: {title} · {artist}',
   },
   lyrics: {
     addInFullWindow: 'Add them in the full window',

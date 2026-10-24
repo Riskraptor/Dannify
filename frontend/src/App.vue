@@ -42,7 +42,12 @@
                is leaving, and a page with one that never ends (Your year in
                music's moving background) held the next one back for its
                full length, eighteen seconds of an empty window. -->
-          <transition name="view" mode="out-in" :duration="{ enter: 260, leave: 100 }">
+          <transition
+            name="view"
+            :mode="traveling ? 'default' : 'out-in'"
+            :css="!traveling"
+            :duration="traveling ? 0 : { enter: 260, leave: 100 }"
+          >
             <keep-alive :include="cachedViews" :max="12">
               <component :is="Component" :key="viewKey(r)" />
             </keep-alive>
@@ -75,6 +80,7 @@
 </template>
 
 <script setup>
+import { traveling } from '/src/model/smoothChange'
 import { ensureFullWindow } from '/src/desktop/fullWindow'
 import { ref, reactive, computed, provide, nextTick, onMounted, onUnmounted, watch, watchEffect, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

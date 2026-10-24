@@ -609,6 +609,8 @@ export default {
     inLibrary: 'Dans votre bibliothèque',
     streaming: 'En streaming',
     upNext: 'À suivre',
+    hintNowPlaying: 'Cliquez sur la pochette pour le grand lecteur',
+    nextIs: 'Suivant : {title} · {artist}',
   },
   lyrics: {
     addInFullWindow: 'Les ajouter dans la fenêtre complète',

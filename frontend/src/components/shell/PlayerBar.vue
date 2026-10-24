@@ -10,8 +10,10 @@
       <template v-if="cur">
         <button
           class="pb-cover"
-          :title="t('player.openNowPlaying')"
+          :class="{ 'is-shared': !onNowPlaying }"
+          :title="`${t('player.openNowPlaying')} (Ctrl+E)`"
           :aria-label="t('player.openNowPlaying')"
+          data-tour="np-cover"
           @click="openNowPlaying"
         >
           <CoverImage :src="cur.cover" radius="sm" :size="56" class="h-full w-full" eager />
@@ -19,9 +21,16 @@
             <span class="spinner h-5 w-5 text-white" />
           </span>
           <span v-else class="pb-cover-overlay">
-            <Icon icon="ph:caret-up-bold" class="h-5 w-5 text-white" />
+            <Icon icon="ph:arrows-out-simple-bold" class="h-5 w-5 text-white" />
           </span>
         </button>
+        <!-- Once, for whoever has never opened the big player: where it is. -->
+        <Transition name="pb-hint">
+          <button v-if="showHint" class="pb-hint" @click="openNowPlaying">
+            <Icon icon="ph:arrows-out-simple-bold" class="h-3.5 w-3.5" />
+            {{ t('player.hintNowPlaying') }}
+          </button>
+        </Transition>
         <div class="min-w-0">
           <button class="pb-title" :title="cur.title" @click="openNowPlaying">
             {{ cur.title }}
@@ -31,7 +40,7 @@
           </div>
         </div>
         <button
-          v-if="!ui.isCompact.value && videoId"
+          v-if="!ui.isCompact.value && videoId && !onNowPlaying"
           class="icon-btn is-round press shrink-0 pb-like"
           :class="{ 'is-liked': liked }"
           :title="liked ? t('account.removeFromLiked') : t('account.addToLiked')"
@@ -44,7 +53,7 @@
         <!-- A download arrow, filled once saved, a ring while it saves. A
              green tick beside the heart read as a second "liked", not as
              "on this PC". -->
-        <SaveSongButton v-if="!ui.isCompact.value" :row="row" class="shrink-0 pb-save" />
+        <SaveSongButton v-if="!ui.isCompact.value && !onNowPlaying" :row="row" class="shrink-0 pb-save" />
       </template>
       <div v-else class="pb-idle">
         <span class="pb-idle-art"><Icon icon="ph:music-notes" class="h-5 w-5" /></span>
@@ -90,7 +99,7 @@
         <button
           class="icon-btn is-round"
           :disabled="!cur"
-          :title="`${t('player.next')} (N)`"
+          :title="nextTitle"
           :aria-label="t('player.next')"
           aria-keyshortcuts="N"
           @click="player.next()"
@@ -113,7 +122,7 @@
           />
         </button>
       </div>
-      <div class="pb-seek">
+      <div class="pb-seek" @wheel="onSeekWheel">
         <span class="pb-time">{{ formatTime(player.currentTime.value) }}</span>
         <RangeSlider
           :value="player.progressPct.value / 100"
@@ -199,7 +208,7 @@
         <Icon icon="ph:sliders-horizontal" class="h-[18px] w-[18px]" />
       </button>
       <SoundPanel v-if="soundWanted" :open="soundOpen" :anchor="soundBtn" @close="soundOpen = false" />
-      <div class="pb-volume">
+      <div class="pb-volume" @wheel="onVolumeWheel">
         <button
           class="icon-btn is-round"
           :title="`${player.isMuted.value ? t('player.unmute') : t('player.mute')} (M)`"
@@ -236,6 +245,7 @@
         :aria-label="t('player.openNowPlaying')"
         :aria-pressed="onNowPlaying"
         aria-keyshortcuts="Control+E"
+        data-tour="np-button"
         @click="toggleNowPlaying"
       >
         <Icon :icon="onNowPlaying ? 'ph:arrows-in-simple' : 'ph:arrows-out-simple'" class="h-[18px] w-[18px]" />
@@ -255,6 +265,7 @@ import { queueRow, trackMenu, songVideoId } from '/src/model/tracks'
 import { openContextMenu, openMenuAt, lastMenuPoint } from '/src/model/contextMenu'
 import { desktop } from '/src/desktop/bridge'
 import { useI18n } from '/src/i18n'
+import { nowPlayingSeen, openNowPlaying, closeNowPlaying, toggleNowPlaying } from '/src/model/nowPlaying'
 import CoverImage from '../ui/CoverImage.vue'
 import ArtistLinks from '../ui/ArtistLinks.vue'
 import RangeSlider from '../ui/RangeSlider.vue'
@@ -357,7 +368,7 @@ function onMoreMenu(e) {
         action: () => {
           // Now Playing has no room for it: the side panel, beside the page
           // that was there before.
-          if (onNowPlaying.value) router.back()
+          if (onNowPlaying.value) closeNowPlaying()
           ui.openPanel('about')
         },
       },
@@ -399,13 +410,48 @@ const volumeIcon = computed(() => {
   return 'ph:speaker-high'
 })
 
-function openNowPlaying() {
-  if (!onNowPlaying.value) router.push({ name: 'NowPlaying' })
+// "Next: Chikwere · Bien", when there is a next.
+const nextTitle = computed(() => {
+  const at = player.upcoming.value[0]
+  const next = at != null ? player.playlist.value[at] : null
+  if (!next || !next.title) return `${t('player.next')} (N)`
+  return `${t('player.nextIs', { title: next.title, artist: next.artist || '' })} (N)`
+})
+
+// The wheel over the song's bar moves through it five seconds a notch; over
+// the volume, five per cent.
+function onSeekWheel(e) {
+  if (!cur.value || !player.duration.value) return
+  e.preventDefault()
+  const step = e.deltaY < 0 ? 5 : -5
+  player.seek(Math.max(0, Math.min(player.duration.value - 1, (player.currentTime.value || 0) + step)))
 }
-function toggleNowPlaying() {
-  if (onNowPlaying.value) router.back()
-  else openNowPlaying()
+function onVolumeWheel(e) {
+  e.preventDefault()
+  const v = player.isMuted.value ? 0 : player.volume.value
+  player.setVolume(Math.max(0, Math.min(1, Math.round((v + (e.deltaY < 0 ? 0.05 : -0.05)) * 20) / 20)))
 }
+
+// The tip, for whoever has never opened Now Playing: a few seconds into a
+// song, once a run, and never again once they have.
+const showHint = ref(false)
+let hintShown = false
+let hintTimer = 0
+watch(
+  () => [player.isPlaying.value, cur.value && cur.value.title],
+  ([playing]) => {
+    if (hintShown || nowPlayingSeen.value || !playing || ui.isCompact.value) return
+    clearTimeout(hintTimer)
+    hintTimer = setTimeout(() => {
+      if (nowPlayingSeen.value || onNowPlaying.value || !player.isPlaying.value) return
+      hintShown = true
+      showHint.value = true
+      hintTimer = setTimeout(() => (showHint.value = false), 9000)
+    }, 12000)
+  }
+)
+watch(nowPlayingSeen, (seen) => seen && (showHint.value = false))
+onBeforeUnmount(() => clearTimeout(hintTimer))
 function onTrackMenu(e) {
   if (!row.value) return
   openContextMenu(e, trackMenu([row.value], { queue: true }))
@@ -438,18 +484,68 @@ function onTrackMenu(e) {
   border-radius: 4px;
   box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
 }
+/* The cover grows into Now Playing's (smoothChange.travel). */
+.pb-cover.is-shared {
+  view-transition-name: np-cover;
+}
+.pb-cover {
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.pb-cover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.45);
+}
 .pb-cover-overlay {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgb(0 0 0 / 0.5);
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.15), rgb(0 0 0 / 0.55));
   opacity: 0;
   transition: opacity 0.12s ease;
 }
 .pb-cover:hover .pb-cover-overlay,
+.pb-cover:focus-visible .pb-cover-overlay,
 .pb-cover-overlay.is-visible {
   opacity: 1;
+}
+.pb-hint {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgb(var(--c-accent));
+  color: rgb(var(--c-accent-fg));
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.35);
+}
+.pb-hint::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 22px;
+  border: 7px solid transparent;
+  border-top-color: rgb(var(--c-accent));
+}
+.pb-hint-enter-active,
+.pb-hint-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s cubic-bezier(0.2, 0.9, 0.2, 1.2);
+}
+.pb-hint-enter-from,
+.pb-hint-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
 }
 .pb-title {
   display: block;
