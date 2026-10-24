@@ -227,7 +227,7 @@ const versionState = computed(() => {
   if (updates.ready.value) return t('update.installNow')
   if (updates.available.value) return t('update.available', { version: updates.info.value.version })
   if (updates.checking.value) return t('update.checking')
-  return updates.checkedOk.value ? t('settings.upToDate') : ''
+  return updates.checkedOk.value && !updates.lastError.value ? t('settings.upToDate') : ''
 })
 
 const PANE_KEY = 'dn.settingsPane'

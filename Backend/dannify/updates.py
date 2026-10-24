@@ -31,6 +31,7 @@ import shutil
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,6 +56,10 @@ CHECK_TTL = 60 * 60 * 6  # re-check at most every 6 hours
 # everyone behind the same router) is not retried for this long.
 RATE_LIMIT_HOLD = 30 * 60
 _USER_AGENT = 'Dannify-Updater'
+# Every release from 4.15.0 carries a description of itself under this name
+# (packaging/publish.ps1). It is fetched like any download, from
+# /releases/latest/download/, which GitHub's 60-an-hour limit does not touch.
+LATEST_NAME = 'latest.json'
 # What every release is signed with (see signing.py and
 # packaging/release_key.py). The private half stays on the release machine.
 # Every release from 4.7.0 on is signed; a copy with this key refuses any
@@ -68,7 +73,10 @@ _USER_AGENT = 'Dannify-Updater'
 PUBLIC_KEY = 'e6946c1597fd9f26d2c0f87da91a5cf06e318ef92af3bca9899b72c8f905f5b8'
 
 _lock = threading.Lock()
-_cache: dict[str, Any] = {'at': 0.0, 'result': None}
+_cache: dict[str, Any] = {'at': 0.0, 'result': None, 'tried': 0.0}
+# "Check now" pressed again and again (a log showed fourteen in three
+# minutes) is answered from the last check for this long.
+FORCE_GAP = 20
 _settings: dict[str, Any] = {'repo': '', 'channel': 'stable'}
 _stage_lock = threading.Lock()
 
@@ -236,15 +244,87 @@ def _get_text(url: str) -> str:
         return response.read().decode('utf-8')
 
 
+def _web_base() -> str:
+    """Where the release pages and files are: github.com, or the test server."""
+
+    api = _api_base()
+    return api if api.startswith('http://') else 'https://github.com'
+
+
+def _download_url(tag: str, name: str) -> str:
+    return f'{_web_base()}/{repo()}/releases/download/{urllib.parse.quote(tag)}/{urllib.parse.quote(name)}'
+
+
+def _from_api() -> dict[str, Any]:
+    """The latest release from GitHub's API: everything about it, but only 60
+    times an hour for each address, and a whole mobile network can share one."""
+
+    return _get(f'{_api_base()}/repos/{repo()}/releases/latest')
+
+
+def _from_description() -> dict[str, Any]:
+    """The latest release as it describes itself (``LATEST_NAME``): the same
+    shape as the API's, fetched like any download, so never refused for being
+    asked too often."""
+
+    data = json.loads(_get_text(f'{_web_base()}/{repo()}/releases/latest/download/{LATEST_NAME}'))
+    if not isinstance(data, dict) or not data.get('tag_name') or not isinstance(data.get('assets'), list):
+        raise ValueError(f'{LATEST_NAME} does not describe a release')
+    return data
+
+
+def _from_page() -> dict[str, Any]:
+    """The latest release from its web page, when nothing else answers: its
+    tag from where /releases/latest leads, its files from the list the page
+    shows. No notes and no sizes, but enough to update."""
+
+    request = urllib.request.Request(
+        f'{_web_base()}/{repo()}/releases/latest', headers={'User-Agent': _USER_AGENT}, method='HEAD'
+    )
+    with urllib.request.urlopen(request, timeout=12) as response:
+        landed = response.geturl()
+    found = re.search(r'/releases/tag/([^/?#]+)$', landed or '')
+    if not found:
+        raise ValueError('there is no latest release')
+    tag = urllib.parse.unquote(found.group(1))
+    page = _get_text(f'{_web_base()}/{repo()}/releases/expanded_assets/{urllib.parse.quote(tag)}')
+    names = sorted(set(re.findall(r'/releases/download/' + re.escape(urllib.parse.quote(tag)) + r'/([^"?#/]+)"', page)))
+    if not names:
+        raise ValueError(f'no files listed for {tag}')
+    return {
+        'tag_name': tag,
+        'name': tag,
+        'body': '',
+        'html_url': f'https://github.com/{repo()}/releases/tag/{tag}',
+        'published_at': '',
+        'assets': [
+            {'name': urllib.parse.unquote(n), 'size': 0, 'browser_download_url': _download_url(tag, urllib.parse.unquote(n))}
+            for n in names
+        ],
+    }
+
+
 def _fetch_latest() -> dict[str, Any]:
-    base = f'{_api_base()}/repos/{repo()}/releases'
     if _settings['channel'] == 'prerelease':
         # /latest skips pre-releases, so early adopters read the full list.
-        for release in _get(f'{base}?per_page=10') or []:
+        for release in _get(f'{_api_base()}/repos/{repo()}/releases?per_page=10') or []:
             if isinstance(release, dict) and not release.get('draft'):
                 return release
         return {}
-    return _get(f'{base}/latest')
+    # Up to 4.14.1 the API was the only way, and a network that had used up
+    # its 60 an hour heard "Could not check for updates" all day. Now the
+    # release's own description first, then the API, then the page.
+    failures: list[Exception] = []
+    for source in (_from_description, _from_api, _from_page):
+        try:
+            return source()
+        except Exception as exc:  # noqa: BLE001  (the next one may answer)
+            failures.append(exc)
+            logger.info('Update check: {} did not answer ({}); trying the next way', source.__name__, exc)
+    limited = [e for e in failures if isinstance(e, RateLimited)]
+    if limited and len(limited) == len(failures):
+        raise limited[0]
+    raise failures[-1]
 
 
 # Where a release's files may come from: GitHub's own download hosts, over
@@ -298,6 +378,9 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         cached = _cache['result']
         if cached is not None and not force and now - _cache['at'] < CHECK_TTL:
             return cached
+        if cached is not None and force and now - _cache['tried'] < FORCE_GAP:
+            return cached
+        _cache['tried'] = now
 
     result: dict[str, Any] = {
         'available': False,
@@ -385,7 +468,7 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         logger.debug('Update check refused by the server; next try in {:.0f}s', hold)
     except Exception as exc:  # offline, no releases yet…
         result['error'] = str(exc)
-        logger.debug('Update check failed: {}', exc)
+        logger.info('Update check failed: {}', exc)
 
     with _lock:
         _cache['result'] = result

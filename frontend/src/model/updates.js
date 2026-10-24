@@ -154,10 +154,14 @@ async function check(force = false, { quiet = true } = {}) {
       checkedOk.value = true
       checkedAt.value = Date.now()
     }
+    // "Up to date" only after a check that was answered. Up to 4.14.1 a check
+    // GitHub refused said it too, while About said it could not check.
     if (!quiet && !info.value.available) {
-      toast(t('update.upToDate', { version: fresh.current || '' }), {
-        icon: 'ph:check-circle',
-      })
+      if (fresh.error) {
+        toast(navigator.onLine === false ? t('update.offline') : t('update.checkFailedLater'), { tone: 'error' })
+      } else {
+        toast(t('update.upToDate', { version: fresh.current || '' }), { icon: 'ph:check-circle' })
+      }
     }
   } catch (e) {
     lastError.value = e.message || 'error'

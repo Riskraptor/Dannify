@@ -160,6 +160,32 @@ $signed = $files | Where-Object { $_ -notlike "*$sig" -and $_ -notlike '*package
 & $python $releaseKey verify-release @signed
 if ($LASTEXITCODE -ne 0) { throw 'a release file does not verify against PUBLIC_KEY in updates.py' }
 
+# --- The release, described by itself -------------------------------------
+# What installed copies read first (updates._from_description). GitHub's API
+# answers 60 times an hour per address, shared by everyone behind one router
+# (often a whole mobile network), and up to 4.14.1 a copy that was refused
+# said "Could not check for updates" until the hour turned. This file is
+# fetched like any download, from /releases/latest/download/, with no such
+# limit. Its every file is still checked against its signature before use.
+$described = Join-Path $work 'latest.json'
+$assets = @($files | ForEach-Object {
+    $leaf = Split-Path $_ -Leaf
+    [ordered]@{
+        name                 = $leaf
+        size                 = (Get-Item $_).Length
+        browser_download_url = "https://github.com/$Repo/releases/download/$tag/$leaf"
+    }
+})
+[ordered]@{
+    tag_name     = $tag
+    name         = "Dannify $version"
+    body         = $Notes
+    html_url     = "https://github.com/$Repo/releases/tag/$tag"
+    published_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    assets       = $assets
+} | ConvertTo-Json -Depth 5 | Set-Content -Path $described -Encoding utf8NoBOM
+$files += $described
+
 if ($DryRun) {
     Write-Host "Dry run: $($files.Count) files signed and checked, nothing published." -ForegroundColor Green
     $files | ForEach-Object { '  ' + (Split-Path $_ -Leaf) }

@@ -325,3 +325,17 @@ describe('fixes that cannot wait', () => {
     delete api.getLive
   })
 })
+
+describe('a check that was not answered', () => {
+  it('is never said to be up to date', async () => {
+    // Up to 4.14.1, GitHub refusing the check (60 an hour per address) read
+    // "Dannify is up to date" while About said it could not check.
+    api.checkForUpdate.mockResolvedValue({ data: { available: false, current: '4.14.1', error: 'rate_limited' } })
+    await updates.check(true, { quiet: false })
+    expect(toasts.map((x) => x.msg)).toEqual(['update.checkFailedLater'])
+    expect(updates.lastError.value).toBe('rate_limited')
+    api.checkForUpdate.mockResolvedValue({ data: { available: false, current: '4.15.0', error: '' } })
+    await updates.check(true, { quiet: false })
+    expect(toasts[1].msg.startsWith('update.upToDate')).toBe(true)
+  })
+})

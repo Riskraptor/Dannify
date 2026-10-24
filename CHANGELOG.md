@@ -46,7 +46,10 @@ own, the charts where you are, richer stats, and an app at ease offline.
   close the window" in Settings, General.
 - **Support is GitHub Sponsors only.** M-Pesa, PayPal and Ko-fi are gone.
 
-Plus fixes: the window keeps its size through maximize and restore, every
+Plus fixes: checking for updates works on busy networks (it used to be
+refused when a whole network shared GitHub's 60 checks an hour, and then
+said "up to date" anyway), the window keeps its size through maximize and
+restore, every
 Browse category opens again, a restart that cannot replace the old copy
 stops cleanly, and the developer-style buttons (refresh pictures, refresh
 recommendations, copy link) are gone because it all keeps itself fresh.
