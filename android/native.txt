@@ -1,4 +1,4 @@
 # Libraries the Android app needs built for Android (see
-# .github/workflows/android-wheels.yml): the same version as
+# .github/workflows/android-native.yml): the same version as
 # Backend/requirements.txt.
 pydantic-core==2.46.4

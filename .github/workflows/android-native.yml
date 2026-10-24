@@ -1,0 +1,94 @@
+# What the Android app carries that nobody publishes for Android, built for
+# phones (arm64-v8a) and the emulator on a PC (x86_64):
+#
+#   * pydantic-core (Rust), the one library of the backend's that is not pure
+#     Python, as wheels for the Python the app embeds (Chaquopy);
+#   * the media tool, FFmpeg with only what Dannify uses
+#     (packaging/android/build-media.sh).
+#
+# Both only change with their versions: android/native.txt names the
+# wheels, the script its FFmpeg. One artifact, android-native, holds them the
+# way android/native/ does on a PC (see android/README.md).
+name: Android native
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    paths:
+      - android/native.txt
+      - packaging/android/build-media.sh
+      - .github/workflows/android-native.yml
+
+permissions:
+  contents: read
+
+# actions/checkout makes the repository with `git init`, and git then printed
+# a hint about the name of the first branch in every job.
+env:
+  GIT_CONFIG_COUNT: 1
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  pydantic-core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: What to build
+        id: want
+        run: echo "spec=$(grep -E '^pydantic-core==' android/native.txt)" >> "$GITHUB_OUTPUT"
+      - name: Rust, for Android
+        run: rustup target add aarch64-linux-android x86_64-linux-android
+      - name: The source
+        run: |
+          python -m pip download --quiet --no-binary :all: --no-deps "${{ steps.want.outputs.spec }}" -d sdist
+          mkdir src && tar -xzf sdist/*.tar.gz -C src --strip-components 1
+      - name: Build
+        env:
+          CIBW_PLATFORM: android
+          CIBW_BUILD: cp314-*
+          CIBW_ARCHS: arm64_v8a x86_64
+          CIBW_BUILD_FRONTEND: build
+          # Its tests need pydantic itself and an emulator; the app's own tests
+          # on a phone are what count.
+          CIBW_TEST_SKIP: '*'
+        run: pipx run cibuildwheel==4.3.4 src --output-dir native/wheels
+      - name: Check
+        run: |
+          ls -la native/wheels
+          test "$(ls native/wheels/*android*arm64_v8a.whl | wc -l)" = 1
+          test "$(ls native/wheels/*android*x86_64.whl | wc -l)" = 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-wheels
+          path: native/
+          if-no-files-found: error
+
+  media:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: bash packaging/android/build-media.sh ${{ matrix.abi }} native
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-media-${{ matrix.abi }}
+          path: native/
+          if-no-files-found: error
+
+  android-native:
+    needs: [pydantic-core, media]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/upload-artifact/merge@v7
+        with:
+          name: android-native
+          pattern: native-*
+          delete-merged: true
