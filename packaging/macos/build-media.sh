@@ -49,20 +49,25 @@ fetch() {  # url file sha256
 QUIET_CFLAGS="-O2 -w"
 
 # What nasm makes carries no "built for macOS N" mark unless asked for one,
-# and the linker said so for every object. Asked for, where nasm knows how;
-# the form it takes is tried rather than assumed.
+# and the linker said so for every object. nasm asks for it with a pragma
+# (its manual: --pragma "macho build_version macos,11,0"); whether this nasm
+# understands it is checked on a test object, mark and all, not assumed.
 if [ "$MACHINE" = "x86_64" ] && command -v nasm >/dev/null; then
+  MAJOR="${MACOSX_DEPLOYMENT_TARGET%%.*}"
+  MINOR="${MACOSX_DEPLOYMENT_TARGET#*.}"
+  [ "$MINOR" = "$MACOSX_DEPLOYMENT_TARGET" ] && MINOR=0
+  MARK="macho build_version macos,${MAJOR},${MINOR%%.*}"
   printf 'section .text\nglobal _probe\n_probe: ret\n' > "$WORK/probe.asm"
-  for MIN_OS in "macos-$MACOSX_DEPLOYMENT_TARGET" "macos$MACOSX_DEPLOYMENT_TARGET"; do
-    if nasm -f macho64 --macho-min-os="$MIN_OS" -o "$WORK/probe.o" "$WORK/probe.asm" 2>/dev/null; then
-      mkdir -p "$WORK/bin"
-      printf '#!/bin/sh\nexec "%s" --macho-min-os="%s" "$@"\n' "$(command -v nasm)" "$MIN_OS" > "$WORK/bin/nasm"
-      chmod +x "$WORK/bin/nasm"
-      export PATH="$WORK/bin:$PATH"
-      echo "nasm marks its objects for $MIN_OS"
-      break
-    fi
-  done
+  if nasm -f macho64 --pragma "$MARK" -o "$WORK/probe.o" "$WORK/probe.asm" \
+      && otool -l "$WORK/probe.o" | grep -q LC_BUILD_VERSION; then
+    mkdir -p "$WORK/bin"
+    printf '#!/bin/sh\nexec "%s" --pragma "%s" "$@"\n' "$(command -v nasm)" "$MARK" > "$WORK/bin/nasm"
+    chmod +x "$WORK/bin/nasm"
+    export PATH="$WORK/bin:$PATH"
+    echo "nasm marks its objects: $MARK"
+  else
+    echo "this nasm cannot mark its objects for a macOS version" >&2
+  fi
 fi
 
 echo "== LAME ${LAME_VERSION}"
