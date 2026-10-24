@@ -50,6 +50,18 @@ describe('YouTube links', () => {
     expect(parseLink('https://music.youtube.com/browse/VLPLabc123')).toMatchObject({ kind: 'playlist', id: 'PLabc123' })
     expect(parseLink('https://music.youtube.com/channel/UCYQ9-fPNabcdefghijklmn')).toMatchObject({ kind: 'artist' })
   })
+
+  it('opens podcasts and their episodes, and channels by their @name', () => {
+    expect(parseLink('https://music.youtube.com/browse/MPSPPLk1Sqn_f33KuWf3tW9BBe_4TP7x8l0m3T')).toMatchObject({
+      kind: 'playlist',
+      id: 'MPSPPLk1Sqn_f33KuWf3tW9BBe_4TP7x8l0m3T',
+    })
+    expect(parseLink('https://music.youtube.com/browse/MPEDrn6iW7XDEHc')).toMatchObject({ kind: 'song', id: 'rn6iW7XDEHc' })
+    expect(parseLink('https://www.youtube.com/podcast/PLk1Sqn_f33KuWf3tW9BBe_4TP7x8l0m3T')).toMatchObject({ kind: 'playlist' })
+    expect(parseLink('https://www.youtube.com/@SautiSol')).toMatchObject({ kind: 'handle', id: 'SautiSol' })
+    expect(parseLink('youtube.com/@sauti.sol/videos')).toMatchObject({ kind: 'handle', id: 'sauti.sol' })
+    expect(parseLink('https://open.spotify.com/episode/2rKMiQw2A58GL5ZHH8jfHo')).toMatchObject({ source: 'spotify', kind: 'episode' })
+  })
 })
 
 describe('what is not a link', () => {

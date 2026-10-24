@@ -66,7 +66,7 @@
             </template>
           </template>
           <span class="opacity-50">•</span>
-          <span>{{ t('explore.songCount', { count: rows.length }) }}</span>
+          <span>{{ isPodcast ? t('explore.episodeCount', { count: rows.length }) : t('explore.songCount', { count: rows.length }) }}</span>
           <template v-if="totalDuration">
             <span class="opacity-50">•</span>
             <span class="text-fg/60">{{ totalDuration }}</span>
@@ -107,7 +107,7 @@
         <TrackTable
           :rows="rows"
           :show-cover="isPlaylist"
-          :show-album="isPlaylist"
+          :show-album="isPlaylist && !isPodcast"
           :sticky-offset="56"
           selectable
           selection-bar
@@ -169,7 +169,10 @@ function ghostWidth(n) {
 
 
 const isPlaylist = computed(() => props.mode === 'playlist')
+// A podcast opens as a playlist of its episodes (explorer.podcast).
+const isPodcast = computed(() => !!(album.value && album.value.podcast))
 const label = computed(() => {
+  if (isPodcast.value) return t('explore.podcast')
   if (isPlaylist.value) return t('explore.playlist')
   const type = album.value && album.value.album_type
   return type && typeof type === 'string' ? type : t('explore.album')

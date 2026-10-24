@@ -7,7 +7,7 @@ import asyncio
 
 import pytest
 
-from dannify import links, providers, spotify
+from dannify import explorer, links, providers, spotify
 from dannify.routes import explore
 
 
@@ -30,6 +30,32 @@ ENTITIES = {
         'coverArt': {'sources': [{'url': 'https://i/cover'}]},
         'trackList': [_row('Housewife', 'Tate McRae', 208_810, 'y1')],
     },
+    # A show's embed is its newest episode, the show's name under it.
+    ('show', 's1'): {'type': 'episode', 'name': '#2570 - Mystery Boys', 'subtitle': 'The Joe Rogan Experience'},
+    ('episode', 'e1'): {'type': 'episode', 'name': '#2570 - Mystery Boys', 'subtitle': 'The Joe Rogan Experience'},
+}
+
+
+class _YouTube:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def search(self, query, filter=None, limit=10):
+        return self.rows.get(filter, [])
+
+
+JRE = {
+    'podcasts': [
+        {'title': 'JRE Clips', 'browseId': 'MPSPclips'},
+        {'title': 'The Joe Rogan Experience', 'browseId': 'MPSPPLjre'},
+    ],
+    'episodes': [
+        {'title': 'Reacting to #2570', 'videoId': 'aaaaaaaaaaa', 'podcast': {'name': 'Cortado Joe'}},
+        {
+            'title': 'Joe Rogan Experience #2570 - Mystery Boys', 'videoId': 'rn6iW7XDEHc',
+            'podcast': {'name': 'The Joe Rogan Experience'}, 'duration': '2 hr 43 min',
+        },
+    ],
 }
 
 
@@ -55,14 +81,53 @@ def test_a_playlist_link_says_whose_it_is(embeds):
     assert page['cover'] == 'https://i/cover' and page['total'] == 1
 
 
-def test_podcasts_are_not_music():
+def test_a_podcast_opens_as_the_same_one_on_youtube_music(embeds, monkeypatch):
+    monkeypatch.setattr(explorer, '_ytm', lambda: _YouTube(JRE))
+    show = spotify.link_page('https://open.spotify.com/show/s1')
+    assert show['title'] == 'The Joe Rogan Experience'
+    assert show['open'] == {'kind': 'podcast', 'id': 'MPSPPLjre'}
+    episode = spotify.link_page('https://open.spotify.com/episode/e1')['open']
+    assert episode['kind'] == 'episode' and episode['song']['video_id'] == 'rn6iW7XDEHc'
+    assert episode['song']['duration'] == 2 * 3600 + 43 * 60
+    # Not on YouTube Music: said so, not opened as something else.
+    monkeypatch.setattr(explorer, '_ytm', lambda: _YouTube({}))
     with pytest.raises(spotify.Unsupported):
-        spotify.link_page('https://open.spotify.com/show/abc123')
+        spotify.link_page('https://open.spotify.com/show/s1')
     with pytest.raises(ValueError):
         spotify.link_page('https://example.com/playlist/abc')
 
 
-def test_the_route_says_what_went_wrong(embeds):
+def test_a_podcast_page_is_its_episodes(monkeypatch):
+    class Podcasts:
+        def get_playlist(self, pid, limit=200):
+            raise KeyError('contents')
+
+        def get_podcast(self, bid, limit=100):
+            assert bid == 'MPSPPLjre'
+            return {
+                'title': 'The Joe Rogan Experience', 'author': {'name': 'PowerfulJRE'},
+                'episodes': [{'title': '#2570', 'videoId': 'rn6iW7XDEHc', 'duration': '1 hr 5 min'}, {'title': 'no video'}],
+            }
+
+    monkeypatch.setattr(explorer, '_ytm', lambda: Podcasts())
+    monkeypatch.setattr(explorer, '_cache_get', lambda key, refresh=None: None)
+    monkeypatch.setattr(explorer, '_cache_put', lambda key, value: None)
+    # A youtube.com link has the episodes' playlist alone.
+    for bid in ('MPSPPLjre', 'PLjre'):
+        page = explorer.playlist(bid)
+        assert page['podcast'] and page['name'] == 'The Joe Rogan Experience'
+        assert [(t['video_id'], t['artists'], t['duration']) for t in page['tracks']] == [
+            ('rn6iW7XDEHc', ['The Joe Rogan Experience'], 3900)
+        ]
+
+
+@pytest.mark.parametrize('said, seconds', [('2 hr 43 min', 9780), ('45 min', 2700), ('1:02:03', 3723), ('', 0), (None, 0)])
+def test_an_episode_length_as_it_is_said(said, seconds):
+    assert explorer._spoken_seconds(said) == seconds
+
+
+def test_the_route_says_what_went_wrong(embeds, monkeypatch):
+    monkeypatch.setattr(explorer, '_ytm', lambda: _YouTube({}))
     with pytest.raises(explore.HTTPException) as exc:
         asyncio.run(explore.spotify_link_endpoint('https://example.com/x'))
     assert exc.value.status_code == 400

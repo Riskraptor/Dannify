@@ -97,7 +97,7 @@ async def spotify_link_endpoint(url: str = Query(..., max_length=500)) -> dict[s
     try:
         return await asyncio.to_thread(spotify.link_page, url)
     except spotify.Unsupported as exc:
-        raise HTTPException(status_code=422, detail=f'Spotify {exc} links are not music') from exc
+        raise HTTPException(status_code=422, detail=f'Spotify {exc} not found on YouTube Music') from exc
     except Exception as exc:
         logger.opt(exception=True).info('Spotify link could not be read: {}', url)
         raise HTTPException(status_code=502, detail='Spotify could not be read') from exc

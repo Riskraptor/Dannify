@@ -980,13 +980,149 @@ def _clean_playlist_id(browse_id: str) -> str:
     return bid
 
 
+# ----- podcasts -------------------------------------------------------------
+_SPOKEN = re.compile(r'(\d+)\s*(hr|h|hour|hours|min|m|minute|minutes|sec|s|seconds?)\b', re.I)
+
+
+def _spoken_seconds(value: Any) -> int:
+    """An episode's length as YouTube Music says it: "2 hr 43 min", or 1:02:03."""
+
+    found = _parse_duration(value)
+    if found or not isinstance(value, str):
+        return found
+    total = 0
+    for amount, unit in _SPOKEN.findall(value):
+        unit = unit.lower()
+        total += int(amount) * (3600 if unit.startswith('h') else 60 if unit.startswith('m') else 1)
+    return total
+
+
+def podcast(browse_id: str, limit: int = 100) -> dict[str, Any]:
+    """A podcast as a playlist of its episodes, the shape ``playlist`` gives.
+
+    *browse_id* is YouTube Music's (MPSP and the episodes' playlist id) or the
+    playlist id alone, as a youtube.com link has it.
+    """
+
+    bid = browse_id.strip()
+    if not bid.startswith('MPSP'):
+        bid = 'MPSP' + _clean_playlist_id(bid)
+    cache_key = f'podcast::{bid}::{limit}'
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    data = _ytm().get_podcast(bid, limit=limit)
+    cover = _thumb(data)
+    title = data.get('title') or ''
+    author = data.get('author') or {}
+    host = author.get('name', '') if isinstance(author, dict) else str(author or '')
+    tracks: list[dict[str, Any]] = []
+    for i, e in enumerate(data.get('episodes') or [], start=1):
+        vid = e.get('videoId') if isinstance(e, dict) else None
+        if not vid:
+            continue
+        tracks.append({
+            'song_id': vid,
+            'name': e.get('title', ''),
+            'artists': [title or host],
+            'artist_ids': [],
+            'album_name': title,
+            'album_id': '',
+            'video_id': vid,
+            'like_status': '',
+            'cover_url': _thumb(e) or cover,
+            'duration': _spoken_seconds(e.get('duration')),
+            'track_number': i,
+            'url': f'https://music.youtube.com/watch?v={vid}',
+            'source': 'youtube',
+            'podcast': True,
+        })
+    out = {
+        'type': 'playlist',
+        'podcast': True,
+        'browse_id': bid,
+        'name': title,
+        'cover_url': cover,
+        'description': data.get('description') or '',
+        'author': host,
+        'track_count': len(tracks),
+        'tracks': tracks,
+    }
+    _cache_put(cache_key, out)
+    return out
+
+
+def _folded(text: str) -> str:
+    return re.sub(r'[^\w]+', ' ', (text or '').casefold()).strip()
+
+
+def find_podcast(name: str) -> Optional[dict[str, Any]]:
+    """The podcast called *name* on YouTube Music: ``{browse_id, name}``, or None."""
+
+    want = _folded(name)
+    if not want:
+        return None
+    rows = [
+        r for r in _ytm().search(name, filter='podcasts', limit=10) or []
+        if isinstance(r, dict) and r.get('browseId')
+    ]
+    # The same name first; else one name the start of the other ("The Daily"
+    # and "The Daily (Podcast)"), never a word or two in common.
+    for close in (False, True):
+        for r in rows:
+            got = _folded(r.get('title', ''))
+            if got == want or (close and min(len(got), len(want)) >= 6 and (got.startswith(want) or want.startswith(got))):
+                return {'browse_id': r['browseId'], 'name': r.get('title', '')}
+    return None
+
+
+def find_episode(show: str, title: str) -> Optional[dict[str, Any]]:
+    """An episode of *show* called *title* on YouTube Music, as a song."""
+
+    want_show, want_title = _folded(show), _folded(title)
+    if not want_title:
+        return None
+    for r in _ytm().search(f'{show} {title}'.strip(), filter='episodes', limit=10) or []:
+        if not isinstance(r, dict) or not r.get('videoId'):
+            continue
+        pod = r.get('podcast') or {}
+        got_show = _folded(pod.get('name', '') if isinstance(pod, dict) else '')
+        got_title = _folded(r.get('title', ''))
+        same_show = not want_show or got_show == want_show or want_show in got_show or got_show in want_show
+        same_title = want_title in got_title or got_title in want_title
+        if same_show and same_title:
+            vid = r['videoId']
+            return {
+                'song_id': vid,
+                'video_id': vid,
+                'name': r.get('title', ''),
+                'artists': [pod.get('name', '') if isinstance(pod, dict) else show],
+                'album_name': pod.get('name', '') if isinstance(pod, dict) else show,
+                'cover_url': _thumb(r),
+                'duration': _spoken_seconds(r.get('duration')),
+                'url': f'https://music.youtube.com/watch?v={vid}',
+                'source': 'youtube',
+                'podcast': True,
+            }
+    return None
+
+
 def playlist(browse_id: str, limit: int = 200) -> dict[str, Any]:
     pid = _clean_playlist_id(browse_id)
+    if pid.startswith('MPSP'):
+        return podcast(pid, limit=min(limit, 100))
     cache_key = f'playlist::{pid}::{limit}'
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
-    data = _ytm().get_playlist(pid, limit=limit)
+    try:
+        data = _ytm().get_playlist(pid, limit=limit)
+    except KeyError:
+        # A podcast's episodes are a playlist YouTube Music will not open as
+        # one (a youtube.com link to a show): opened as the podcast it is.
+        if pid.startswith('PL'):
+            return podcast(pid, limit=min(limit, 100))
+        raise
     cover = _thumb(data)
     tracks: list[dict[str, Any]] = []
     for i, t in enumerate(data.get('tracks') or [], start=1):

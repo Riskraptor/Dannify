@@ -749,6 +749,8 @@ def link_page(url: str) -> dict[str, Any]:
     if parsed is None:
         raise ValueError('Not a Spotify link')
     kind, sid = parsed
+    if kind in ('episode', 'show'):
+        return _podcast_page(kind, sid)
     if kind not in ('track', 'album', 'playlist', 'artist'):
         raise Unsupported(kind)
     year = ''
@@ -788,6 +790,38 @@ def link_page(url: str) -> dict[str, Any]:
         'total': len(tracks),
         'duration': sum(int(t.get('duration') or 0) for t in tracks),
     }
+
+
+def _podcast_page(kind: str, sid: str) -> dict[str, Any]:
+    """A Spotify podcast or episode, as where it is on YouTube Music: the
+    show (``open: {kind: 'podcast', id}``) or the episode, to play
+    (``open: {kind: 'episode', song}``). Spotify's own audio is never used;
+    :class:`Unsupported` when YouTube Music does not have it."""
+
+    from . import explorer  # noqa: PLC0415
+
+    entity = _entity_from(_fetch_embed_json(kind, sid))
+    # A show's embed is its newest episode: the show's name is its subtitle.
+    show = entity.get('subtitle') if isinstance(entity.get('subtitle'), str) else ''
+    if kind == 'show' and not show:
+        show = entity.get('name') or ''
+    title = entity.get('name') or entity.get('title') or ''
+    page = {
+        'source': 'spotify',
+        'kind': kind,
+        'id': sid,
+        'url': f'https://open.spotify.com/{kind}/{sid}',
+        'title': show if kind == 'show' else title,
+        'subtitle': show,
+    }
+    if kind == 'episode':
+        song = explorer.find_episode(show, title)
+        if song:
+            return {**page, 'open': {'kind': 'episode', 'song': song}}
+    found = explorer.find_podcast(show)
+    if found:
+        return {**page, 'open': {'kind': 'podcast', 'id': found['browse_id']}}
+    raise Unsupported(kind)
 
 
 def resolve(url: str) -> Any:

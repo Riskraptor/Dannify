@@ -914,6 +914,8 @@ export default {
     downloadRemaining: 'Download {count} more',
     allInLibrary: 'All in your library',
     songCount: '{count} song | {count} songs',
+    episodeCount: '{count} episode | {count} episodes',
+    podcast: 'Podcast',
     back: 'Back',
     notFound: 'Nothing found.',
     artist: 'Artist',

@@ -256,6 +256,11 @@ async function load() {
   try {
     const res = await API.spotifyLink(url)
     if (mine !== token) return
+    // A podcast or an episode leads on to YouTube Music's own.
+    if (res.data && res.data.open) {
+      const { followPodcast } = await import('/src/model/links')
+      if (await followPodcast(res.data, { replace: true })) return
+    }
     page.value = res.data
     matches.value = new Array(res.data.tracks.length)
     matchingDone = matchAll(mine)

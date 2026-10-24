@@ -15,18 +15,66 @@ export async function openLink(text) {
   const link = parseLink(text)
   if (!link) return false
   if (link.source === 'spotify') {
-    if (link.kind === 'episode' || link.kind === 'show') {
-      toast(t('links.notMusic'), { icon: 'ph:microphone', key: 'link' })
-      return true
-    }
-    router.push({ name: 'Link', query: { url: link.url } })
+    if (link.kind === 'episode' || link.kind === 'show') await openPodcast(link)
+    else router.push({ name: 'Link', query: { url: link.url } })
     return true
   }
-  if (link.kind === 'playlist') router.push({ name: 'ExplorePlaylist', params: { id: link.id } })
+  if (link.kind === 'handle') await openHandle(link)
+  else if (link.kind === 'playlist') router.push({ name: 'ExplorePlaylist', params: { id: link.id } })
   else if (link.kind === 'album') router.push({ name: 'ExploreAlbum', params: { id: link.id } })
   else if (link.kind === 'artist') router.push({ name: 'ExploreArtist', params: { id: link.id } })
   else await playVideo(link)
   return true
+}
+
+// A Spotify podcast or episode: the same one on YouTube Music, since
+// Spotify's own audio is not Dannify's to play.
+async function openPodcast(link) {
+  toast(t('links.opening'), { icon: 'ph:microphone', key: 'link', timeout: 4000 })
+  try {
+    const res = await API.spotifyLink(link.url)
+    if (!(await followPodcast(res.data))) throw new Error('nothing to open')
+  } catch (err) {
+    const missing = err && err.response && err.response.status === 422
+    toast(missing ? t('links.notMusic') : t('links.failed'), {
+      tone: missing ? undefined : 'error',
+      icon: missing ? 'ph:microphone' : 'ph:link-break',
+      key: 'link',
+    })
+  }
+}
+
+/** Where a Spotify podcast link leads: its show, or its episode playing. */
+export async function followPodcast(page, { replace = false } = {}) {
+  const to = page && page.open
+  if (!to) return false
+  if (to.kind === 'podcast') {
+    const where = { name: 'ExplorePlaylist', params: { id: to.id } }
+    if (replace) router.replace(where)
+    else router.push(where)
+    return true
+  }
+  if (!to.song) return false
+  const { usePlayer, songToTrack } = await import('/src/model/player')
+  usePlayer().setPlaylist([songToTrack(to.song)], { startIndex: 0 })
+  toast(t('links.playing', { title: to.song.name || '' }), { icon: 'ph:play-fill', key: 'link' })
+  if (replace) router.back()
+  return true
+}
+
+// youtube.com/@name: the artist of that name on YouTube Music.
+async function openHandle(link) {
+  try {
+    const res = await API.exploreSearch(link.id, 5)
+    const artist = ((res.data && res.data.artists) || [])[0]
+    if (artist && artist.browse_id) {
+      router.push({ name: 'ExploreArtist', params: { id: artist.browse_id } })
+      return
+    }
+  } catch {
+    // searched for as words, below
+  }
+  router.push({ name: 'Search', params: { query: link.id } })
 }
 
 // A song by its YouTube link: played at once, with its title and artist.
