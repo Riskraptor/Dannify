@@ -11,6 +11,11 @@ set -euo pipefail
 DEB="$(realpath "$1")"
 USER_NAME="${SUDO_USER:-root}"
 export DEBIAN_FRONTEND=noninteractive
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+# The package seals its log; this run gives it a key of its own to read it
+# with (packaging/testlog.py).
+eval "$(python3 "$HERE/testlog.py" keys)"
+applog() { python3 "$HERE/testlog.py" open "$DATA/dannify.log"; }
 
 echo "== install"
 # A runner's package index can be days old, and apt then asks for versions
@@ -26,26 +31,26 @@ test -x /opt/dannify/jsruntime/dnfjs
 
 echo "== launch"
 DATA="$(sudo -u "$USER_NAME" mktemp -d)"
-sudo -u "$USER_NAME" env DANNIFY_DATA_DIR="$DATA" DANNIFY_KEYSTORE=file \
+sudo -u "$USER_NAME" env DANNIFY_DATA_DIR="$DATA" DANNIFY_KEYSTORE=file DANNIFY_LOG_KEY="$DANNIFY_LOG_KEY" \
   dbus-run-session -- xvfb-run -a dannify >"$DATA/stdout.txt" 2>&1 &
 for _ in $(seq 1 90); do
-  grep -q 'Application startup complete' "$DATA/dannify.log" 2>/dev/null && break
+  applog 2>/dev/null | grep -q 'Application startup complete' && break
   sleep 1
 done
-grep -q 'Application startup complete' "$DATA/dannify.log" || {
-  echo "the app did not start"; tail -n 40 "$DATA/dannify.log" "$DATA/stdout.txt" || true; exit 1; }
+applog | grep -q 'Application startup complete' || {
+  echo "the app did not start"; applog | tail -n 40 || true; tail -n 40 "$DATA/stdout.txt" || true; exit 1; }
 sleep 10
 pgrep -f /opt/dannify/app/desktop.py >/dev/null || { echo "the app did not stay up"; exit 1; }
 # A second launch hands over to the first instead of starting again.
-sudo -u "$USER_NAME" env DANNIFY_DATA_DIR="$DATA" timeout 20 dannify
+sudo -u "$USER_NAME" env DANNIFY_DATA_DIR="$DATA" DANNIFY_LOG_KEY="$DANNIFY_LOG_KEY" timeout 20 dannify
 test "$(pgrep -fc /opt/dannify/app/desktop.py)" = 1
-sudo -u "$USER_NAME" env DANNIFY_DATA_DIR="$DATA" dannify --quit
+sudo -u "$USER_NAME" env DANNIFY_DATA_DIR="$DATA" DANNIFY_LOG_KEY="$DANNIFY_LOG_KEY" dannify --quit
 QUIT_AT=$SECONDS
 for _ in $(seq 1 60); do pgrep -f /opt/dannify/app/desktop.py >/dev/null || break; sleep 1; done
 if pgrep -f /opt/dannify/app/desktop.py >/dev/null; then
-  echo "the app did not quit"; tail -n 25 "$DATA/dannify.log"; exit 1; fi
+  echo "the app did not quit"; applog | tail -n 25; exit 1; fi
 echo "quit in $((SECONDS - QUIT_AT)) s"
-if grep -E 'Traceback|CRITICAL' "$DATA/dannify.log"; then echo "errors in the log"; exit 1; fi
+if applog | grep -E 'Traceback|CRITICAL'; then echo "errors in the log"; exit 1; fi
 
 echo "== remove"
 apt-get remove -y -q dannify >/dev/null

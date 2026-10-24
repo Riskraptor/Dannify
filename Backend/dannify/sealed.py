@@ -21,6 +21,7 @@ import base64
 import hashlib
 import hmac
 import os
+import re
 import sys
 import threading
 from typing import Optional
@@ -155,13 +156,26 @@ def is_sealed(line: str) -> bool:
     return len(line) > 60 and line.startswith(MARK) and ' ' not in line
 
 
+def _shipped() -> bool:
+    # Windows and macOS run frozen; the Linux package runs its own Python,
+    # started by /usr/bin/dannify with DANNIFY_PACKAGED.
+    return bool(getattr(sys, 'frozen', False)) or os.getenv('DANNIFY_PACKAGED') == '1'
+
+
 def sealing() -> bool:
     """Whether this run's log is sealed: a shipped copy's always is."""
 
-    asked = os.getenv('DANNIFY_SEAL_LOGS', '').strip()
-    if asked in ('0', '1'):
-        return asked == '1' or bool(getattr(sys, 'frozen', False))
-    return bool(getattr(sys, 'frozen', False))
+    return os.getenv('DANNIFY_SEAL_LOGS', '').strip() == '1' or _shipped()
+
+
+def _public() -> bytes:
+    """Who the log is sealed for: the developer, or a test of a shipped copy
+    that gave a key of its own (packaging/testlog.py). Never no one."""
+
+    given = os.getenv('DANNIFY_LOG_KEY', '').strip()
+    if re.fullmatch(r'[0-9a-fA-F]{64}', given):
+        return bytes.fromhex(given)
+    return bytes.fromhex(LOG_PUBLIC)
 
 
 _lock = threading.Lock()
@@ -176,5 +190,5 @@ def line(text: str) -> str:
         return text
     with _lock:
         if _sealer is None:
-            _sealer = Sealer(bytes.fromhex(LOG_PUBLIC))
+            _sealer = Sealer(_public())
     return _sealer.seal(text)
