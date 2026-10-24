@@ -9,6 +9,7 @@ import App from './App.vue'
 import router from './router/index'
 import './model/theme'
 import { installShortcuts } from './desktop/shortcuts'
+import { installLinkPaste } from './model/links'
 import { installDesktopIntegration } from './desktop/integration'
 import { startArtAccent } from './model/artAccent'
 import { installErrorReporting } from './model/problems'
@@ -49,6 +50,7 @@ installErrorReporting(app)
 app.directive('overlay-scroll', vOverlayScroll)
 app.use(router)
 installShortcuts()
+installLinkPaste()
 installDesktopIntegration()
 // Drawn once the language it starts in has arrived: a moment for anything
 // but English, and no flash of English before it.

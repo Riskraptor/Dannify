@@ -1,5 +1,5 @@
 // English for the pages opened later: the lyrics editor, the stories, the
-// first-run setup and reports. A file of its own, read beside the app's start
+// first-run setup, reports and pasted links. A file of its own, read beside the app's start
 // rather than inside it, so the start has less to read; the window waits for
 // it before drawing (i18n/index.js), so these words are never missing.
 // Every other language keeps all its words in one file.
@@ -385,6 +385,46 @@ export default {
     accountNote: 'Optional. Everything else works without it.',
     doneTitle: "You're all set",
     doneText: 'Search for a song, an artist or a playlist to begin.',
+  },
+  links: {
+    open: {
+      spotify: {
+        track: 'Open this Spotify song',
+        album: 'Open this Spotify album',
+        playlist: 'Open this Spotify playlist',
+        artist: 'Open this Spotify artist',
+        episode: 'Open this Spotify link',
+        show: 'Open this Spotify link',
+      },
+      youtube: {
+        track: 'Play this YouTube song',
+        album: 'Open this YouTube Music album',
+        playlist: 'Open this YouTube playlist',
+        artist: 'Open this YouTube Music artist',
+      },
+    },
+    label: {
+      track: 'Spotify song',
+      album: 'Spotify album',
+      playlist: 'Spotify playlist',
+      artist: 'Spotify artist · Top songs',
+    },
+    notMusic: 'Spotify podcasts are not music, so Dannify does not open them.',
+    opening: 'Opening the link…',
+    playing: 'Playing {title}',
+    failed: 'That link could not be opened.',
+    loadFailed: 'This Spotify link could not be opened',
+    loadFailedText: 'Spotify did not answer as expected. Check the link, or try again in a moment.',
+    untitled: 'Spotify link',
+    fromSpotify: 'From Spotify',
+    finding: 'Finding these songs on YouTube Music… {done} of {total}',
+    foundSome: '{found} of {total} songs are ready to play',
+    allFound: 'Every song is ready to play',
+    notFoundTitle: 'Not on YouTube Music',
+    notFoundText: 'These could not be found, so they are left out.',
+    saveAsPlaylist: 'Save as a playlist',
+    saveSong: 'Save',
+    openInSpotify: 'Open in Spotify',
   },
   problems: {
     title: 'Report a problem',

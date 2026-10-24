@@ -21,6 +21,7 @@ const ExploreArtist = () => import('/src/views/ExploreArtist.vue')
 const ExploreCollection = () => import('/src/views/ExploreCollection.vue')
 const Settings = () => import('/src/views/Settings.vue')
 const Mood = () => import('/src/views/Mood.vue')
+const LinkPage = () => import('/src/views/LinkPage.vue')
 const Stats = () => import('/src/views/Stats.vue')
 const History = () => import('/src/views/History.vue')
 const Albums = () => import('/src/views/Albums.vue')
@@ -59,6 +60,7 @@ const routes = [
   },
   { path: '/settings', name: 'Settings', component: Settings },
   { path: '/browse/:params', name: 'Mood', component: Mood },
+  { path: '/link', name: 'Link', component: LinkPage },
   { path: '/:pathMatch(.*)*', redirect: { name: 'Home' } },
 ]
 

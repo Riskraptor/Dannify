@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from loguru import logger
 
 from .. import explorer
-from .. import spotify, streaming
+from .. import links, spotify, streaming
 
 router = APIRouter()
 
@@ -79,6 +79,39 @@ def preview_endpoint(url: str = Query(...)) -> dict[str, Any]:
         logger.exception('Preview failed for {}', url)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     raise HTTPException(status_code=400, detail=f'Unsupported type: {kind}')
+
+
+# ---------------------------------------------------------------------------
+# A pasted Spotify link: its page, then its songs made playable
+# ---------------------------------------------------------------------------
+
+
+@router.get('/api/links/spotify')
+async def spotify_link_endpoint(url: str = Query(..., max_length=500)) -> dict[str, Any]:
+    """A Spotify track, album, playlist or artist link as a page of songs
+    (spotify.link_page). 400 for what is not a Spotify link, 422 for one that
+    is not music, 502 when Spotify could not be read."""
+
+    if spotify.parse_spotify_url(url) is None:
+        raise HTTPException(status_code=400, detail='Not a Spotify link')
+    try:
+        return await asyncio.to_thread(spotify.link_page, url)
+    except spotify.Unsupported as exc:
+        raise HTTPException(status_code=422, detail=f'Spotify {exc} links are not music') from exc
+    except Exception as exc:
+        logger.opt(exception=True).info('Spotify link could not be read: {}', url)
+        raise HTTPException(status_code=502, detail='Spotify could not be read') from exc
+
+
+@router.post('/api/links/match')
+async def link_match_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """The same songs on YouTube Music, in order: ``{matches: [song|null]}``,
+    at most links.MATCH_BATCH at a time."""
+
+    tracks = payload.get('tracks')
+    if not isinstance(tracks, list):
+        raise HTTPException(status_code=400, detail='tracks must be a list')
+    return {'matches': await asyncio.to_thread(links.match, tracks)}
 
 
 # ---------------------------------------------------------------------------

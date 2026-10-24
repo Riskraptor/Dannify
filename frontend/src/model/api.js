@@ -147,6 +147,13 @@ function preview(url) {
   return API.get('/api/preview', { params: { url } })
 }
 
+// A pasted Spotify link as a page of songs, and those songs on YouTube Music.
+function spotifyLink(url) {
+  return API.get('/api/links/spotify', { params: { url }, timeout: 60000 })
+}
+function matchLinkSongs(tracks) {
+  return API.post('/api/links/match', { tracks }, { timeout: 90000 })
+}
 function resolveStream(url) {
   return API.get('/api/resolve', { params: { url } })
 }
@@ -587,6 +594,8 @@ export default {
   reportClientError,
   getReportStatus,
   getReportPreview,
+  spotifyLink,
+  matchLinkSongs,
   sendReport,
   holdReport,
   heldReports,
