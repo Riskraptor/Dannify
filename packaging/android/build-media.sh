@@ -52,10 +52,13 @@ case "$ABI" in
 esac
 CC="$TOOLS/${TRIPLE}${API}-clang"
 
+mkdir -p "$OUT/$ABI"
+# Where it goes, said in full: the build works in a folder of its own.
+OUT="$(cd "$OUT" && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 DEPS="$WORK/deps"
-mkdir -p "$DEPS" "$OUT/$ABI"
+mkdir -p "$DEPS"
 cd "$WORK"
 
 fetch() {  # url file sha256
@@ -88,7 +91,10 @@ sed -i '/lame_init_old/d' include/libmp3lame.sym
 sed -i 's/^\(\.nas\.l\?o\): \$< nasm\.h$/\1:/' libmp3lame/i386/Makefile.in
 sed -i 's/^if test ${cross_compiling} = "yes"; then$/if false; then/' configure
 # AR_FLAGS: ar ignores the 'u' in libtool's 'cru', and said so for each library.
-CC="$CC" AR="$TOOLS/llvm-ar" RANLIB="$TOOLS/llvm-ranlib" AR_FLAGS=cr \
+# Every tool named outright: the NDK's are not called after the host, and
+# configure warned about any it found only under its plain name.
+CC="$CC" AR="$TOOLS/llvm-ar" RANLIB="$TOOLS/llvm-ranlib" STRIP="$TOOLS/llvm-strip" \
+NM="$TOOLS/llvm-nm" OBJDUMP="$TOOLS/llvm-objdump" AR_FLAGS=cr \
 CFLAGS="$QUIET_CFLAGS" alex_cv_ieee854_float80=no \
 ./configure --host="$TRIPLE" --prefix="$DEPS" --enable-static --disable-shared \
     --disable-frontend --disable-decoder --disable-gtktest >/dev/null

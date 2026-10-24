@@ -71,6 +71,8 @@ jobs:
   media:
     runs-on: ubuntu-24.04
     strategy:
+      # One processor's build failing says nothing about the other's.
+      fail-fast: false
       matrix:
         abi: [arm64-v8a, x86_64]
     steps:
