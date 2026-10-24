@@ -60,6 +60,13 @@ _DAILY_UP_TO = 92
 _FORGOTTEN_AFTER_DAYS = 30
 _REDISCOVER_MIN_PLAYS = 3
 _REDISCOVER = 12
+# One sitting: songs that follow each other with no more than this between
+# the end of one and the start of the next.
+_SESSION_GAP = 10 * 60
+# A song played this many times in one day is "on repeat" that day.
+_REPEAT_MIN = 3
+# Songs first heard in the stretch, shown on the Stats page.
+_DISCOVERIES = 20
 
 
 def init(data_dir: Path) -> None:
@@ -459,6 +466,87 @@ def _ranked(songs, by_song, by_artist, by_album, top: int) -> tuple[list, list, 
     return top_songs, top_artists, top_albums
 
 
+def _highlights(chosen: list, plays: list, songs: dict, since: float) -> tuple[list, dict, list]:
+    """The week, the moments worth telling, and what was new, for a stretch.
+
+    ``(by_weekday, highlights, discoveries)``: seconds for each day of the
+    week (Monday first); the biggest day, the longest sitting, the song
+    played most in one day, the average day and how much was new; and the
+    songs first heard in the stretch, the most played first. Nothing is new
+    in "ever".
+    """
+
+    by_weekday = [0] * 7
+    by_day: dict[date, int] = {}
+    day_song: dict[tuple[date, str], int] = {}
+    for at, seconds, key in chosen:
+        day = date.fromtimestamp(at)
+        by_weekday[day.weekday()] += seconds
+        by_day[day] = by_day.get(day, 0) + seconds
+        day_song[(day, key)] = day_song.get((day, key), 0) + 1
+
+    best_day = None
+    if by_day:
+        day, seconds = max(by_day.items(), key=lambda kv: (kv[1], kv[0]))
+        best_day = {'date': day.isoformat(), 'seconds': seconds}
+
+    # The longest sitting: plays one after another, each starting no more
+    # than _SESSION_GAP after the one before ended.
+    session = None
+    start = end = heard = count = 0
+    for at, seconds, _key in chosen:
+        if count and at - end <= _SESSION_GAP:
+            heard += seconds
+            count += 1
+            end = max(end, at + seconds)
+        else:
+            start, end, heard, count = at, at + seconds, seconds, 1
+        if session is None or heard > session['seconds']:
+            session = {'start': start, 'seconds': heard, 'plays': count}
+
+    repeat = None
+    if day_song:
+        (day, key), n = max(day_song.items(), key=lambda kv: (kv[1], kv[0][0]))
+        if n >= _REPEAT_MIN:
+            repeat = {'date': day.isoformat(), 'plays': n, 'song': _entry(songs, key)}
+
+    new_songs = new_artists = 0
+    discoveries: list[dict[str, Any]] = []
+    if since:
+        first_song: dict[str, int] = {}
+        first_artist: dict[str, int] = {}
+        for at, _seconds, key in plays:
+            first_song.setdefault(key, at)
+            for name in songs.get(key, {}).get('artists') or []:
+                first_artist.setdefault(name.casefold().strip(), at)
+        fresh = {key for key, at in first_song.items() if at >= since}
+        new_songs = len(fresh)
+        new_artists = sum(1 for name, at in first_artist.items() if name and at >= since)
+        tally: dict[str, list[int]] = {}
+        for at, seconds, key in chosen:
+            if key in fresh:
+                t = tally.setdefault(key, [0, 0, 0])
+                t[0] += 1
+                t[1] += seconds
+                t[2] = max(t[2], at)
+        discoveries = [
+            _entry(songs, key, plays=n, seconds=secs, last=last)
+            for key, (n, secs, last) in sorted(tally.items(), key=lambda kv: (-kv[1][0], -kv[1][1], kv[0]))
+        ][:_DISCOVERIES]
+
+    active_days = len(by_day)
+    highlights = {
+        'best_day': best_day,
+        'session': session,
+        'repeat': repeat,
+        'active_days': active_days,
+        'per_day': round(sum(by_day.values()) / active_days) if active_days else 0,
+        'new_songs': new_songs,
+        'new_artists': new_artists,
+    }
+    return by_weekday, highlights, discoveries
+
+
 def stats(days: int = 0, top: int = 50, now: Optional[float] = None) -> dict[str, Any]:
     """What was listened to in the last *days* days (0: ever), summed up.
 
@@ -527,7 +615,9 @@ def stats(days: int = 0, top: int = 50, now: Optional[float] = None) -> dict[str
         previous = {
             'seconds': sum(p[1] for p in plays[lo:hi]),
             'plays': hi - lo,
+            'songs': len({p[2] for p in plays[lo:hi]}),
         }
+    by_weekday, highlights, discoveries = _highlights(chosen, plays, songs, since)
 
     current, longest = _streaks({date.fromtimestamp(p[0]) for p in plays}, today)
 
@@ -561,6 +651,9 @@ def stats(days: int = 0, top: int = 50, now: Optional[float] = None) -> dict[str
         'bucket': 'month' if monthly else 'day',
         'buckets': buckets,
         'by_hour': by_hour,
+        'by_weekday': by_weekday,
+        'highlights': highlights,
+        'discoveries': discoveries,
         'top_songs': top_songs,
         'top_artists': top_artists,
         'top_albums': top_albums,

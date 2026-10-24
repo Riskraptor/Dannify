@@ -121,6 +121,17 @@
           <p v-if="!data.plays" class="stats-none">{{ t('stats.emptyPeriod') }}</p>
 
           <template v-else>
+            <!-- What stood out: the biggest day, the longest sitting, an
+                 average day, what was new, and the song on repeat. -->
+            <section v-if="moments.length" class="moments" :aria-label="t('stats.highlights')">
+              <div v-for="m in moments" :key="m.id" class="moment" :class="`is-${m.id}`">
+                <span class="moment-icon"><Icon :icon="m.icon" class="h-4 w-4" /></span>
+                <p class="moment-label">{{ m.label }}</p>
+                <p class="moment-value" :title="m.value">{{ m.value }}</p>
+                <p class="moment-note">{{ m.note }}</p>
+              </div>
+            </section>
+
             <div class="charts">
               <section class="panel">
                 <h2 class="panel-title">{{ data.bucket === 'month' ? t('stats.byMonth') : t('stats.byDay') }}</h2>
@@ -143,6 +154,18 @@
                   :labels="hourLabels"
                   :label="t('stats.byHour')"
                   :columns="[t('stats.colHour'), t('stats.timeListened')]"
+                />
+              </section>
+              <section v-if="weekBars.length" class="panel">
+                <h2 class="panel-title">{{ t('stats.byWeekday') }}</h2>
+                <p v-if="weekPeak" class="panel-sub">{{ t('stats.byWeekdayPeak', { day: weekPeak }) }}</p>
+                <BarChart
+                  :height="132"
+                  :bars="weekBars"
+                  :scale="weekScale"
+                  :labels="weekLabels"
+                  :label="t('stats.byWeekday')"
+                  :columns="[t('stats.colWeekday'), t('stats.timeListened')]"
                 />
               </section>
             </div>
@@ -189,6 +212,53 @@
               </ol>
               <button v-if="songRows.length > FIRST" class="more-btn" @click="allSongs = !allSongs">
                 {{ allSongs ? t('explore.showLess') : t('home.showAll') }}
+              </button>
+            </section>
+
+            <!-- Songs heard for the first time in this stretch: to play again,
+                 or keep. Nothing is new in "ever". -->
+            <section v-if="newRows.length" class="top">
+              <header class="top-head">
+                <div class="min-w-0">
+                  <h2 class="top-title">{{ t('stats.newToYou') }}</h2>
+                  <p class="top-sub">{{ t('stats.newToYouText') }}</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button class="btn-ghost btn-pill h-8" @click="saveNew">
+                    <Icon icon="ph:playlist" class="h-4 w-4" />
+                    {{ t('playlists.saveQueue') }}
+                  </button>
+                  <button class="btn btn-pill h-8" @click="playRows(newRows, 0, { toggle: false })">
+                    <Icon icon="ph:play-fill" class="h-3.5 w-3.5" />
+                    {{ t('actions.play') }}
+                  </button>
+                </div>
+              </header>
+              <ol class="rank-list">
+                <li v-for="(row, i) in shownNew" :key="row.key">
+                  <div
+                    class="rank press"
+                    role="button"
+                    tabindex="0"
+                    :class="{ 'is-current': isRowCurrent(row), 'is-gone': row.gone }"
+                    :title="`${row.title}. ${row.artistText}`"
+                    @click="playRows(newRows, i)"
+                    @keydown.enter.prevent="playRows(newRows, i)"
+                    @contextmenu="openContextMenu($event, trackMenu([row], { source: newRows }))"
+                  >
+                    <span class="rank-n"><Icon icon="ph:sparkle-fill" class="ml-auto h-3.5 w-3.5 text-accent" /></span>
+                    <CoverImage :src="row.cover" radius="sm" :size="44" class="rank-cover" />
+                    <span class="rank-text">
+                      <span class="rank-title">{{ row.title }}</span>
+                      <span class="rank-sub">{{ row.artistText || t('common.unknownArtist') }}</span>
+                    </span>
+                    <span class="rank-plays">{{ t('stats.playCount', { count: row.plays }) }}</span>
+                    <span class="rank-time">{{ durationText(row.seconds, t) }}</span>
+                  </div>
+                </li>
+              </ol>
+              <button v-if="newRows.length > FIRST" class="more-btn" @click="allNew = !allNew">
+                {{ allNew ? t('explore.showLess') : t('home.showAll') }}
               </button>
             </section>
 
@@ -247,6 +317,7 @@ import {
   peakHour,
   timeScale,
 } from '/src/model/statsFormat'
+import { weekStart } from '/src/model/weekStart'
 import { useI18n } from '/src/i18n'
 import ViewHeader from '/src/components/ui/ViewHeader.vue'
 import EmptyState from '/src/components/ui/EmptyState.vue'
@@ -420,6 +491,98 @@ const songRows = computed(() => {
 const shownSongs = computed(() => (allSongs.value ? songRows.value : songRows.value.slice(0, FIRST)))
 const topPlays = computed(() => Math.max(1, ...songRows.value.map((r) => r.plays)))
 
+// ----- the moments -------------------------------------------------------
+function dayText(iso, options = { weekday: 'long', day: 'numeric', month: 'long' }) {
+  const [y, m, d] = String(iso || '').split('-').map(Number)
+  if (!y) return ''
+  return new Intl.DateTimeFormat(locale.value, options).format(new Date(y, (m || 1) - 1, d || 1))
+}
+const moments = computed(() => {
+  const h = data.value && data.value.highlights
+  if (!h) return []
+  const out = []
+  if (h.best_day && h.active_days > 1) {
+    out.push({ id: 'day', icon: 'ph:trophy-fill', label: t('stats.hlBestDay'), value: durationText(h.best_day.seconds, t), note: dayText(h.best_day.date) })
+  }
+  if (h.session && h.session.plays > 1) {
+    const date = dayText(localIso(h.session.start), { day: 'numeric', month: 'long' })
+    out.push({ id: 'session', icon: 'ph:headphones-fill', label: t('stats.hlSession'), value: durationText(h.session.seconds, t), note: t('stats.hlSessionNote', { count: h.session.plays, date }) })
+  }
+  if (h.per_day && h.active_days > 1) {
+    out.push({ id: 'average', icon: 'ph:calendar-check-fill', label: t('stats.hlAverage'), value: durationText(h.per_day, t), note: t('stats.hlActiveDays', { count: h.active_days }) })
+  }
+  if (h.new_songs) {
+    out.push({
+      id: 'new',
+      icon: 'ph:sparkle-fill',
+      label: t('stats.hlNew'),
+      value: t('stats.hlNewValue', { count: h.new_songs }),
+      note: h.new_artists ? t('stats.hlNewArtists', { count: h.new_artists }) : t('stats.hlNewKnown'),
+    })
+  }
+  if (h.repeat && h.repeat.song) {
+    out.push({
+      id: 'repeat',
+      icon: 'ph:repeat-fill',
+      label: t('stats.hlRepeat'),
+      value: h.repeat.song.title || '',
+      note: t('stats.hlRepeatNote', { count: h.repeat.plays, date: dayText(h.repeat.date, { day: 'numeric', month: 'long' }) }),
+    })
+  }
+  return out
+})
+// A time as the date it fell on here, "2026-10-14".
+function localIso(seconds) {
+  const d = new Date(seconds * 1000)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// ----- the week, in the order this listener's week runs ----------------------
+// 5 January 2026 was a Monday: day i of the server's week (Monday 0) is the
+// 5th plus i.
+function weekdayName(i, style) {
+  return new Intl.DateTimeFormat(locale.value, { weekday: style }).format(new Date(2026, 0, 5 + i))
+}
+const weekOrder = computed(() => Array.from({ length: 7 }, (_, i) => (weekStart.value + i) % 7))
+const weekBars = computed(() => {
+  const week = (data.value && data.value.by_weekday) || []
+  if (!week.some((s) => s > 0)) return []
+  return weekOrder.value.map((d) => ({
+    key: d,
+    value: week[d] || 0,
+    title: weekdayName(d, 'long'),
+    text: durationText(week[d] || 0, t),
+  }))
+})
+const weekScale = computed(() => timeScale(Math.max(0, ...((data.value && data.value.by_weekday) || [0])), t))
+const weekLabels = computed(() => weekOrder.value.map((d, index) => ({ index, text: weekdayName(d, 'short') })))
+const weekPeak = computed(() => {
+  const week = (data.value && data.value.by_weekday) || []
+  const most = Math.max(0, ...week)
+  return most > 0 ? weekdayName(week.indexOf(most), 'long') : ''
+})
+
+// ----- new to you ---------------------------------------------------------
+const allNew = ref(false)
+watch(days, () => {
+  allNew.value = false
+})
+const newRows = computed(() => {
+  void lib.tracks.value
+  return ((data.value && data.value.discoveries) || []).map((song, i) => ({
+    ...entryRow(song, i),
+    plays: song.plays,
+    seconds: song.seconds,
+  }))
+})
+const shownNew = computed(() => (allNew.value ? newRows.value : newRows.value.slice(0, FIRST)))
+function saveNew() {
+  const period = PERIODS.find((p) => p.days === days.value)
+  playlists.createPlaylist(newRows.value, {
+    name: t('stats.newPlaylistName', { period: t(period.label) }),
+  })
+}
+
 function onSongMenu(e, row) {
   openContextMenu(e, trackMenu([row], { source: songRows.value }))
 }
@@ -568,9 +731,12 @@ function openAlbum(a) {
 /* ----- the charts ----- */
 .charts {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   margin-top: 10px;
+}
+.charts > .panel:first-child {
+  grid-column: 1 / -1;
 }
 @container stats (max-width: 860px) {
   .charts {
@@ -613,6 +779,73 @@ function openAlbum(a) {
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.015em;
+}
+.top-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  color: rgb(var(--c-fg) / var(--fg-60));
+}
+
+/* ----- the moments ----- */
+.moments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.moment {
+  --m: var(--c-accent);
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgb(var(--c-tint) / 0.06);
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgb(var(--m) / 0.14), transparent 60%),
+    rgb(var(--c-raised));
+}
+.moment.is-day {
+  --m: 245 166 35;
+}
+.moment.is-session {
+  --m: 80 155 245;
+}
+.moment.is-average {
+  --m: 29 185 84;
+}
+.moment.is-new {
+  --m: 175 40 150;
+}
+.moment.is-repeat {
+  --m: 232 17 91;
+}
+.moment-icon {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  background: rgb(var(--m) / 0.18);
+  color: rgb(var(--m));
+}
+.moment-label {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--c-fg) / var(--fg-60));
+}
+.moment-value {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.moment-note {
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .rank-list {
   margin: 0;

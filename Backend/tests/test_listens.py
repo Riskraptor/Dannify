@@ -148,7 +148,7 @@ def test_stats_for_a_stretch_of_days_and_the_stretch_before():
         listens.record(song(3), 150, at(day, 9), now=NOW)
     got = listens.stats(days=7, now=NOW)
     assert (got['plays'], got['seconds'], got['songs']) == (4, 700, 2)
-    assert got['previous'] == {'seconds': 300, 'plays': 2}
+    assert got['previous'] == {'seconds': 300, 'plays': 2, 'songs': 1}
     assert [(s['title'], s['plays']) for s in got['top_songs']] == [('Song 1', 3), ('Song 2', 1)]
     assert got['top_songs'][0]['last'] == at(14, 9)
     # Everyone on a song is credited with it.
@@ -205,3 +205,44 @@ def test_rediscover_is_what_was_played_a_lot_and_then_not_for_a_while():
     assert [s['title'] for s in listens.stats(now=later)['rediscover']] == ['Song 1', 'Song 2']
     # Ten days on, nothing has been away for long enough.
     assert listens.stats(now=NOW + 10 * 86400)['rediscover'] == []
+
+
+def test_the_week_and_the_moments_of_a_stretch():
+    # Wednesday the 14th: three songs back to back, then Song 1 twice more
+    # after a long break. Tuesday the 13th: one.
+    listens.record(song(1), 200, at(14, 9, 0), now=NOW)
+    listens.record(song(2), 200, at(14, 9, 4), now=NOW)  # starts as Song 1 ends
+    listens.record(song(3), 200, at(14, 9, 15), now=NOW)  # 4 min after Song 2 ended
+    listens.record(song(1), 200, at(14, 15, 0), now=NOW)
+    listens.record(song(1), 200, at(14, 18, 0), now=NOW)
+    listens.record(song(4), 100, at(13, 20, 0), now=NOW)
+    got = listens.stats(days=7, now=NOW)
+    week = got['by_weekday']
+    assert week[2] == 1000 and week[1] == 100 and sum(week) == 1100  # Wednesday, Tuesday
+    h = got['highlights']
+    assert h['best_day'] == {'date': '2026-10-14', 'seconds': 1000}
+    assert h['session'] == {'start': at(14, 9, 0), 'seconds': 600, 'plays': 3}
+    assert h['repeat']['plays'] == 3 and h['repeat']['song']['title'] == 'Song 1'
+    assert h['repeat']['date'] == '2026-10-14'
+    assert h['active_days'] == 2 and h['per_day'] == 550
+
+
+def test_what_was_new_in_a_stretch_and_nothing_is_new_in_ever():
+    listens.record(song(1), 200, at(3, 9), now=NOW)  # heard before the week
+    listens.record(song(1), 200, at(14, 9), now=NOW)
+    listens.record(song(2, artists=['Bien']), 200, at(13, 9), now=NOW)
+    listens.record(song(2, artists=['Bien']), 200, at(14, 10), now=NOW)
+    listens.record(song(3), 100, at(14, 11), now=NOW)
+    got = listens.stats(days=7, now=NOW)
+    assert got['highlights']['new_songs'] == 2
+    assert got['highlights']['new_artists'] == 1, 'Bien is new; Sauti Sol is not'
+    assert [(d['title'], d['plays']) for d in got['discoveries']] == [('Song 2', 2), ('Song 3', 1)]
+    ever = listens.stats(now=NOW)
+    assert ever['discoveries'] == [] and ever['highlights']['new_songs'] == 0
+
+
+def test_no_moments_from_nothing():
+    got = listens.stats(days=7, now=NOW)
+    assert got['by_weekday'] == [0] * 7
+    assert got['highlights']['best_day'] is None and got['highlights']['session'] is None
+    assert got['highlights']['repeat'] is None and got['highlights']['per_day'] == 0
