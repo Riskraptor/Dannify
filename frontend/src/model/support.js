@@ -2,7 +2,7 @@ import { reactive, computed, ref } from 'vue'
 import API from '/src/model/api'
 import { desktop } from '/src/desktop/bridge'
 
-// Supporting the app: GitHub Sponsors, M-Pesa in Kenya (see Backend/dannify/
+// Supporting the app: GitHub Sponsors (see Backend/dannify/
 // support.py), on a page of their own in Settings, reachable from a small
 // button in the side bar at any time, and mentioned once in a while on Home,
 // never as a pop-up. Only after someone has really used the app (a week, and
@@ -18,7 +18,7 @@ const AFTER_PLAYS = 40
 const NOT_NOW_DAYS = 60
 const AFTER_GIVING_DAYS = 180
 
-const config = reactive({ configured: false, link: '', message: '', mpesa: {}, paypal_link: '', sponsors_link: '' })
+const config = reactive({ configured: false, link: '', message: '', paypal_link: '', sponsors_link: '' })
 /** PayPal's checkout is open in its window (the button says so). */
 export const checkingOut = ref(false)
 /** When someone last gave through the app: the page says thank you. */
@@ -146,15 +146,11 @@ export async function thank() {
   const [{ toast }, { t }] = await Promise.all([import('/src/model/toast'), import('/src/i18n')])
   toast(t('support.thanksToast'), { icon: 'ph:heart-fill', tone: 'success', timeout: 9000 })
 }
-export function gaveByMpesa() {
-  snooze(AFTER_GIVING_DAYS)
-}
-
 export function notNow() {
   snooze(NOT_NOW_DAYS)
 }
 
 export function useSupport() {
   loadSupport()
-  return { config, due, openSupport, notNow, giveByKofi, giveByPaypal, gaveByMpesa }
+  return { config, due, openSupport, notNow, giveByKofi, giveByPaypal }
 }

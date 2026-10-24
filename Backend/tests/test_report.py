@@ -73,7 +73,7 @@ def test_the_diagnostics_stay_small_dropping_the_oldest_logs_first(tmp_path):
 
 def test_what_the_person_typed_is_checked():
     assert report.clean_fields('The song stops after a minute', 'PLAYBACK', '') == {
-        'description': 'The song stops after a minute', 'category': 'playback', 'contact': ''}
+        'description': 'The song stops after a minute', 'category': 'playback', 'contact': '', 'context': ''}
     assert report.clean_fields('Something odd happens here', 'nonsense', 'me@example.com')['category'] == 'other'
     with pytest.raises(ValueError):
         report.clean_fields('short', 'other', '')
@@ -343,3 +343,68 @@ def test_an_email_the_window_could_not_send_waits_for_it(emailed, tmp_path, monk
     assert held[0]['access_key'] == 'test-access-key'  # the key the app has now
     asyncio.run(api.support_report_done_endpoint({'id': 'AB12CD34'}))
     assert report.pending(tmp_path) == 0
+
+
+# ---------------------------------------------------------------------------
+# Choosing what goes with it
+# ---------------------------------------------------------------------------
+
+
+def test_the_logs_go_only_when_chosen(receiver, tmp_path, monkeypatch):
+    (tmp_path / 'dannify.log').write_text('a line\n', encoding='utf-8')
+    monkeypatch.setattr(api.state, 'data_dir', tmp_path)
+    asyncio.run(api.support_report_send_endpoint({
+        'description': 'The song stops after a minute', 'category': 'playback', 'contact': '',
+        'include': {'about': True, 'errors': True, 'logs': False},
+    }))
+    files = _unzip(_Receiver.got[-1]['diagnostics'])
+    assert 'about.txt' in files
+    assert not any(name.startswith('logs/') for name in files)
+    asyncio.run(api.support_report_send_endpoint({
+        'description': 'The song stops after a minute', 'category': 'playback', 'contact': '',
+        'include': {'about': False, 'errors': False, 'logs': True},
+    }))
+    files = _unzip(_Receiver.got[-1]['diagnostics'])
+    assert 'logs/dannify.log' in files and 'about.txt' not in files
+
+
+def test_nothing_chosen_sends_no_diagnostics_at_all(receiver, tmp_path, monkeypatch):
+    (tmp_path / 'dannify.log').write_text('a line\n', encoding='utf-8')
+    monkeypatch.setattr(api.state, 'data_dir', tmp_path)
+    asyncio.run(api.support_report_send_endpoint({
+        'description': 'An idea for the queue page', 'category': 'idea', 'contact': '',
+        'include': {'about': False, 'errors': False, 'logs': False},
+    }))
+    assert 'diagnostics' not in _Receiver.got[-1]
+
+
+def test_only_a_plain_yes_counts():
+    assert report.chosen_parts({'include': {'about': 'yes', 'errors': 1, 'logs': True}}) == {
+        'about': False, 'errors': False, 'logs': True}
+    assert report.chosen_parts({}) == {'about': False, 'errors': False, 'logs': False}
+    assert report.chosen_parts({'include_diagnostics': True}) == {'about': True, 'errors': True, 'logs': True}
+
+
+def test_the_preview_shows_each_part_as_it_would_go(tmp_path, monkeypatch):
+    lines = [f'line {n} token=abc{n}' for n in range(100)]
+    (tmp_path / 'dannify.log').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    monkeypatch.setattr(api.state, 'data_dir', tmp_path)
+    monkeypatch.setattr(api.state, 'settings', {'theme': 'dark', 'yt_cookie': 'SAPISID=secret'})
+    out = asyncio.run(api.support_report_preview_endpoint())
+    assert 'theme' in out['about'] and 'yt_cookie' not in out['about'] and 'secret' not in out['about']
+    assert out['logs'] == [{'name': 'dannify.log', 'bytes': (tmp_path / 'dannify.log').stat().st_size}]
+    tail = out['logs_tail'].splitlines()
+    assert len(tail) == report.PREVIEW_LOG_LINES and tail[-1].startswith('line 99')
+    assert 'abc99' not in out['logs_tail'], 'scrubbed like what is sent'
+
+
+def test_the_song_playing_goes_with_it_when_given(emailed, tmp_path, monkeypatch):
+    monkeypatch.setattr(api.state, 'data_dir', tmp_path)
+    out = asyncio.run(api.support_report_send_endpoint({
+        'description': 'This song skips in the middle', 'category': 'playback', 'contact': '',
+        'context': '  Ma Cherie \n  Bien  ' + 'x' * 400, 'include': {},
+    }))
+    message = out['email']['message']
+    assert 'Playing: Ma Cherie Bien' in message
+    playing = next(line for line in message.splitlines() if line.startswith('Playing: '))
+    assert len(playing) <= len('Playing: ') + report.CONTEXT_MAX

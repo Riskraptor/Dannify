@@ -1,15 +1,15 @@
-"""Ways to support Dannify: GitHub Sponsors first, M-Pesa in Kenya, and
-Ko-fi and PayPal when they are set.
+"""Ways to support Dannify: GitHub Sponsors, and Ko-fi and PayPal only
+when they are set (neither is, since 4.14.1).
 
-Links opened in the user's browser, and an M-Pesa number to pay to from a
-phone. No keys, no checkout page, no card details anywhere near the app.
+Links opened in the user's browser. No keys, no card details anywhere near
+the app. M-Pesa was offered in Kenya in 4.14.0 and 4.14.1 and is gone.
 Set them in one of these, last one wins:
 
 * ``config/support.json`` next to the exe, shipped with the build;
 * ``support.json`` in the data folder, per user;
 * ``DANNIFY_SUPPORT_LINK`` / ``DANNIFY_SUPPORT_DISABLED`` in the environment.
 
-The PayPal link, the M-Pesa number, the Ko-fi page and the message can also
+The GitHub account, the PayPal link, the Ko-fi page and the message can also
 change between releases: ``config/support-live.json`` on the repository's main
 branch, signed with the release key (see ``accept_live`` and
 ``packaging/support_details.py``).
@@ -37,10 +37,6 @@ _DEFAULTS: dict[str, Any] = {
     # A page to give on (Ko-fi was the first): none since 4.14.1.
     'link': '',
     'message': '',
-    # Lipa na M-Pesa: {'kind': 'till' | 'paybill', 'number': '...',
-    # 'account': '...' (a paybill's account), 'name': '...' (as M-Pesa
-    # shows it, so the payer knows they have the right one)}.
-    'mpesa': {'kind': 'till', 'number': '8496746'},
     # A paypal.me name, or a PayPal payment link
     # (https://www.paypal.com/ncp/payment/...): none since 4.14.1.
     'paypal': '',
@@ -51,15 +47,17 @@ _config: dict[str, Any] = dict(_DEFAULTS)
 # ---------------------------------------------------------------------------
 # Changed without a release
 # ---------------------------------------------------------------------------
-# A signed file on the repository's main branch says what the PayPal link,
-# the M-Pesa number and the message are now. It is believed only when it
+# A signed file on the repository's main branch says what the GitHub account,
+# the PayPal link and the message are now. It is believed only when it
 # verifies against the release key's public half (updates.PUBLIC_KEY) and is
 # no older than the one already kept: neither a changed file nor an old one
 # put back can send anyone's money somewhere else. Kept in the data folder,
 # signature and all, so it holds offline and is checked again at every start.
 LIVE_NAME = 'support-live.json'
 LIVE_KIND = 'support'
-LIVE_FIELDS = ('paypal', 'mpesa', 'link', 'message', 'github')
+# Its "mpesa" is for copies from before M-Pesa was taken out (kept empty so
+# they show none); this one reads no such thing.
+LIVE_FIELDS = ('paypal', 'link', 'message', 'github')
 LIVE_EVERY = 12 * 3600
 _live: dict[str, Any] = {}
 _live_dir: Optional[Path] = None
@@ -247,26 +245,9 @@ def _sponsors_link() -> str:
 
 
 def configured() -> bool:
-    """Whether there is any way to give from anywhere (M-Pesa is Kenya only)."""
+    """Whether there is any way to give."""
 
     return bool(_config.get('enabled') and (_sponsors_link() or _link() or _paypal_link()))
-
-
-def _mpesa() -> dict[str, str]:
-    """The M-Pesa way to pay, checked: digits only, a kind M-Pesa has."""
-
-    current = _current()
-    raw = current.get('mpesa') or {}
-    if not isinstance(raw, dict) or not current.get('enabled'):
-        return {}
-    kind = str(raw.get('kind') or '').strip().lower()
-    number = re.sub(r'\D', '', str(raw.get('number') or ''))
-    if kind not in ('till', 'paybill') or not 5 <= len(number) <= 10:
-        return {}
-    out = {'kind': kind, 'number': number, 'name': str(raw.get('name') or '').strip()[:60]}
-    if kind == 'paybill':
-        out['account'] = re.sub(r'[^0-9A-Za-z -]', '', str(raw.get('account') or '')).strip()[:30]
-    return out
 
 
 def _paypal_link() -> str:
@@ -294,6 +275,5 @@ def config() -> dict[str, Any]:
         'link': _link(),
         'sponsors_link': _sponsors_link(),
         'message': str(_current().get('message') or '')[:300],
-        'mpesa': _mpesa(),
         'paypal_link': _paypal_link(),
     }

@@ -6,8 +6,6 @@
 
     python packaging/support_details.py [--github LOGIN] [--no-github]
                                         [--paypal LINK] [--no-paypal]
-                                        [--till NUMBER | --paybill NUMBER --account ACCOUNT]
-                                        [--mpesa-name NAME] [--no-mpesa]
                                         [--kofi LINK] [--message TEXT]
         Change them. The version goes up by one, the file is signed with the
         release key (DANNIFY_RELEASE_KEY, or ~/.dannify/release-signing.key,
@@ -15,11 +13,12 @@
         the app checks it. Then commit config/support-live.json and its .dsig
         to main (a pull request); copies take them within twelve hours.
 
+M-Pesa is gone from Dannify. The file always says so ("mpesa": {}), for the
+copies from before (4.14.0 and 4.14.1), which still read it.
+
 Examples:
     --paypal https://www.paypal.com/ncp/payment/PLB-XXXXXXXXXXXX
     --paypal mypaypalname                       (a paypal.me name)
-    --till 8496746
-    --paybill 247247 --account 0712345678
     --message "Thank you for keeping Dannify free!"
 """
 
@@ -62,21 +61,11 @@ def what_copies_show(raw: bytes, signature: str) -> dict | None:
 
 
 def describe(shown: dict, version: int) -> str:
-    mpesa = shown.get('mpesa') or {}
-    if mpesa.get('kind') == 'paybill':
-        m = f"paybill {mpesa['number']}, account {mpesa.get('account') or '(none)'}"
-    elif mpesa:
-        m = f"till {mpesa['number']}"
-    else:
-        m = '(not shown)'
-    if mpesa.get('name'):
-        m += f" ({mpesa['name']})"
     return '\n'.join(
         [
             f'  version  {version}',
             f"  GitHub   {shown.get('sponsors_link') or '(not shown)'}",
             f"  PayPal   {shown.get('paypal_link') or '(not shown)'}",
-            f'  M-PESA   {m}  (shown in Kenya only)',
             f"  Ko-fi    {shown.get('link') or '(not shown)'}",
             f"  message  {shown.get('message') or '(the built-in one)'}",
         ]
@@ -89,11 +78,6 @@ def main(argv: list[str]) -> int:
     ap.add_argument('--no-github', action='store_true')
     ap.add_argument('--paypal')
     ap.add_argument('--no-paypal', action='store_true')
-    ap.add_argument('--till')
-    ap.add_argument('--paybill')
-    ap.add_argument('--account')
-    ap.add_argument('--mpesa-name')
-    ap.add_argument('--no-mpesa', action='store_true')
     ap.add_argument('--kofi')
     ap.add_argument('--message')
     args = ap.parse_args(argv)
@@ -102,7 +86,7 @@ def main(argv: list[str]) -> int:
     sig_path = FILE.with_name(FILE.name + signing.SIGNATURE_SUFFIX)
     changing = any(
         v not in (None, False)
-        for v in (args.github, args.no_github, args.paypal, args.no_paypal, args.till, args.paybill, args.mpesa_name, args.no_mpesa, args.kofi, args.message)
+        for v in (args.github, args.no_github, args.paypal, args.no_paypal, args.kofi, args.message)
     )
     if not changing:
         if not FILE.is_file():
@@ -116,8 +100,6 @@ def main(argv: list[str]) -> int:
         print(describe(shown, details.get('version', 0)))
         return 0
 
-    if args.till and args.paybill:
-        raise SystemExit('a till or a paybill, not both')
     if args.github is not None:
         details['github'] = args.github.strip()
     if args.no_github:
@@ -126,15 +108,8 @@ def main(argv: list[str]) -> int:
         details['paypal'] = args.paypal.strip()
     if args.no_paypal:
         details['paypal'] = ''
-    if args.till or args.paybill:
-        mpesa = {'kind': 'till' if args.till else 'paybill', 'number': (args.till or args.paybill).strip()}
-        if args.paybill:
-            mpesa['account'] = (args.account or '').strip()
-        details['mpesa'] = mpesa
-    if args.mpesa_name is not None:
-        details.setdefault('mpesa', {})['name'] = args.mpesa_name.strip()
-    if args.no_mpesa:
-        details['mpesa'] = {}
+    # Copies from before M-Pesa was taken out read it: none, for good.
+    details['mpesa'] = {}
     if args.kofi is not None:
         details['link'] = args.kofi.strip()
     if args.message is not None:

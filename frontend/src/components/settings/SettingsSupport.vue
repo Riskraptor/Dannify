@@ -68,29 +68,9 @@
       </div>
     </article>
 
-    <!-- The other ways, side by side: M-PESA in Kenya only (where it is the
-         way to pay), and a page to give on when one is set. -->
-    <div v-if="(mpesa && inKenya) || support.link" class="sp-ways">
-      <div v-if="mpesa && inKenya" class="sp-way is-mpesa">
-        <span class="sp-way-mark is-mpesa-mark">M-PESA</span>
-        <p class="sp-way-name">Lipa na M-PESA</p>
-        <p class="sp-way-number">
-          <span>{{ mpesa.kind === 'paybill' ? t('support.mpesaBusinessLabel') : t('support.mpesaTillLabel') }}</span>
-          <b :aria-label="mpesa.number">{{ grouped(mpesa.number) }}</b>
-        </p>
-        <p v-if="mpesa.kind === 'paybill' && mpesa.account" class="sp-way-note">{{ t('support.mpesaAccountLabel') }} {{ mpesa.account }}</p>
-        <p class="sp-way-text">
-          {{ mpesa.kind === 'paybill' ? t('support.mpesaStep2Paybill') : t('support.mpesaStep2') }}
-          {{ t('support.mpesaLead') }}
-          <template v-if="mpesa.name">{{ t('support.mpesaName', { name: mpesa.name }) }}</template>
-        </p>
-        <button class="sp-way-btn press" @click="copyNumber">
-          <Icon :icon="copied ? 'ph:check-bold' : 'ph:copy'" class="h-3.5 w-3.5" />
-          {{ copied ? t('support.copied') : t('support.copyNumber') }}
-        </button>
-      </div>
-
-      <div v-if="support.link" class="sp-way is-kofi">
+    <!-- A page to give on, when one is set (none is). -->
+    <div v-if="support.link" class="sp-ways">
+      <div class="sp-way is-kofi">
         <span class="sp-way-mark"><Icon icon="ph:coffee-fill" class="h-6 w-6" /></span>
         <p class="sp-way-name">Ko-fi</p>
         <p class="sp-way-text">{{ t('support.kofiText') }}</p>
@@ -132,7 +112,6 @@
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { checkingOut, giveBySponsors, refreshSupport, thankedAt, useSupport } from '/src/model/support'
-import { region } from '/src/model/occasions'
 import { useReporting } from '/src/model/problems'
 import { useUpdates } from '/src/model/updates'
 import { copyText } from '/src/model/clipboard'
@@ -143,13 +122,11 @@ import { useI18n } from '/src/i18n'
 // cost nothing.
 const { t, locale } = useI18n()
 const Particles = defineAsyncComponent(() => import('/src/components/ui/Particles.vue'))
-const { config: support, giveByKofi, giveByPaypal, gaveByMpesa } = useSupport()
+const { config: support, giveByKofi, giveByPaypal } = useSupport()
 const reporting = useReporting()
 // The details as they are now: they can change between releases.
 onMounted(refreshSupport)
 const updates = useUpdates()
-
-const mpesa = computed(() => (support.mpesa && support.mpesa.number ? support.mpesa : null))
 
 // What the PayPal checkout offers (the payment link is made with these, in
 // USD), from a coffee to a hundred: chosen there.
@@ -165,24 +142,6 @@ function price(usd) {
 }
 // Thanked for a while after giving, then the page is as it was.
 const thanked = computed(() => thankedAt.value > 0 && Date.now() - thankedAt.value < 30 * 60 * 1000)
-// Where the app thinks it is (Settings, Special days): a Kenyan till is the
-// way to give in Kenya, and of no use anywhere else, so not shown there.
-const inKenya = computed(() => region.value === 'KE')
-
-// 8496746 reads as 849 6746, the way a number is read out and typed in.
-function grouped(number) {
-  const n = String(number || '')
-  return n.length > 4 ? `${n.slice(0, n.length - 4)} ${n.slice(-4)}` : n
-}
-
-const copied = ref(false)
-async function copyNumber() {
-  if (!mpesa.value) return
-  await copyText(mpesa.value.number)
-  copied.value = true
-  gaveByMpesa()
-  setTimeout(() => (copied.value = false), 2000)
-}
 const linkCopied = ref(false)
 async function copyLink() {
   await copyText(updates.siteUrl.value)
@@ -551,17 +510,6 @@ async function copyLink() {
 .sp-way.is-kofi {
   --way: 255 94 91;
 }
-.sp-way.is-mpesa {
-  --way: 0 166 81;
-}
-.sp-way-mark.is-mpesa-mark {
-  width: auto;
-  padding: 0 10px;
-  font-size: 13px;
-  font-weight: 900;
-  font-style: italic;
-  letter-spacing: 0.02em;
-}
 .sp-way-mark {
   display: grid;
   width: 44px;
@@ -580,27 +528,6 @@ async function copyLink() {
   font-size: 12.5px;
   line-height: 1.45;
   color: rgb(var(--c-fg) / var(--fg-60, 0.65));
-}
-.sp-way-number {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  font-size: 12px;
-  font-weight: 700;
-  color: rgb(var(--c-fg) / var(--fg-60, 0.65));
-}
-.sp-way-number b {
-  font-size: 22px;
-  font-weight: 900;
-  letter-spacing: 0.03em;
-  font-variant-numeric: tabular-nums;
-  color: rgb(var(--c-fg));
-}
-.sp-way-note {
-  font-size: 12px;
-  font-weight: 600;
-  color: rgb(var(--c-fg) / 0.8);
 }
 .sp-way-btn {
   display: inline-flex;

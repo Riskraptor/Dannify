@@ -90,7 +90,7 @@
                 class="rp-field rp-text"
                 rows="5"
                 :maxlength="5000"
-                :placeholder="category === 'idea' ? t('problems.ideaHint') : t('problems.whatHappenedHint')"
+                :placeholder="hint"
               />
               <p class="rp-count" :class="{ 'is-short': description.trim().length > 0 && !longEnough }">
                 {{ longEnough ? `${description.length} / 5000` : t('problems.tooShort') }}
@@ -112,20 +112,55 @@
               <!-- No person sees this, so no person fills it in (report.py). -->
               <input v-model="website" class="rp-trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
 
-              <label class="rp-check">
-                <input v-model="includeDiagnostics" type="checkbox" class="check" />
-                <span>{{ t('problems.includeDiagnostics') }}</span>
-              </label>
-              <button class="rp-what-in" type="button" @click="showWhat = !showWhat">
-                <Icon :icon="showWhat ? 'ph:caret-down' : 'ph:caret-right'" class="h-3 w-3" />
-                {{ t('problems.whatIsIncluded') }}
-              </button>
-              <ul v-if="showWhat" class="rp-list">
-                <li>{{ t('problems.inLogs') }}</li>
-                <li>{{ t('problems.inErrors') }}</li>
-                <li>{{ tp('problems.inAbout') }}</li>
-                <li class="rp-never">{{ t('problems.never') }}</li>
-              </ul>
+              <!-- What goes with it, chosen one by one. The logs are the most
+                   detailed and the least often needed: off unless asked for.
+                   An idea needs none of it. -->
+              <section v-if="category !== 'idea'" class="rp-with" :aria-label="t('problems.withIt')">
+                <p class="rp-label">{{ t('problems.withIt') }}</p>
+                <label v-if="song" class="rp-part">
+                  <Icon icon="ph:music-notes" class="rp-part-icon h-4 w-4" />
+                  <span class="rp-part-text">
+                    <b>{{ t('problems.partSong') }}</b>
+                    <small dir="auto">{{ song }}</small>
+                  </span>
+                  <input v-model="includeSong" type="checkbox" class="switch" />
+                </label>
+                <label v-for="part in PARTS" :key="part.id" class="rp-part">
+                  <Icon :icon="part.icon" class="rp-part-icon h-4 w-4" />
+                  <span class="rp-part-text">
+                    <b>{{ t(part.label) }}</b>
+                    <small>{{ partText(part.id) }}</small>
+                  </span>
+                  <input v-model="parts[part.id]" type="checkbox" class="switch" />
+                </label>
+
+                <button class="rp-what-in" type="button" :aria-expanded="showWhat ? 'true' : 'false'" @click="showWhat = !showWhat">
+                  <Icon :icon="showWhat ? 'ph:caret-down' : 'ph:caret-right'" class="h-3 w-3" />
+                  {{ t('problems.seeWhat') }}
+                </button>
+                <div v-if="showWhat" class="rp-preview">
+                  <div class="seg" role="tablist">
+                    <button
+                      v-for="part in PARTS"
+                      :key="part.id"
+                      class="seg-item"
+                      role="tab"
+                      :class="{ 'is-active': previewTab === part.id }"
+                      :aria-selected="previewTab === part.id ? 'true' : 'false'"
+                      @click="previewTab = part.id"
+                    >
+                      {{ t(part.label) }}
+                      <Icon v-if="!parts[part.id]" icon="ph:prohibit" class="h-3 w-3 opacity-60" :title="t('problems.notSent')" />
+                    </button>
+                  </div>
+                  <p v-if="!parts[previewTab]" class="rp-preview-off">{{ t('problems.notSent') }}</p>
+                  <pre class="rp-pre" :class="{ 'is-off': !parts[previewTab] }">{{ previewText }}</pre>
+                </div>
+                <p class="rp-never">
+                  <Icon icon="ph:lock-simple" class="h-3.5 w-3.5 shrink-0" />
+                  {{ t('problems.never') }}
+                </p>
+              </section>
 
               <p v-if="error" class="rp-error">
                 <Icon icon="ph:warning" class="h-4 w-4" />
@@ -170,9 +205,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
+import API from '/src/model/api'
 import { useReporting } from '/src/model/problems'
+import { usePlayer } from '/src/model/player'
 import HCaptchaBox from '/src/components/ui/HCaptchaBox.vue'
 import { rememberFocus } from '/src/model/focusTrap'
 import { useI18n } from '/src/i18n'
@@ -198,12 +235,51 @@ const kinds = [
   { id: 'other', icon: 'ph:chat-circle-dots', label: 'problems.kindOther' },
 ]
 
+// What can go with a report (report.py PARTS), each chosen on its own.
+const PARTS = [
+  { id: 'about', icon: 'ph:info', label: 'problems.partAbout' },
+  { id: 'errors', icon: 'ph:bug', label: 'problems.partErrors' },
+  { id: 'logs', icon: 'ph:list-bullets', label: 'problems.partLogs' },
+]
+const HINTS = {
+  idea: 'problems.ideaHint',
+  playback: 'problems.hintPlayback',
+  downloads: 'problems.hintDownloads',
+  lyrics: 'problems.hintLyrics',
+  looks: 'problems.hintLooks',
+  crash: 'problems.hintCrash',
+}
+// What was written and not sent yet, and the address to reply to: kept on
+// this computer, so closing the window, or the app, loses nothing.
+const DRAFT_KEY = 'dannify-report-draft'
+const CONTACT_KEY = 'dannify-report-contact'
+
+function readStore(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || 'null')
+  } catch {
+    return null
+  }
+}
+function writeStore(key, value) {
+  try {
+    if (value == null) localStorage.removeItem(key)
+    else localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Storage that throws: kept for this time only.
+  }
+}
+
+const player = usePlayer()
 const category = ref('playback')
 const website = ref('')
 const description = ref('')
-const contact = ref('')
-const includeDiagnostics = ref(true)
+const contact = ref(String(readStore(CONTACT_KEY) || ''))
+const parts = reactive({ about: true, errors: true, logs: false })
+const includeSong = ref(true)
 const showWhat = ref(false)
+const previewTab = ref('about')
+const preview = ref(null)
 const sending = ref(false)
 const error = ref('')
 const result = ref(null)
@@ -219,6 +295,46 @@ const knobX = ref(0)
 const dragging = ref(false)
 const travel = computed(() => (track.value ? track.value.clientWidth - KNOB - 8 : 200))
 
+const hint = computed(() => t(HINTS[category.value] || 'problems.whatHappenedHint'))
+const song = computed(() => {
+  const track = player.currentTrack.value
+  if (!track || !track.title) return ''
+  return track.artist ? `${track.title} \u2014 ${track.artist}` : String(track.title)
+})
+
+function size(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+function partText(id) {
+  const p = preview.value
+  if (id === 'about') return tp('problems.inAbout')
+  if (id === 'errors') return p ? t('problems.partErrorsCount', { count: p.errors }) : t('problems.partErrorsText')
+  const bytes = p ? p.logs.reduce((sum, l) => sum + (l.bytes || 0), 0) : 0
+  return bytes ? t('problems.partLogsSize', { size: size(bytes) }) : t('problems.partLogsText')
+}
+const previewText = computed(() => {
+  const p = preview.value
+  if (!p) return '\u2026'
+  if (previewTab.value === 'about') return p.about
+  if (previewTab.value === 'errors') return p.errors_text || t('problems.noneYet')
+  return p.logs_tail || t('problems.noneYet')
+})
+
+function loadPreview() {
+  API.getReportPreview()
+    .then((res) => {
+      preview.value = res.data || null
+    })
+    .catch(() => {})
+}
+
+// The draft as it is typed, so nothing written is lost.
+watch([category, description], ([kind, text]) => {
+  if (!open.value || result.value || keptEmail.value) return
+  writeStore(DRAFT_KEY, text.trim() ? { category: kind, description: text } : null)
+})
+
 const longEnough = computed(() => description.value.trim().length >= 10)
 const contactOk = computed(
   () => !contact.value.trim() || /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(contact.value.trim())
@@ -227,6 +343,7 @@ const contactOk = computed(
 // challenge (when there is one) in the middle of the window.
 const captchaKey = computed(() => (reporting.status.captcha && reporting.status.captcha.sitekey) || '')
 const captchaBox = ref(null)
+const idea = computed(() => category.value === 'idea')
 const canSend = computed(() => !sending.value && (keptEmail.value ? true : longEnough.value && contactOk.value))
 
 // Immediate as well: the dialog is loaded the first time it is opened, by
@@ -239,7 +356,17 @@ watch(
     result.value = null
     error.value = ''
     knobX.value = 0
+    showWhat.value = false
+    // Each time: the logs stay off unless asked for this time.
+    Object.assign(parts, { about: true, errors: true, logs: false })
+    includeSong.value = true
+    const draft = readStore(DRAFT_KEY)
+    if (!description.value && draft && typeof draft.description === 'string') {
+      description.value = draft.description
+      if (draft.category) category.value = draft.category
+    }
     if (reporting.kind.value) category.value = reporting.kind.value
+    loadPreview()
     await nextTick()
     if (keptEmail.value) box.value && box.value.querySelector('.rp-slide-knob') && box.value.querySelector('.rp-slide-knob').focus()
     else what.value && what.value.focus()
@@ -255,8 +382,8 @@ function close() {
   // Written and not sent is kept for next time; sent is cleared.
   if (result.value) {
     description.value = ''
-    contact.value = ''
     category.value = 'playback'
+    writeStore(DRAFT_KEY, null)
   }
   if (giveBack) setTimeout(giveBack, 0)
 }
@@ -292,11 +419,15 @@ async function submit() {
         category: category.value,
         description: description.value,
         contact: contact.value.trim(),
-        include_diagnostics: includeDiagnostics.value,
+        include: idea.value ? { about: false, errors: false, logs: false } : { ...parts },
+        context: !idea.value && includeSong.value ? song.value : '',
         website: website.value,
       },
       captcha
     )
+    // The address, for next time: a reply goes to the same place.
+    if (!keptEmail.value) writeStore(CONTACT_KEY, contact.value.trim() || null)
+    writeStore(DRAFT_KEY, null)
     await nextTick()
     doneBtn.value && doneBtn.value.focus()
   } catch (err) {
@@ -506,31 +637,93 @@ function onKey(e) {
   overflow-wrap: anywhere;
   color: rgb(var(--c-fg) / 0.88);
 }
-.rp-check {
+.rp-with {
+  margin-top: 4px;
+}
+.rp-part {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 16px;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--c-tint) / 0.1);
+  background: rgb(var(--c-tint) / 0.03);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+.rp-part:hover {
+  background: rgb(var(--c-tint) / 0.06);
+}
+.rp-part:has(.switch:checked) {
+  border-color: rgb(var(--c-accent) / 0.35);
+}
+.rp-part-icon {
+  flex-shrink: 0;
+  color: rgb(var(--c-fg) / 0.55);
+}
+.rp-part-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+.rp-part-text b {
   font-size: 13px;
+  font-weight: 650;
+}
+.rp-part-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .rp-what-in {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin: 6px 0 0 28px;
+  margin: 10px 0 0 2px;
   font-size: 12px;
   font-weight: 600;
   color: rgb(var(--c-accent));
 }
-.rp-list {
-  margin: 6px 0 0 44px;
-  list-style: disc;
-  font-size: 12px;
-  line-height: 1.7;
+.rp-preview {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgb(var(--c-tint) / 0.05);
+}
+.rp-preview-off {
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
   color: rgb(var(--c-fg) / var(--fg-60));
 }
+.rp-pre {
+  max-height: 180px;
+  margin-top: 8px;
+  overflow: auto;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: rgb(var(--c-fg) / 0.8);
+}
+.rp-pre.is-off {
+  opacity: 0.45;
+}
 .rp-never {
-  color: rgb(var(--c-fg) / 0.78);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: rgb(var(--c-fg) / var(--fg-60));
 }
 .rp-error {
   display: flex;

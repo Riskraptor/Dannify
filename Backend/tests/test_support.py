@@ -19,11 +19,11 @@ def _with(**values):
     return support.config()
 
 
-def test_github_sponsors_and_the_mpesa_till_by_default():
+def test_github_sponsors_only_by_default():
     out = _with()
     assert out['configured'] and out['sponsors_link'] == 'https://github.com/sponsors/Riskraptor'
-    assert out['mpesa'] == {'kind': 'till', 'number': '8496746', 'name': ''}
-    # PayPal and Ko-fi are no longer offered unless set.
+    # M-Pesa is gone; PayPal and Ko-fi are not offered unless set.
+    assert 'mpesa' not in out
     assert out['paypal_link'] == '' and out['link'] == ''
 
 
@@ -37,17 +37,8 @@ def test_nothing_to_give_with_from_anywhere_is_not_configured():
     assert not _with(github='', link='', paypal='')['configured']
 
 
-def test_an_mpesa_till_and_a_paybill():
-    till = _with(mpesa={'kind': 'Till', 'number': '123 456', 'name': 'Dannify'})['mpesa']
-    assert till == {'kind': 'till', 'number': '123456', 'name': 'Dannify'}
-    paybill = _with(mpesa={'kind': 'paybill', 'number': '247247', 'account': '0712<script>'})['mpesa']
-    assert paybill['kind'] == 'paybill' and paybill['account'] == '0712script'
-
-
-def test_an_mpesa_that_is_not_one_is_left_out():
-    assert _with(mpesa={'kind': 'send money', 'number': '0712345678'})['mpesa'] == {}
-    assert _with(mpesa={'kind': 'till', 'number': '12'})['mpesa'] == {}
-    assert _with(mpesa='0712345678')['mpesa'] == {}
+def test_an_mpesa_number_set_anywhere_is_not_shown():
+    assert 'mpesa' not in _with(mpesa={'kind': 'till', 'number': '8496746'})
 
 
 def test_a_paypal_payment_link_is_kept_as_it_is():
@@ -63,6 +54,6 @@ def test_paypal_by_name_or_by_link():
 
 
 def test_turned_off_offers_nothing():
-    out = _with(enabled=False, paypal='dkavangi', mpesa={'kind': 'till', 'number': '123456'})
-    assert not out['configured'] and out['mpesa'] == {} and out['paypal_link'] == ''
+    out = _with(enabled=False, paypal='dkavangi')
+    assert not out['configured'] and out['paypal_link'] == ''
     assert out['sponsors_link'] == ''

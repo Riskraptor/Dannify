@@ -258,9 +258,6 @@
         <div class="min-w-0 flex-1">
           <p class="give-title">{{ t('support.nudgeTitle') }}</p>
           <p class="give-text">{{ support.config.message || t('support.nudgeText') }}</p>
-          <p v-if="region === 'KE' && support.config.mpesa && support.config.mpesa.number" class="give-till">
-            <b>M-PESA</b> {{ t('support.mpesaChip', { number: support.config.mpesa.number }) }}
-          </p>
         </div>
         <div class="give-actions">
           <button class="btn-ghost btn-pill h-8 px-3 text-xs" @click="support.notNow()">
@@ -296,7 +293,7 @@ import { useI18n } from '/src/i18n'
 import { useSupport } from '/src/model/support'
 import { listensEpoch } from '/src/model/listens'
 import { mixCovers, MIXES, useMixes } from '/src/model/mixes'
-import { loadCalendar, region, today, toneOf, wordsFor } from '/src/model/occasions'
+import { loadCalendar, today, toneOf, wordsFor } from '/src/model/occasions'
 // Only on a special day: fetched then.
 const Particles = defineAsyncComponent(() => import('/src/components/ui/Particles.vue'))
 import Shelf from '/src/components/ui/Shelf.vue'
@@ -567,26 +564,6 @@ function submitWelcome() {
 </script>
 
 <style scoped>
-.give-till {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  padding: 3px 10px 3px 4px;
-  border-radius: 999px;
-  background: rgb(0 166 81 / 0.14);
-  color: rgb(var(--c-fg));
-  font-size: 12px;
-  font-weight: 700;
-}
-.give-till b {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: #00a651;
-  color: #fff;
-  font-style: italic;
-  font-weight: 900;
-}
 .welcome {
   position: relative;
   display: flex;

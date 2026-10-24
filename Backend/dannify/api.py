@@ -49,6 +49,7 @@ from .routes.system import (  # noqa: F401  (used through api.<name>)
     support_report_done_endpoint,
     support_report_held_endpoint,
     support_report_hold_endpoint,
+    support_report_preview_endpoint,
     support_report_send_endpoint,
     support_report_status_endpoint,
 )

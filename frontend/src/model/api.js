@@ -247,6 +247,9 @@ function reportClientError(payload) {
 function getReportStatus() {
   return API.get('/api/support/report/status')
 }
+function getReportPreview() {
+  return API.get('/api/support/report/preview')
+}
 function sendReport(payload) {
   return API.post('/api/support/report/send', payload, { timeout: 90000 })
 }
@@ -583,6 +586,7 @@ export default {
   getAlbum,
   reportClientError,
   getReportStatus,
+  getReportPreview,
   sendReport,
   holdReport,
   heldReports,
