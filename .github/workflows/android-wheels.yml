@@ -1,0 +1,63 @@
+# The one library Dannify's backend needs that nobody publishes for Android:
+# pydantic-core (Rust). Built here with cibuildwheel for the Python the
+# Android app embeds (Chaquopy), for phones (arm64-v8a) and the emulator
+# (x86_64). Everything else the backend uses is pure Python.
+#
+# The wheels only change with pydantic-core's version, which follows
+# Backend/requirements.txt; android/wheels.txt names what to build.
+name: Android wheels
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - android/wheels.txt
+      - .github/workflows/android-wheels.yml
+
+permissions:
+  contents: read
+
+# actions/checkout makes the repository with `git init`, and git then printed
+# a hint about the name of the first branch in every job.
+env:
+  GIT_CONFIG_COUNT: 1
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  pydantic-core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: What to build
+        id: want
+        run: echo "spec=$(grep -E '^pydantic-core==' android/wheels.txt)" >> "$GITHUB_OUTPUT"
+      - name: Rust, for Android
+        run: rustup target add aarch64-linux-android x86_64-linux-android
+      - name: The source
+        run: |
+          python -m pip download --quiet --no-binary :all: --no-deps "${{ steps.want.outputs.spec }}" -d sdist
+          mkdir src && tar -xzf sdist/*.tar.gz -C src --strip-components 1
+      - name: Build
+        env:
+          CIBW_PLATFORM: android
+          CIBW_BUILD: cp314-*
+          CIBW_ARCHS: arm64_v8a x86_64
+          CIBW_BUILD_FRONTEND: build
+          # Its tests need pydantic itself and an emulator; the app's own tests
+          # on a phone are what count.
+          CIBW_TEST_SKIP: '*'
+        run: pipx run cibuildwheel==4.3.4 src --output-dir wheels
+      - name: Check
+        run: |
+          ls -la wheels
+          test "$(ls wheels/*android*arm64_v8a.whl | wc -l)" = 1
+          test "$(ls wheels/*android*x86_64.whl | wc -l)" = 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-wheels
+          path: wheels/*.whl
+          if-no-files-found: error
