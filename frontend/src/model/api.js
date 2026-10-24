@@ -401,6 +401,9 @@ function getSupportConfig() {
 function netCheck() {
   return API.get('/api/net', { timeout: 8000 })
 }
+function getLive() {
+  return API.get('/api/live')
+}
 function checkForUpdate(force = false) {
   return API.get('/api/update/check', { params: { force: force ? 1 : 0 } })
 }
@@ -657,6 +660,7 @@ export default {
   // support + updates
   getSupportConfig,
   checkForUpdate,
+  getLive,
   netCheck,
   downloadUpdate,
   updateStatus,

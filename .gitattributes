@@ -18,3 +18,4 @@
 
 # Signed byte for byte (config/README.md): never converted.
 config/support-live.json -text
+config/live.json -text

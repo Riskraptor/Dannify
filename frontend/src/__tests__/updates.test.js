@@ -289,3 +289,39 @@ describe('installing on each system', () => {
     expect(desktop.installUpdate).not.toHaveBeenCalled()
   })
 })
+
+describe('fixes that cannot wait', () => {
+  it('says a fix build as the release it puts right', async () => {
+    const { versionLabel } = await import('../model/updates.js')
+    expect(versionLabel('4.15.0.1')).toBe('update.fixLabel {"version":"4.15.0","n":1}')
+    expect(versionLabel('4.15.0')).toBe('4.15.0')
+    expect(versionLabel('4.15.0.0')).toBe('4.15.0.0')
+  })
+
+  it('an important fix is looked for at once, and offered plainly', async () => {
+    const { confirmDialog } = await import('/src/model/dialog')
+    confirmDialog.mockClear()
+    api.getLive = vi.fn(() =>
+      Promise.resolve({ data: { emergency: { version: '4.15.0.1', notes: { en: 'Songs play again' } } } })
+    )
+    api.checkForUpdate.mockResolvedValue({
+      data: { available: true, version: '4.15.0.1', package_url: 'p', self_update: true },
+    })
+    api.downloadUpdate.mockResolvedValue({ data: { path: 'staged', kind: 'staged' } })
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(api.checkForUpdate).toHaveBeenCalledWith(true)
+    expect(confirmDialog).toHaveBeenCalledTimes(1)
+    expect(confirmDialog.mock.calls[0][0].message).toBe('Songs play again')
+    await vi.advanceTimersByTimeAsync(10)
+    expect(api.downloadUpdate).toHaveBeenCalled()
+    delete api.getLive
+  })
+
+  it('a notice is said once', async () => {
+    api.getLive = vi.fn(() => Promise.resolve({ data: { notice: { id: 'outage-1', text: { en: 'YouTube is down' } } } }))
+    await vi.advanceTimersByTimeAsync(6000)
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000)
+    expect(toasts.filter((x) => x.msg === 'YouTube is down')).toHaveLength(1)
+    delete api.getLive
+  })
+})

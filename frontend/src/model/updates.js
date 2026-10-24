@@ -20,6 +20,19 @@ import { restartKindly } from '/src/model/restart'
 
 const SKIP_KEY = 'dannify-skipped-update'
 const AUTO_KEY = 'dannify-auto-update'
+const NOTICES_KEY = 'dannify-notices-seen'
+
+/**
+ * How a version is said. A fix build has a fourth number (4.15.0.1): it is
+ * the same release, put right, and reads that way ("4.15.0 · fix 1").
+ */
+export function versionLabel(version) {
+  const parts = String(version || '').replace(/^v/i, '').split('.')
+  if (parts.length === 4 && /^\d+$/.test(parts[3]) && Number(parts[3]) > 0) {
+    return t('update.fixLabel', { version: parts.slice(0, 3).join('.'), n: Number(parts[3]) })
+  }
+  return String(version || '')
+}
 
 function read(key, fallback) {
   try {
@@ -56,6 +69,11 @@ const stageBytes = ref({ done: 0, total: 0 })
 const installerPath = ref('')
 const updateKind = ref('installer')
 const lastError = ref('')
+// When a check last came back (ms), for "checked 2 minutes ago".
+const checkedAt = ref(0)
+// An important fix for this version, from the signed live file (live.py):
+// { version, notes }. It is fetched and offered without waiting.
+const emergency = ref(null)
 // Whether a check has actually come back this session. Until one has, "up to
 // date" is not something anybody knows: it was shown all the same, offline.
 const checkedOk = ref(false)
@@ -132,7 +150,10 @@ async function check(force = false, { quiet = true } = {}) {
     // same version must not hide the "restart to update" button.
     info.value = { ...fresh, available: !!fresh.available || (ready.value && fresh.version === info.value.version) }
     lastError.value = fresh.error || ''
-    if (!fresh.error) checkedOk.value = true
+    if (!fresh.error) {
+      checkedOk.value = true
+      checkedAt.value = Date.now()
+    }
     if (!quiet && !info.value.available) {
       toast(t('update.upToDate', { version: fresh.current || '' }), {
         icon: 'ph:check-circle',
@@ -355,7 +376,9 @@ async function tryAutoDownload() {
   } catch {
     // Player not up yet; treat that as quiet.
   }
-  if (playing && Date.now() - (deferredSince || (deferredSince = Date.now())) < MAX_DEFER) {
+  // An important fix does not wait for the song to end.
+  const urgent = !!emergency.value && emergency.value.version === info.value.version
+  if (!urgent && playing && Date.now() - (deferredSince || (deferredSince = Date.now())) < MAX_DEFER) {
     autoTimer = setTimeout(tryAutoDownload, 90_000)
     return
   }
@@ -371,10 +394,74 @@ async function tryAutoDownload() {
   autoTimer = setTimeout(tryAutoDownload, wait)
 }
 
+// --- Fixes that cannot wait, and notices -----------------------------------
+//
+// The signed live file (Backend/dannify/live.py) can say a fix build is out
+// for this version. Then it is checked for at once rather than at the next
+// six-hourly look, fetched even while music plays, and offered plainly: what
+// it puts right, and Update now. "Later" asks again in two hours.
+
+let emergencyAskedAt = 0
+const ASK_AGAIN = 2 * 60 * 60 * 1000
+
+function seenNotices() {
+  try {
+    return JSON.parse(read(NOTICES_KEY, '[]')) || []
+  } catch {
+    return []
+  }
+}
+
+function inMyLanguage(texts) {
+  const lang = String(currentLocale.value || 'en').split('-')[0]
+  return (texts && (texts[lang] || texts.en || Object.values(texts)[0])) || ''
+}
+
+async function offerEmergency() {
+  const em = emergency.value
+  if (!em || ready.value || Date.now() - emergencyAskedAt < ASK_AGAIN) return
+  if (!info.value.available || info.value.version !== em.version) return
+  emergencyAskedAt = Date.now()
+  const go = await confirmDialog({
+    title: t('update.emergencyTitle'),
+    message: inMyLanguage(em.notes) || t('update.emergencyFallback'),
+    detail: t('update.emergencyDetail', { version: versionLabel(em.version) }),
+    confirmText: t('update.emergencyGo'),
+    cancelText: t('update.emergencyLater'),
+    icon: 'ph:first-aid-kit',
+  })
+  if (go) downloadAndInstall()
+}
+
+async function loadLive() {
+  let data
+  try {
+    data = (await API.getLive()).data || {}
+  } catch {
+    return
+  }
+  emergency.value = data.emergency || null
+  if (emergency.value) {
+    await check(true)
+    offerEmergency()
+  }
+  const notice = data.notice
+  if (notice && notice.id) {
+    const seen = seenNotices()
+    if (!seen.includes(notice.id)) {
+      write(NOTICES_KEY, JSON.stringify([...seen.slice(-20), notice.id]))
+      const text = inMyLanguage(notice.text)
+      if (text) toast(text, { icon: 'ph:megaphone-simple', timeout: 15000, key: 'notice' })
+    }
+  }
+}
+
 if (typeof window !== 'undefined') {
   setTimeout(loadStatus, 2500)
   setTimeout(() => check(false), 8000)
   setInterval(() => check(false), 6 * 60 * 60 * 1000)
+  setTimeout(loadLive, 6000)
+  setInterval(loadLive, 60 * 60 * 1000)
   // A found update starts getting ready by itself half a minute later.
   watch(available, (yes) => {
     if (yes) {
@@ -395,6 +482,8 @@ export function useUpdates() {
     ready,
     checking,
     checkedOk,
+    checkedAt,
+    emergency,
     downloading,
     progress,
     stage,

@@ -40,3 +40,31 @@ PayPal payment link or a paypal.me name, the GitHub account a GitHub name, the
 Ko-fi page an https address. Nothing else in the file is read: which
 repository updates come from, and everything else about the app, stay as
 built.
+
+# Live fixes
+
+`live.json` is how a fix reaches every installed copy without a new version
+(see `Backend/dannify/live.py`). It is read and believed the same way as
+`support-live.json`: signed with the release key, never rolled back, checked
+at start and every three hours, kept for when there is no connection.
+
+It can carry three things:
+
+- `clients`: the identities YouTube is asked with. When songs stop playing
+  everywhere at once because YouTube changed what it accepts, this puts it
+  right everywhere at once, with no update to install.
+- `emergency`: a fix build that copies in a range should take now. The build
+  is published like any release, tagged with a fourth number (`v4.15.0.1`,
+  shown as "4.15.0 · fix 1"); copies between `from` and it say plainly that an
+  important fix is ready and fetch it straight away, even while music plays.
+- `notice`: one line everyone sees once (a service being down).
+
+```
+python packaging/live_details.py                                   (what copies are told)
+python packaging/live_details.py --clients Backend/dannify/clients.json
+python packaging/live_details.py --emergency 4.15.0.1 --from 4.15.0 --note "Songs play again"
+python packaging/live_details.py --notice outage-1 --notice-text "YouTube is down; saved music plays" --days 2
+python packaging/live_details.py --no-emergency --no-notice
+```
+
+Then commit `live.json` and `live.json.dsig` to `main` (through a pull request).

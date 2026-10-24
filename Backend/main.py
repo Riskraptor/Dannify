@@ -242,6 +242,13 @@ def build_app() -> FastAPI:
     from dannify import innertube as _innertube
 
     _innertube.init(DATABASE_DIR)
+    # Fixes that reach every copy without an update, signed (see live.py):
+    # the identities YouTube is asked with, taken the moment they change.
+    from dannify import live as _live
+
+    _live.init(DATABASE_DIR)
+    _live.on_change(lambda found: _innertube.use_live(found.get('clients')))
+    _live.start()
     api.state.data_dir = DATABASE_DIR
     from dannify import artist_links as _artist_links
 

@@ -40,7 +40,7 @@ from dannify import release_assets, signing  # noqa: E402
 
 KEY_FILE = Path.home() / '.dannify' / 'release-signing.key'
 # Windows' two kinds, and every platform kind release_assets names.
-KINDS = ('package', 'installer', 'support')
+KINDS = ('package', 'installer', 'support', 'live')
 SUPPORT_FILE = Path(__file__).resolve().parent.parent / 'config' / 'support-live.json'
 
 
