@@ -995,3 +995,16 @@ html[data-away] .decor,
 html[data-away] .decor * {
   animation-play-state: paused !important;
 }
+
+/* Keyboard hints are for keyboards. On a screen that is only touched (a
+   phone, in the Android app or a browser) there is no Ctrl+K or Space to
+   press, so the hints go; a Chromebook with its keyboard keeps them. */
+@media (hover: none) and (pointer: coarse) {
+  kbd,
+  .sbx-hint,
+  .keys,
+  .cp-keys,
+  .cp-foot {
+    display: none !important;
+  }
+}
