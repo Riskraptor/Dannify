@@ -20,20 +20,41 @@ HOST=x86_64-w64-mingw32
 JOBS="$(nproc)"
 
 apt-get update -qq
+# debconf's note that apt-utils is missing is about a tool a throwaway
+# container never needs; anything else apt says still shows.
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-    mingw-w64 make nasm pkg-config wget ca-certificates xz-utils gcc libc6-dev >/dev/null
+    mingw-w64 make nasm pkg-config wget ca-certificates xz-utils gcc libc6-dev \
+    >/dev/null 2> >(grep -v 'delaying package configuration' >&2)
+
+# A download that drops halfway (it did, for a release) is tried again.
+fetch() {
+  wget -q --tries=6 --waitretry=10 --retry-connrefused --retry-on-host-error "$1"
+}
+
+# LAME and FFmpeg are other people's code: their own warnings are theirs to
+# fix, and they buried every real message in this build. Built quietly.
+QUIET_CFLAGS="-O2 -w"
 
 mkdir -p /work /deps /out
 cd /work
 
 echo "== LAME ${LAME_VERSION}"
-wget -q "https://downloads.sourceforge.net/project/lame/lame/${LAME_VERSION}/lame-${LAME_VERSION}.tar.gz"
+fetch "https://downloads.sourceforge.net/project/lame/lame/${LAME_VERSION}/lame-${LAME_VERSION}.tar.gz"
 echo "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e  lame-${LAME_VERSION}.tar.gz" | sha256sum -c -
 tar xf "lame-${LAME_VERSION}.tar.gz"
 cd "lame-${LAME_VERSION}"
 # The export list names a function that is not built; static only, so it
 # does not matter, but the line stops the link of the shared library.
 sed -i '/lame_init_old/d' include/libmp3lame.sym
+# Two things in LAME's 2017 build files that today's tools warn about: make
+# ignores prerequisites on a suffix rule (and said so), and configure printed
+# a page about cross compiling although it works the type sizes out at
+# compile time all the same. The 80-bit float check cannot run when cross
+# compiling; "no" is what it took without asking.
+sed -i 's/^\(\.nas\.l\?o\): \$< nasm\.h$/\1:/' libmp3lame/i386/Makefile.in
+sed -i 's/^if test ${cross_compiling} = "yes"; then$/if false; then/' configure
+# AR_FLAGS: ar ignores the 'u' in libtool's 'cru', and said so for each library.
+AR_FLAGS=cr CFLAGS="$QUIET_CFLAGS" alex_cv_ieee854_float80=no \
 ./configure --host="$HOST" --prefix=/deps --enable-static --disable-shared \
     --disable-frontend --disable-decoder --disable-gtktest --enable-nasm >/dev/null
 make -j"$JOBS" >/dev/null
@@ -41,7 +62,7 @@ make install >/dev/null
 cd /work
 
 echo "== FFmpeg ${FFMPEG_VERSION}"
-wget -q "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"
+fetch "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"
 echo "${FFMPEG_SHA256}  ffmpeg-${FFMPEG_VERSION}.tar.xz" | sha256sum -c -
 tar xf "ffmpeg-${FFMPEG_VERSION}.tar.xz"
 cd "ffmpeg-${FFMPEG_VERSION}"
@@ -67,7 +88,9 @@ cd "ffmpeg-${FFMPEG_VERSION}"
     --enable-filter=abuffer,abuffersink,aformat,anull,aresample,atrim,volume,acopy,asetnsamples \
     --enable-swresample >/dev/null
 
-make -j"$JOBS" >/dev/null
+# Quiet only while compiling: configure tells which macOS calls are safe
+# for the oldest supported version by turning warnings into errors.
+make -j"$JOBS" ECFLAGS=-w >/dev/null
 "${HOST}-strip" ffmpeg.exe
 cp ffmpeg.exe /out/dnfmedia.exe
 ./ffmpeg.exe -version >/dev/null 2>&1 || true

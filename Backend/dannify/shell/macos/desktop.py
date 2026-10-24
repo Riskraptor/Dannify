@@ -8,6 +8,7 @@ paths (the login item, where the app lives) can be checked anywhere.
 from __future__ import annotations
 
 import ctypes
+import ctypes.util
 import plistlib
 import sys
 from pathlib import Path
@@ -233,7 +234,9 @@ _SIGNATURE = _fourcc(b'DnfY')
 
 
 def _carbon():
-    lib = ctypes.cdll.LoadLibrary('/System/Library/Frameworks/Carbon.framework/Carbon')
+    # By name: macOS knows where its frameworks are, and PyInstaller takes a
+    # full path in a ctypes load for a library to bundle, and says it cannot.
+    lib = ctypes.cdll.LoadLibrary(ctypes.util.find_library('Carbon'))
     lib.GetApplicationEventTarget.restype = ctypes.c_void_p
     lib.GetApplicationEventTarget.argtypes = []
     lib.InstallEventHandler.restype = ctypes.c_int32

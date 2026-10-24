@@ -4,7 +4,7 @@
 // modifiers working (e.g. `bg-tint/5`, `text-fg/60`).
 const rgbVar = (name) => `rgb(var(${name}) / <alpha-value>)`
 
-module.exports = {
+export default {
   content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
   theme: {
     extend: {

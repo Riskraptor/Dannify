@@ -7,6 +7,7 @@ import API from '/src/model/api'
 import { t } from '/src/i18n'
 import { toast } from '/src/model/toast'
 import { parseLink } from '/src/model/linkParse'
+import { usePlayer, songToTrack } from '/src/model/player'
 
 export { parseLink }
 
@@ -55,7 +56,6 @@ export async function followPodcast(page, { replace = false } = {}) {
     return true
   }
   if (!to.song) return false
-  const { usePlayer, songToTrack } = await import('/src/model/player')
   usePlayer().setPlaylist([songToTrack(to.song)], { startIndex: 0 })
   toast(t('links.playing', { title: to.song.name || '' }), { icon: 'ph:play-fill', key: 'link' })
   if (replace) router.back()
@@ -79,7 +79,6 @@ async function openHandle(link) {
 
 // A song by its YouTube link: played at once, with its title and artist.
 async function playVideo(link) {
-  const { usePlayer, songToTrack } = await import('/src/model/player')
   toast(t('links.opening'), { icon: 'ph:link', key: 'link', timeout: 3000 })
   try {
     const res = await API.resolveStream(`https://music.youtube.com/watch?v=${link.id}`)

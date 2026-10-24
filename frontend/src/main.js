@@ -7,6 +7,7 @@ import { addCollection } from '@iconify/vue'
 import icons from 'virtual:dannify-icons'
 import App from './App.vue'
 import router from './router/index'
+import { setNavigator } from './model/navigate'
 import './model/theme'
 import { installShortcuts } from './desktop/shortcuts'
 import { installLinkPaste } from './model/links'
@@ -49,6 +50,7 @@ const app = createApp(App)
 installErrorReporting(app)
 app.directive('overlay-scroll', vOverlayScroll)
 app.use(router)
+setNavigator(router)
 installShortcuts()
 installLinkPaste()
 installDesktopIntegration()

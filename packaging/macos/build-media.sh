@@ -37,9 +37,38 @@ mkdir -p "$DEPS" "$OUT"
 cd "$WORK"
 
 fetch() {  # url file sha256
-  curl -fsSL --retry 3 -o "$2" "$1"
+  # Every failure retried, a dropped connection too: a release's Intel build
+  # once stopped on "Connection reset by peer" halfway through FFmpeg.
+  curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o "$2" "$1"
   echo "$3  $2" | shasum -a 256 -c -
 }
+
+# LAME and FFmpeg are other people's code: their own warnings (and Apple's
+# deprecation of the Secure Transport API FFmpeg's https still uses) are
+# theirs to fix, and they buried every real message in this build.
+QUIET_CFLAGS="-O2 -w"
+
+# What nasm makes carries no "built for macOS N" mark unless asked for one,
+# and the linker said so for every object. nasm asks for it with a pragma
+# (its manual: --pragma "macho build_version macos,11,0"); whether this nasm
+# understands it is checked on a test object, mark and all, not assumed.
+if [ "$MACHINE" = "x86_64" ] && command -v nasm >/dev/null; then
+  MAJOR="${MACOSX_DEPLOYMENT_TARGET%%.*}"
+  MINOR="${MACOSX_DEPLOYMENT_TARGET#*.}"
+  [ "$MINOR" = "$MACOSX_DEPLOYMENT_TARGET" ] && MINOR=0
+  MARK="macho build_version macos,${MAJOR},${MINOR%%.*}"
+  printf 'section .text\nglobal _probe\n_probe: ret\n' > "$WORK/probe.asm"
+  if nasm -f macho64 --pragma "$MARK" -o "$WORK/probe.o" "$WORK/probe.asm" \
+      && otool -l "$WORK/probe.o" | grep -q LC_BUILD_VERSION; then
+    mkdir -p "$WORK/bin"
+    printf '#!/bin/sh\nexec "%s" --pragma "%s" "$@"\n' "$(command -v nasm)" "$MARK" > "$WORK/bin/nasm"
+    chmod +x "$WORK/bin/nasm"
+    export PATH="$WORK/bin:$PATH"
+    echo "nasm marks its objects: $MARK"
+  else
+    echo "this nasm cannot mark its objects for a macOS version" >&2
+  fi
+fi
 
 echo "== LAME ${LAME_VERSION}"
 fetch "https://downloads.sourceforge.net/project/lame/lame/${LAME_VERSION}/lame-${LAME_VERSION}.tar.gz" \
@@ -52,7 +81,7 @@ sed -i.orig '/lame_init_old/d' include/libmp3lame.sym
 NASM=""
 if [ "$MACHINE" = "x86_64" ]; then NASM="--enable-nasm"; fi
 # LAME's config.guess predates Apple silicon: say what this is outright.
-./configure --build="$(echo "$MACHINE" | sed 's/arm64/aarch64/')-apple-darwin" \
+CFLAGS="$QUIET_CFLAGS" ./configure --build="$(echo "$MACHINE" | sed 's/arm64/aarch64/')-apple-darwin" \
     --prefix="$DEPS" --enable-static --disable-shared \
     --disable-frontend --disable-decoder --disable-gtktest $NASM >/dev/null
 make -j"$JOBS" >/dev/null
@@ -92,7 +121,9 @@ if grep -E '^#define CONFIG_(GPL|NONFREE) 1' config.h; then
 fi
 grep -q '^#define CONFIG_SECURETRANSPORT 1' config.h || { echo "no Secure Transport: https would not work" >&2; exit 1; }
 
-make -j"$JOBS" >/dev/null
+# Quiet only while compiling: configure tells which macOS calls are safe
+# for the oldest supported version by turning warnings into errors.
+make -j"$JOBS" ECFLAGS=-w >/dev/null
 strip -x ffmpeg
 # Stripping drops the signature an Apple silicon Mac needs to run anything.
 codesign --force -s - ffmpeg

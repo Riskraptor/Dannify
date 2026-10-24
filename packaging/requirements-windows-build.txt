@@ -7,8 +7,11 @@
 # every release of it. The release workflow is the only place a Windows build
 # is made now, and nobody has a Windows desk to find out on what a change like
 # that does to a real install. These move when somebody decides they should.
-pyinstaller==6.20.0
-pyinstaller-hooks-contrib==2026.6
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.9
+# pydantic imports zoneinfo, which on Windows reads its time zones from this
+# package; without it the build said "Hidden import tzdata not found".
+tzdata==2026.5
 pythonnet==3.1.0
 clr_loader==0.3.1
 cffi==2.0.0

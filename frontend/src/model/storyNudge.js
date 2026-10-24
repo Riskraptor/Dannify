@@ -3,6 +3,7 @@
 // month gone. Only when there is a story worth seeing, never twice for the
 // same stretch, and as a toast that goes by itself, never a pop-up.
 
+import { navigate } from '/src/model/navigate'
 import API from '/src/model/api'
 import { t, currentLocale } from '/src/i18n'
 import { toast } from '/src/model/toast'
@@ -33,9 +34,8 @@ function iso(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-async function open(query) {
-  const { default: router } = await import('/src/router')
-  router.push({ name: 'Recap', query })
+function open(query) {
+  navigate({ name: 'Recap', query })
 }
 
 /** Say so if last month's or last week's story is ready and not yet seen. */

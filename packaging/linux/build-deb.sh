@@ -47,7 +47,7 @@ cp -r "$ROOT/frontend/dist" "$APP/frontend/dist"
 
 echo "== QuickJS"
 if [ "$ARCH" = "amd64" ]; then
-  curl -fsSL --retry 3 -o "$WORK/qjs.zip" "$QJS_URL"
+  curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o "$WORK/qjs.zip" "$QJS_URL"
   echo "$QJS_SHA256  $WORK/qjs.zip" | sha256sum -c -
   unzip -q -o "$WORK/qjs.zip" -d "$WORK/qjs"
   QJS="$(find "$WORK/qjs" -type f -name qjs | head -n 1)"
