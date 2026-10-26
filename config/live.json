@@ -1,0 +1,16 @@
+{
+  "version": 10,
+  "off": {
+    "rooms": {
+      "text": {
+        "en": "We’re fixing this part of Dannify. Everything else keeps working.",
+        "fr": "Nous réparons cette partie de Dannify. Tout le reste fonctionne.",
+        "es": "Estamos arreglando esta parte de Dannify. Todo lo demás sigue funcionando.",
+        "pt": "Estamos a corrigir esta parte do Dannify. Todo o resto continua a funcionar.",
+        "de": "Wir reparieren diesen Teil von Dannify. Alles andere funktioniert weiter.",
+        "sw": "Tunarekebisha sehemu hii ya Dannify. Mengine yote yanaendelea kufanya kazi."
+      }
+    }
+  },
+  "signed_at": 1793012520
+}
