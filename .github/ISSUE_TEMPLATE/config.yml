@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question or share an idea
+    url: https://github.com/Riskraptor/Dannify/discussions
+    about: Talk with other people who use Dannify.
+  - name: Download Dannify
+    url: https://github.com/Riskraptor/Dannify/releases/latest
+    about: The latest version for Windows, macOS and Linux.
+  - name: Buy me a coffee
+    url: https://ko-fi.com/dkavangi
+    about: If Dannify has earned it.

@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dannify: music for every device</title>
+  <meta name="description" content="Dannify: search anything, play it at once, keep what you love. Free, with no ads, for Windows, macOS, Linux, Android phones and tablets, and Android TV, Google TV and Fire TV.">
+  <meta name="theme-color" content="#050A07">
+  <meta name="color-scheme" content="dark">
+  <meta property="og:title" content="Dannify">
+  <meta property="og:description" content="Search anything, play it at once, keep what you love. Free, with no ads, on your computer, phone and TV.">
+  <meta property="og:image" content="https://riskraptor.github.io/Dannify/screenshots/home.png">
+  <link rel="icon" href="thanks/dannify.svg" type="image/svg+xml">
+  <!-- The website's front page: which devices Dannify runs on, the right
+       file for the device it is opened on (from latest.json, written at each
+       release), Dannify on Android, what it does, every file, and answers.
+       Its words, in six languages, are in site.js. -->
+  <style>
+    :root {
+      --bg: #050a07;
+      --bg2: #08110c;
+      --ink: #ffffff;
+      --soft: rgba(255, 255, 255, 0.76);
+      --faint: rgba(255, 255, 255, 0.58);
+      --card: rgba(255, 255, 255, 0.055);
+      --card2: rgba(255, 255, 255, 0.09);
+      --line: rgba(255, 255, 255, 0.12);
+      --accent: #2ee27a;
+      --accent-soft: rgba(46, 226, 122, 0.15);
+      --accent-ink: #05130b;
+      --radius: 20px;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+    html, body { margin: 0; }
+    body {
+      color: var(--ink);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.5;
+      background:
+        radial-gradient(90% 600px at 50% -120px, rgba(46, 226, 122, 0.22), transparent 70%),
+        radial-gradient(50% 500px at 100% 700px, rgba(18, 205, 160, 0.07), transparent 70%),
+        var(--bg);
+      background-repeat: no-repeat;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: clip;
+    }
+    a { color: inherit; }
+    img { max-width: 100%; }
+    svg.i { width: 24px; height: 24px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 10px; }
+    .get:focus-visible { outline-color: #ffffff; }
+    .wrap { width: min(1120px, 100%); margin: 0 auto; padding: 0 18px; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+    /* The bar at the top */
+    header.top { position: sticky; top: 0; z-index: 10; background: rgba(5, 10, 7, 0.82); backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid transparent; }
+    header.top .wrap { display: flex; align-items: center; gap: 10px; min-height: 62px; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 800; font-size: 19px; letter-spacing: -0.01em; }
+    .brand img { width: 32px; height: 32px; }
+    header.top nav { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 14.5px; }
+    header.top nav a { padding: 8px 12px; border-radius: 999px; color: var(--soft); text-decoration: none; }
+    header.top nav a:hover { color: var(--ink); background: var(--card); }
+    header.top nav a.pill { margin-left: 6px; background: var(--accent); color: var(--accent-ink); font-weight: 800; }
+    header.top nav a.pill:hover { background: #4cec8f; }
+    header.top nav .link { display: none; }
+
+    /* The first screen: what it is, the download, and every device */
+    .hero { display: grid; grid-template-areas: "text" "devices" "stage"; gap: 26px; padding: 18px 0 44px; }
+    .hero-text { grid-area: text; }
+    .hero h1 { margin: 0; font-size: clamp(36px, 9.5vw, 60px); line-height: 1.02; letter-spacing: -0.035em; font-weight: 850; }
+    .hero h1 em { font-style: normal; color: var(--accent); }
+    .lead { margin: 16px 0 24px; font-size: 17px; line-height: 1.55; color: var(--soft); max-width: 33em; }
+    .get {
+      display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+      min-height: 58px; padding: 0 28px; border-radius: 999px;
+      background: var(--accent); color: var(--accent-ink);
+      font-size: 17.5px; font-weight: 800; text-decoration: none; text-align: center;
+      box-shadow: 0 14px 36px rgba(46, 226, 122, 0.3);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+    .get:hover { transform: translateY(-1px); background: #4cec8f; box-shadow: 0 18px 44px rgba(46, 226, 122, 0.4); }
+    .get svg { width: 22px; height: 22px; flex-shrink: 0; }
+    .meta { margin: 12px 0 0; font-size: 13.5px; color: var(--faint); min-height: 1.4em; }
+    .alt { margin: 6px 0 0; font-size: 14px; color: var(--soft); }
+    .alt a { color: var(--accent); }
+    .install { margin: 14px 0 0; max-width: 520px; }
+    .install summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; font-size: 14.5px; font-weight: 700; color: var(--accent); border-radius: 8px; }
+    .install summary::-webkit-details-marker { display: none; }
+    .install summary svg { width: 18px; height: 18px; transition: transform 0.2s ease; }
+    .install[open] summary svg { transform: rotate(180deg); }
+    .install .how { margin-top: 12px; }
+
+    .how {
+      margin: 0; padding: 16px 18px 4px; border-radius: 18px;
+      background: var(--card); box-shadow: inset 0 0 0 1px var(--line);
+      list-style: none; counter-reset: step;
+    }
+    .how li { position: relative; margin: 0 0 12px; padding-left: 36px; font-size: 14.5px; line-height: 1.45; color: var(--soft); counter-increment: step; }
+    .how li::before {
+      content: counter(step); position: absolute; left: 0; top: -1px;
+      display: grid; place-items: center; width: 25px; height: 25px; border-radius: 999px;
+      background: var(--accent-soft); color: var(--accent); font-size: 12.5px; font-weight: 800;
+    }
+    .how code { padding: 1px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.09); color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
+
+    /* Every device, as tiles */
+    .devices { grid-area: devices; }
+    .devices h2 { margin: 0 0 10px; font-size: 12.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+    .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .tiles li { display: flex; }
+    .tile {
+      position: relative; flex: 1; display: flex; align-items: center; gap: 11px; min-height: 66px; padding: 12px;
+      border-radius: 16px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line);
+      text-decoration: none; transition: background 0.15s ease, box-shadow 0.15s ease;
+    }
+    a.tile:hover { background: var(--card2); box-shadow: inset 0 0 0 1px rgba(46, 226, 122, 0.45); }
+    .tile svg { width: 28px; height: 28px; color: var(--accent); }
+    .tile b { display: block; font-size: 15px; line-height: 1.25; }
+    .tile small { display: block; margin-top: 2px; font-size: 12px; line-height: 1.3; color: var(--soft); }
+    .tile.is-yours { background: rgba(46, 226, 122, 0.08); box-shadow: inset 0 0 0 1.5px var(--accent); }
+    .tile .here { position: absolute; top: -9px; right: 10px; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 10.5px; font-weight: 800; white-space: nowrap; }
+    .tile.off svg { color: var(--faint); }
+    .tile.off b { color: var(--soft); }
+
+    /* The picture beside: a computer's window and a phone */
+    .stage { grid-area: stage; position: relative; padding: 0 0 44px 30px; }
+    .stage .window { display: block; border-radius: 14px; overflow: hidden; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--line); }
+    .stage .window img { display: block; width: 100%; height: auto; }
+    .stage .phone { position: absolute; left: 0; bottom: 0; font-size: 4.1px; }
+
+    /* A phone, drawn (its size follows its font-size) */
+    .phone {
+      width: 23em; height: 48em; padding: 0.75em; border-radius: 3.6em; flex-shrink: 0;
+      background: #101312; box-shadow: 0 0 0 0.18em #2c322f, 0 3em 7em rgba(0, 0, 0, 0.6);
+    }
+    .screen {
+      position: relative; display: flex; flex-direction: column; width: 100%; height: 100%;
+      padding: 1.3em 1.7em 1.2em; border-radius: 2.9em; overflow: hidden; color: #fff;
+      background: linear-gradient(170deg, #6b4519 0%, #3c1d10 52%, #120806 100%);
+    }
+    .screen > * { flex-shrink: 0; }
+    .sb { display: flex; justify-content: space-between; align-items: center; font-size: 1.15em; font-weight: 700; opacity: 0.92; padding: 0 0.3em; }
+    .sb i { width: 0.9em; height: 0.9em; border-radius: 50%; background: #000; }
+    .sb s { display: flex; gap: 0.25em; text-decoration: none; }
+    .sb s b { width: 0.32em; border-radius: 0.1em; background: #fff; }
+    .sb s b:nth-child(1) { height: 0.45em; align-self: flex-end; }
+    .sb s b:nth-child(2) { height: 0.65em; align-self: flex-end; }
+    .sb s b:nth-child(3) { height: 0.85em; }
+    .np-top { display: flex; justify-content: space-between; margin-top: 1.2em; opacity: 0.85; }
+    .np-top svg { width: 2.2em; height: 2.2em; }
+    .phone .art { display: block; width: 100%; aspect-ratio: 1; height: auto; margin-top: 1.6em; border-radius: 1.1em; box-shadow: 0 1.6em 3em rgba(0, 0, 0, 0.45); object-fit: cover; background: #3c1d10; }
+    .np-t { margin-top: 2em; font-size: 1.6em; font-weight: 800; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .np-a { margin-top: 0.2em; font-size: 1.3em; opacity: 0.7; }
+    .bar { position: relative; height: 0.45em; margin-top: 1.7em; border-radius: 1em; background: rgba(255, 255, 255, 0.24); }
+    .bar i { position: absolute; inset: 0 auto 0 0; width: 24%; border-radius: inherit; background: #fff; }
+    .bar i::after { content: ""; position: absolute; right: -0.55em; top: -0.42em; width: 1.3em; height: 1.3em; border-radius: 50%; background: #fff; }
+    .times { display: flex; justify-content: space-between; margin-top: 0.7em; font-size: 1.05em; opacity: 0.68; }
+    .ctrl { display: flex; justify-content: space-between; align-items: center; margin-top: 1.1em; }
+    .ctrl svg { width: 2.5em; height: 2.5em; }
+    .ctrl .on { color: var(--accent); }
+    .ctrl .play { display: grid; place-items: center; width: 6em; height: 6em; border-radius: 50%; background: #fff; color: #120806; }
+    .ctrl .play svg { width: 2.8em; height: 2.8em; margin-left: 0.3em; }
+    .home-bar { width: 38%; height: 0.45em; margin: auto auto 0; border-radius: 1em; background: rgba(255, 255, 255, 0.55); }
+
+    /* A TV, drawn (its size follows its width) */
+    .tv-wrap { position: relative; width: 100%; max-width: 520px; padding-bottom: 22px; }
+    .tv-wrap::after { content: ""; position: absolute; left: 50%; bottom: 4px; width: 34%; height: 8px; border-radius: 8px; transform: translateX(-50%); background: #1d2220; }
+    .tv { container-type: inline-size; width: 100%; aspect-ratio: 16 / 9; padding: 1.4%; border-radius: 14px; background: #0f1211; box-shadow: 0 0 0 1px #2c322f, 0 30px 70px rgba(0, 0, 0, 0.55); }
+    .tv .screen {
+      display: grid; grid-template-columns: 36% 1fr; align-items: center; gap: 6%;
+      padding: 0 7%; border-radius: 8px; font-size: 6px; font-size: 1.6cqw;
+      background: linear-gradient(120deg, #6b4519 0%, #3c1d10 55%, #120806 100%);
+    }
+    .tv .art { display: block; width: 100%; aspect-ratio: 1; height: auto; border-radius: 0.9em; box-shadow: 0 2em 4em rgba(0, 0, 0, 0.45); }
+    .tv .np-t { margin-top: 0; font-size: 2.4em; white-space: normal; }
+    .tv .np-a { font-size: 1.6em; }
+    .tv .bar { margin-top: 2em; height: 0.5em; }
+    .tv .ctrl { justify-content: flex-start; gap: 2.6em; margin-top: 2.2em; }
+    .tv .ctrl svg { width: 2.6em; height: 2.6em; }
+    .tv .ctrl .play { width: 5.6em; height: 5.6em; box-shadow: 0 0 0 0.5em rgba(5, 10, 7, 0.9), 0 0 0 0.9em #fff; }
+
+    /* Sections */
+    section { padding: 56px 0; }
+    .head { max-width: 680px; margin: 0 0 30px; }
+    .head h2 { margin: 0 0 8px; font-size: clamp(28px, 6vw, 40px); line-height: 1.1; letter-spacing: -0.025em; }
+    .head p { margin: 0; color: var(--soft); font-size: 16.5px; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 5px 12px 5px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 800; }
+    .eyebrow svg { width: 18px; height: 18px; }
+
+    /* Dannify for Android */
+    #android { background: linear-gradient(180deg, transparent, rgba(46, 226, 122, 0.045) 30%, rgba(46, 226, 122, 0.045) 70%, transparent); }
+    .and-grid { display: grid; gap: 18px; }
+    .and-card { display: flex; flex-direction: column; border-radius: 24px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+    .and-vis { display: grid; place-items: center; min-height: 300px; padding: 30px 20px 26px; background: radial-gradient(70% 70% at 50% 40%, rgba(46, 226, 122, 0.16), transparent 75%); }
+    .and-vis .phone { font-size: 7.4px; }
+    .and-body { display: flex; flex-direction: column; gap: 14px; padding: 4px 20px 22px; }
+    .and-body h3 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+    .and-body .small { margin: -10px 0 0; color: var(--faint); font-size: 14px; }
+    .perks { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .perks li { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; color: var(--soft); }
+    .perks li::before { content: ""; flex-shrink: 0; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; background: var(--accent-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6.5 12.5l3.6 3.6 7.4-8' fill='none' stroke='%232ee27a' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 15px no-repeat; }
+    .and-body .get { align-self: flex-start; }
+    .and-body .meta { margin-top: -6px; }
+    .and-body .how { background: rgba(0, 0, 0, 0.18); }
+    .tv-card .how code { display: inline-block; margin-top: 6px; padding: 7px 12px; border-radius: 10px; background: rgba(46, 226, 122, 0.12); color: var(--accent); font: 700 15.5px ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace; }
+    .fine { margin: 0; font-size: 13.5px; color: var(--faint); }
+    .qr { display: none; align-items: center; gap: 16px; padding: 12px; border-radius: 16px; background: rgba(0, 0, 0, 0.18); }
+    .qr img { width: 104px; height: 104px; border-radius: 10px; flex-shrink: 0; }
+    .qr p { margin: 0; font-size: 14px; color: var(--soft); }
+
+    /* What it does: rows of words and pictures */
+    .rows { display: grid; gap: 54px; }
+    .row { display: grid; gap: 22px; align-items: center; }
+    .row h3 { margin: 0 0 10px; font-size: clamp(23px, 5vw, 30px); line-height: 1.15; letter-spacing: -0.02em; }
+    .row p { margin: 0 0 10px; color: var(--soft); font-size: 16.5px; }
+    .row p.more { font-size: 15px; color: var(--faint); }
+    .row .shot { display: block; border-radius: 14px; overflow: hidden; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--line); background: #0d1310; }
+    .row .shot img { display: block; width: 100%; height: auto; }
+
+    /* Listening together, drawn */
+    .room { display: grid; gap: 22px; justify-items: center; padding: 30px 18px; border-radius: 18px; background: radial-gradient(80% 90% at 50% 0%, rgba(46, 226, 122, 0.16), transparent 70%), #0b1410; box-shadow: 0 0 0 1px var(--line); }
+    .room .code { display: flex; gap: 6px; }
+    .room .code span { display: grid; place-items: center; width: 40px; height: 50px; border-radius: 12px; background: var(--card2); box-shadow: inset 0 0 0 1.5px var(--line); font: 800 22px ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace; }
+    .room .code span:nth-child(3) { margin-right: 8px; }
+    .room .devs { display: flex; gap: 14px; }
+    .room .dev { display: grid; justify-items: center; gap: 10px; width: 88px; padding: 14px 8px 12px; border-radius: 16px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); color: var(--soft); }
+    .room .dev svg { width: 30px; height: 30px; }
+    .eq { display: flex; align-items: flex-end; gap: 3px; height: 22px; }
+    .eq i { width: 4px; height: 100%; border-radius: 2px; background: var(--accent); transform-origin: bottom; animation: eq 1.1s ease-in-out infinite; }
+    .eq i:nth-child(1) { animation-delay: -0.2s; }
+    .eq i:nth-child(2) { animation-delay: -0.5s; }
+    .eq i:nth-child(3) { animation-delay: -0.9s; }
+    .eq i:nth-child(4) { animation-delay: -0.35s; }
+    .eq i:nth-child(5) { animation-delay: -0.7s; }
+    @keyframes eq { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+    .room .song { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: 14px; background: var(--card); font-size: 13.5px; }
+    .room .song img { width: 38px; height: 38px; border-radius: 8px; }
+    .room .song span { display: block; color: var(--faint); font-size: 12.5px; }
+
+    /* And more */
+    .more-grid { display: grid; gap: 12px; margin-top: 64px; }
+    .more-grid h3 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
+    .mini { padding: 18px; border-radius: 18px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+    .mini b { display: block; margin-bottom: 4px; font-size: 16px; }
+    .mini p { margin: 0; color: var(--soft); font-size: 14.5px; }
+
+    /* Every file */
+    .files { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+    .file { display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: var(--radius); background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+    .file.is-yours { box-shadow: inset 0 0 0 1.5px var(--accent); }
+    .file .how { margin: 0; background: none; box-shadow: none; padding: 4px 0 0; }
+    .file-top { display: flex; align-items: center; gap: 12px; }
+    .file-top .ic { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); flex-shrink: 0; }
+    .file-top b { font-size: 17px; }
+    .file-top span.sub { display: block; font-size: 13px; color: var(--faint); }
+    .file .tag { margin-left: auto; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 750; white-space: nowrap; }
+    .file .dl { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+    .file .dl a {
+      display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px;
+      border-radius: 999px; background: rgba(255, 255, 255, 0.08); text-decoration: none; font-size: 14px; font-weight: 700;
+    }
+    .file .dl a:hover { background: rgba(255, 255, 255, 0.14); }
+    .file .dl a.main { background: var(--accent); color: var(--accent-ink); }
+    .file .dl a.main:hover { background: #4cec8f; }
+    .file .dl small { opacity: 0.75; font-weight: 600; }
+    .file .dl a svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .note { margin-top: 18px; font-size: 14px; color: var(--faint); line-height: 1.55; }
+
+    /* Questions */
+    .faq { display: grid; gap: 10px; max-width: 780px; }
+    .faq details { border-radius: 16px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+    .faq details[open] { background: var(--card2); }
+    .faq summary { display: flex; align-items: center; gap: 12px; padding: 16px 18px; cursor: pointer; list-style: none; font-size: 16px; font-weight: 700; border-radius: 16px; }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary svg { margin-left: auto; width: 20px; height: 20px; color: var(--faint); transition: transform 0.2s ease; }
+    .faq details[open] summary svg { transform: rotate(180deg); }
+    .faq details p { margin: 0; padding: 0 18px 18px; color: var(--soft); font-size: 15px; }
+
+    footer { padding: 30px 0 calc(34px + env(safe-area-inset-bottom)); color: var(--faint); font-size: 13.5px; border-top: 1px solid var(--line); }
+    footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 24px; justify-content: space-between; }
+    footer p { margin: 0; }
+    footer a { color: var(--soft); }
+    .langs { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+    .langs a { text-decoration: none; }
+    .langs a:hover { text-decoration: underline; }
+    .langs a[aria-current] { color: var(--accent); font-weight: 700; }
+
+    @media (min-width: 600px) {
+      .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .more-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .more-grid h3 { grid-column: 1 / -1; }
+      .files { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stage { padding-left: 46px; }
+      .stage .phone { font-size: 5.6px; }
+      .and-vis .phone { font-size: 8.6px; }
+    }
+    @media (min-width: 760px) {
+      header.top nav .link { display: inline-block; }
+    }
+    @media (min-width: 900px) {
+      section { padding: 84px 0; }
+      .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr); grid-template-areas: "text stage" "devices devices"; column-gap: 48px; row-gap: 34px; align-items: center; padding: 34px 0 60px; }
+      .hero h1 { font-size: clamp(44px, 5vw, 60px); }
+      .lead { font-size: 18px; }
+      .stage { padding: 0 0 40px 50px; }
+      .stage .phone { font-size: 6.4px; left: 0; }
+      .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+      .tile { flex-direction: column; align-items: flex-start; gap: 10px; min-height: 112px; padding: 16px; }
+      .tile .here { top: -9px; }
+      .and-grid { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); gap: 22px; }
+      .and-vis { min-height: 440px; }
+      .and-body { padding: 4px 28px 28px; }
+      .rows { gap: 96px; }
+      .row { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 56px; }
+      .row:nth-child(even) { grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); }
+      .row:nth-child(even) .copy { order: 2; }
+      .more-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      html:not([data-device="android"]):not([data-device="ios"]):not([data-device="tv"]) .qr { display: flex; }
+    }
+    @media (max-width: 380px) {
+      .room .code span { width: 34px; height: 44px; font-size: 19px; }
+      .room .dev { width: 78px; }
+      .tile { padding: 10px; gap: 9px; }
+      .tile svg { width: 24px; height: 24px; }
+    }
+    @media (max-width: 599px) {
+      header.top nav a.pill { margin-left: 0; }
+      .get { padding: 0 18px; font-size: 17px; gap: 10px; }
+      .stage { padding-bottom: 26px; }
+      .hero .get { width: 100%; }
+      .and-body .get { align-self: stretch; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition: none !important; animation: none !important; }
+      .eq i { transform: scaleY(0.65); }
+      .get:hover { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Icons, drawn here once and used throughout (simple shapes, no logos). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="i-windows" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><rect x="3" y="3" width="8.3" height="8.3" rx="1.6"/><rect x="12.7" y="3" width="8.3" height="8.3" rx="1.6"/><rect x="3" y="12.7" width="8.3" height="8.3" rx="1.6"/><rect x="12.7" y="12.7" width="8.3" height="8.3" rx="1.6"/></g></symbol>
+    <symbol id="i-mac" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></symbol>
+    <symbol id="i-linux" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></g></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.8"/><path d="M10.5 18.3h3"/></g></symbol>
+    <symbol id="i-tv" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2.4"/><path d="M8 21h8M12 17v4"/></g></symbol>
+    <symbol id="i-iphone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="3.2"/><path d="M10.6 5.2h2.8"/></g></symbol>
+    <symbol id="i-laptop" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.8"/><path d="M2 19.5h20"/></g></symbol>
+    <symbol id="i-dl" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-8 15a1 1 0 0 1 1 1v1h14v-1a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1Z"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 5.2v13.6a1 1 0 0 0 1.53.85l10.6-6.8a1 1 0 0 0 0-1.7L8.53 4.35A1 1 0 0 0 7 5.2Z"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path fill="currentColor" d="M5 5h2.2v14H5zM19 5.6v12.8a.8.8 0 0 1-1.22.68L8.6 12.68a.8.8 0 0 1 0-1.36l9.18-6.4A.8.8 0 0 1 19 5.6Z"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path fill="currentColor" d="M16.8 5H19v14h-2.2zM5 5.6v12.8a.8.8 0 0 0 1.22.68l9.18-6.4a.8.8 0 0 0 0-1.36L6.22 4.92A.8.8 0 0 0 5 5.6Z"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M3 7h3.2c2 0 3.2 1 4.2 2.7l2.6 4.6C14 16 15.2 17 17.2 17H21M3 17h3.2c1.3 0 2.3-.5 3.1-1.3M14.7 8.3C15.5 7.5 16.4 7 17.2 7H21M18.5 4.5 21 7l-2.5 2.5M18.5 14.5 21 17l-2.5 2.5"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M4 11.5V10a3.5 3.5 0 0 1 3.5-3.5H20M17 3.5l3 3-3 3M20 12.5V14a3.5 3.5 0 0 1-3.5 3.5H4M7 20.5l-3-3 3-3"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></g></symbol>
+  </svg>
+
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="#top" aria-label="Dannify"><img src="thanks/dannify.svg" alt="" width="32" height="32"><span>Dannify</span></a>
+      <nav aria-label="Dannify">
+        <a class="link" href="#android" data-w="navAndroid">Android</a>
+        <a class="link" href="#features" data-w="navFeatures">Features</a>
+        <a class="link" href="#faq" data-w="navFaq">Questions</a>
+        <a class="pill" href="#download" data-w="navDownload">Download</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <div class="wrap">
+      <div class="hero">
+        <div class="hero-text">
+          <h1 data-w="title" data-html>Search anything.<br><em>Play it now.</em><br>Keep it.</h1>
+          <p class="lead" data-w="lead">A music player for your computer, phone and TV. Free, with no ads, and it keeps itself up to date.</p>
+          <a class="get" id="get" href="#download">
+            <svg aria-hidden="true"><use href="#i-dl"/></svg>
+            <span id="getWords" data-w="getAll">Download Dannify</span>
+          </a>
+          <p class="meta" id="meta"></p>
+          <p class="alt" id="alt"></p>
+          <details class="install" id="install" hidden>
+            <summary><span data-w="howTitle">How to install</span><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary>
+            <ol class="how" id="how"></ol>
+          </details>
+        </div>
+
+        <div class="devices" id="devices">
+          <h2 data-w="runsOn">Dannify runs on</h2>
+          <ul class="tiles">
+            <li><a class="tile" href="#get-windows" data-device="windows"><svg aria-hidden="true"><use href="#i-windows"/></svg><span><b>Windows</b><small data-w="tWin">10 and 11</small></span></a></li>
+            <li><a class="tile" href="#get-macos" data-device="macos"><svg aria-hidden="true"><use href="#i-mac"/></svg><span><b>macOS</b><small data-w="tMac">Apple silicon and Intel</small></span></a></li>
+            <li><a class="tile" href="#get-linux" data-device="linux"><svg aria-hidden="true"><use href="#i-linux"/></svg><span><b>Linux</b><small>Ubuntu, Debian, Mint (.deb)</small></span></a></li>
+            <li><a class="tile" href="#android" data-device="android"><svg aria-hidden="true"><use href="#i-phone"/></svg><span><b>Android</b><small data-w="phones">Phones and tablets</small></span></a></li>
+            <li><a class="tile" href="#tv" data-device="tv"><svg aria-hidden="true"><use href="#i-tv"/></svg><span><b data-w="tv">TV</b><small>Android TV, Google TV, Fire TV</small></span></a></li>
+            <li><a class="tile off" href="#q-ios" data-device="ios"><svg aria-hidden="true"><use href="#i-iphone"/></svg><span><b>iPhone, iPad</b><small data-w="notYet">Not yet</small></span></a></li>
+          </ul>
+        </div>
+
+        <div class="stage">
+          <picture class="window">
+            <source type="image/webp" srcset="screenshots/home-800.webp 800w, screenshots/home-1440.webp 1440w" sizes="(min-width: 1120px) 560px, (min-width: 900px) 50vw, calc(100vw - 80px)">
+            <img src="screenshots/home.png" width="1440" height="900" fetchpriority="high" decoding="async" data-wa="altHome" alt="Dannify on a computer: Home, with a song playing and its lyrics beside it">
+          </picture>
+          <div class="phone" aria-hidden="true">
+            <div class="screen">
+              <div class="sb"><span>12:30</span><i></i><s><b></b><b></b><b></b></s></div>
+              <div class="np-top"><svg class="i"><use href="#i-chev"/></svg><svg><use href="#i-dots"/></svg></div>
+              <img class="art" src="screenshots/art.webp" alt="" width="390" height="390" decoding="async">
+              <div class="np-t">Melanin (feat. Patoranking)</div>
+              <div class="np-a">Sauti Sol</div>
+              <div class="bar"><i></i></div>
+              <div class="times"><span>1:06</span><span>4:35</span></div>
+              <div class="ctrl"><svg><use href="#i-shuffle"/></svg><svg><use href="#i-prev"/></svg><span class="play"><svg><use href="#i-play"/></svg></span><svg><use href="#i-next"/></svg><svg><use href="#i-repeat"/></svg></div>
+              <div class="home-bar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section id="android" aria-labelledby="android-title">
+      <div class="wrap">
+        <div class="head">
+          <p class="eyebrow"><svg aria-hidden="true"><use href="#i-phone"/></svg><span data-w="andEyebrow">Phones, tablets and TVs</span></p>
+          <h2 id="android-title" data-w="andTitle">Dannify for Android</h2>
+          <p data-w="andSub">The same Dannify on your phone, your tablet and your TV. Free, with no ads, and it keeps itself up to date there too.</p>
+        </div>
+        <div class="and-grid">
+          <article class="and-card" id="phone">
+            <div class="and-vis">
+              <div class="phone" role="img" data-wl="altPhone" aria-label="Dannify on an Android phone, playing a song">
+                <div class="screen" aria-hidden="true">
+                  <div class="sb"><span>12:30</span><i></i><s><b></b><b></b><b></b></s></div>
+                  <div class="np-top"><svg class="i"><use href="#i-chev"/></svg><svg><use href="#i-dots"/></svg></div>
+                  <img class="art" src="screenshots/art.webp" alt="" width="390" height="390" loading="lazy" decoding="async">
+                  <div class="np-t">Melanin (feat. Patoranking)</div>
+                  <div class="np-a">Sauti Sol</div>
+                  <div class="bar"><i></i></div>
+                  <div class="times"><span>1:06</span><span>4:35</span></div>
+                  <div class="ctrl"><svg><use href="#i-shuffle"/></svg><svg><use href="#i-prev"/></svg><span class="play"><svg><use href="#i-play"/></svg></span><svg><use href="#i-next"/></svg><svg><use href="#i-repeat"/></svg></div>
+                  <div class="home-bar"></div>
+                </div>
+              </div>
+            </div>
+            <div class="and-body">
+              <h3 data-w="phones">Phones and tablets</h3>
+              <p class="small" data-w="and7">Android 7.0 and later</p>
+              <ul class="perks" data-w="andPerks">
+                <li>A widget for your home screen</li>
+                <li>Plays on the lock screen and in the notification</li>
+                <li>Your headphones’ buttons play along</li>
+                <li>At home on a tablet too</li>
+              </ul>
+              <a class="get" id="getApk" href="android/">
+                <svg aria-hidden="true"><use href="#i-dl"/></svg>
+                <span data-w="getAndroid">Download for Android</span>
+              </a>
+              <p class="meta" id="apkMeta"></p>
+              <ol class="how" data-w="androidHow">
+                <li>Open the file once it has downloaded.</li>
+                <li>If your phone asks, let your browser install apps. This is only once.</li>
+                <li>Open Dannify. It keeps itself up to date.</li>
+              </ol>
+              <div class="qr">
+                <img src="android/qr.svg" alt="" width="104" height="104" loading="lazy">
+                <p data-w="andScan">On a computer? Scan this with your phone’s camera to get Dannify there.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="and-card tv-card" id="tv">
+            <div class="and-vis">
+              <div class="tv-wrap">
+                <div class="tv" role="img" data-wl="altTv" aria-label="Dannify on a TV, moved around with the remote">
+                  <div class="screen" aria-hidden="true">
+                    <img class="art" src="screenshots/art.webp" alt="" width="390" height="390" loading="lazy" decoding="async">
+                    <div>
+                      <div class="np-t">Melanin (feat. Patoranking)</div>
+                      <div class="np-a">Sauti Sol</div>
+                      <div class="bar"><i></i></div>
+                      <div class="ctrl"><svg><use href="#i-prev"/></svg><span class="play"><svg><use href="#i-play"/></svg></span><svg><use href="#i-next"/></svg></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="and-body">
+              <h3 data-w="tvSub">Android TV, Google TV and Fire TV</h3>
+              <p class="small" data-w="tvRemote">Moved around with the remote</p>
+              <ol class="how" data-w="tvHow">
+                <li>On the TV, install the Downloader app from its store.</li>
+                <li>In Downloader, go to <code>riskraptor.github.io/Dannify/android</code></li>
+                <li>Download, install, and move around Dannify with the remote.</li>
+              </ol>
+              <p class="fine" data-w="tv64">Dannify needs a 64-bit TV or stick. Many older sticks are 32-bit and cannot run it yet.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <div class="head">
+          <h2 id="features-title" data-w="featuresTitle">Everything music, in one app</h2>
+          <p data-w="featuresSub">The same Dannify on your computer, your phone and your TV.</p>
+        </div>
+
+        <div class="rows">
+          <article class="row">
+            <div class="copy">
+              <h3 data-w="f1">Play anything, at once</h3>
+              <p data-w="f1t">Search the whole catalogue and play in a moment. Charts and new music where you are, moods and genres.</p>
+              <p class="more" data-w="f1x">A song starts in about a third of a second, and what is already in your library comes first.</p>
+            </div>
+            <picture class="shot">
+              <source type="image/webp" srcset="screenshots/search-800.webp 800w, screenshots/search-1440.webp 1440w" sizes="(min-width: 1120px) 620px, (min-width: 900px) 56vw, calc(100vw - 36px)">
+              <img src="screenshots/search.png" width="1440" height="900" loading="lazy" decoding="async" data-wa="altSearch" alt="Search: what is in your library first, then the top result, songs and artists">
+            </picture>
+          </article>
+
+          <article class="row">
+            <div class="copy">
+              <h3 data-w="f3">Lyrics in time</h3>
+              <p data-w="f3t">Words light up as they are sung. Missing or off? Fix them, and everyone gets the fix.</p>
+              <p class="more" data-w="f3x">Running early or late? Click the line you hear and the words line up. A song with none? Write them and tap the timing in.</p>
+            </div>
+            <picture class="shot">
+              <source type="image/webp" srcset="screenshots/lyrics-timing-800.webp 800w, screenshots/lyrics-timing-1440.webp 1440w" sizes="(min-width: 1120px) 620px, (min-width: 900px) 56vw, calc(100vw - 36px)">
+              <img src="screenshots/lyrics-timing.png" width="1440" height="900" loading="lazy" decoding="async" data-wa="altLyrics" alt="Now Playing with lyrics in time, and the box to line them up with the song">
+            </picture>
+          </article>
+
+          <article class="row">
+            <div class="copy">
+              <h3 data-w="f4">Listen together</h3>
+              <p data-w="f4t">Start a room, share its code, and everyone hears the same song at the same moment. Chat and reactions included.</p>
+              <p class="more" data-w="f4x">Guests suggest songs and send reactions, each on their own device. Free, with no account needed.</p>
+            </div>
+            <div class="room" aria-hidden="true">
+              <div class="code"><span>Q</span><span>F</span><span>6</span><span>H</span><span>B</span><span>L</span></div>
+              <div class="devs">
+                <div class="dev"><svg class="i"><use href="#i-laptop"/></svg><div class="eq"><i></i><i></i><i></i><i></i><i></i></div></div>
+                <div class="dev"><svg class="i"><use href="#i-phone"/></svg><div class="eq"><i></i><i></i><i></i><i></i><i></i></div></div>
+                <div class="dev"><svg class="i"><use href="#i-tv"/></svg><div class="eq"><i></i><i></i><i></i><i></i><i></i></div></div>
+              </div>
+              <div class="song"><img src="screenshots/art.webp" alt="" width="38" height="38" loading="lazy"><div>Melanin (feat. Patoranking)<span>Sauti Sol</span></div></div>
+            </div>
+          </article>
+
+          <article class="row">
+            <div class="copy">
+              <h3 data-w="f5">Your music, told back</h3>
+              <p data-w="f5t">History, your stats, mixes that keep up with you, and your year in music as a story.</p>
+              <p class="more" data-w="f5x">Today, this week, this month and this year at a glance, with your streaks and the artists you played most.</p>
+            </div>
+            <picture class="shot">
+              <source type="image/webp" srcset="screenshots/year-in-music-800.webp 800w, screenshots/year-in-music-1440.webp 1440w" sizes="(min-width: 1120px) 620px, (min-width: 900px) 56vw, calc(100vw - 36px)">
+              <img src="screenshots/year-in-music.png" width="1440" height="900" loading="lazy" decoding="async" data-wa="altYear" alt="Your Soundtrack: your year in music, with your top songs and artists">
+            </picture>
+          </article>
+
+          <article class="row">
+            <div class="copy">
+              <h3 data-w="f2">Keep what you love</h3>
+              <p data-w="f2t">Saved songs come with their artwork, tags and lyrics, and play without a connection.</p>
+              <p class="more" data-w="f2x">At ease offline, and Dannify picks up where you left off, down to the second.</p>
+            </div>
+            <picture class="shot">
+              <source type="image/webp" srcset="screenshots/albums-800.webp 800w, screenshots/albums-1440.webp 1440w" sizes="(min-width: 1120px) 620px, (min-width: 900px) 56vw, calc(100vw - 36px)">
+              <img src="screenshots/albums.png" width="1440" height="900" loading="lazy" decoding="async" data-wa="altAlbums" alt="The albums in your library, each with its artwork">
+            </picture>
+          </article>
+
+          <article class="row">
+            <div class="copy">
+              <h3 data-w="f7">Special days, wherever you are</h3>
+              <p data-w="f7t">The New Year, Ramadan and Eid, Diwali, Christmas and many more, on your country’s own dates. Each one comes with its own look and its own music.</p>
+            </div>
+            <picture class="shot">
+              <source type="image/webp" srcset="screenshots/special-day-800.webp 800w, screenshots/special-day-1440.webp 1440w" sizes="(min-width: 1120px) 620px, (min-width: 900px) 56vw, calc(100vw - 36px)">
+              <img src="screenshots/special-day.png" width="1440" height="900" loading="lazy" decoding="async" data-wa="altSpecial" alt="Home on Diwali, with its lamps and its music">
+            </picture>
+          </article>
+        </div>
+
+        <div class="more-grid">
+          <h3 data-w="moreTitle">And more</h3>
+          <div class="mini"><b data-w="f6">Paste a link</b><p data-w="f6t">A Spotify song, album, playlist or artist opens ready to play and save.</p></div>
+          <div class="mini"><b data-w="fDesk">At home on your computer</b><p data-w="fDeskT">A real window, a tray icon, and your keyboard’s media keys.</p></div>
+          <div class="mini"><b data-w="fLang">Six languages</b><p>English, Français, Español, Português, Deutsch, Kiswahili.</p></div>
+          <div class="mini"><b data-w="fUpd">Up to date by itself</b><p data-w="fUpdT">Install once. Each update is checked against Dannify’s signature before it goes in.</p></div>
+          <div class="mini"><b data-w="fLight">Dark or light</b><p data-w="fLightT">A dark look and a light one. Pick the one you like.</p></div>
+          <div class="mini"><b data-w="fFree">Free, with no ads</b><p data-w="fFreeT">No ads, and no account needed to search and play.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" aria-labelledby="download-title">
+      <div class="wrap">
+        <div class="head">
+          <h2 id="download-title" data-w="dlTitle">Download</h2>
+          <p data-w="dlSub">One file for each device. Dannify keeps itself up to date after that.</p>
+        </div>
+        <div class="files" id="files"></div>
+        <p class="note" data-w="note">Every file is signed by Dannify, and the app checks each update’s signature before taking it. Not on this list: iPhone and iPad.</p>
+      </div>
+    </section>
+
+    <section id="faq" aria-labelledby="faq-title">
+      <div class="wrap">
+        <div class="head">
+          <h2 id="faq-title" data-w="faqTitle">Questions</h2>
+        </div>
+        <div class="faq">
+          <details id="q-free"><summary><span data-w="q1">Is Dannify free?</span><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p data-w="a1">Yes. Free to download and use, with no ads.</p></details>
+          <details id="q-update"><summary><span data-w="q2">Does it update itself?</span><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p data-w="a2">Yes. You install Dannify once; after that, every copy keeps itself up to date.</p></details>
+          <details id="q-safe"><summary><span data-w="q3">Is it safe?</span><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p data-w="a3">Every file is signed by Dannify, and the app checks the signature of each update before installing it.</p></details>
+          <details id="q-windows"><summary><span data-w="q4">Windows says it protected my PC</span><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p data-w="a4">Choose More info, then Run anyway. Windows asks only the first time.</p></details>
+          <details id="q-mac"><summary><span data-w="q5">My Mac says Dannify cannot be opened</span><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p data-w="a5">Right-click Dannify in Applications, choose Open, then Open again. On macOS 15 and later: open Dannify and click Done, then in System Settings, Privacy &amp; Security, click Open Anyway.</p></details>
+          <details id="q-android"><summary><span data-w="q6">My phone says Play Protect does not know the app</span><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p data-w="a6">Tap More details, then Install anyway.</p></details>
+          <details id="q-tv"><summary><span data-w="q7">Will it run on my TV stick?</span><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p data-w="a7">If it is 64-bit, yes. Many older sticks are 32-bit and cannot run Dannify yet.</p></details>
+          <details id="q-ios"><summary><span data-w="q8">Is there Dannify for iPhone or iPad?</span><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p data-w="a8">Not yet, sorry. For now, you can enjoy Dannify on your computer, your Android phone or tablet, and your TV.</p></details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Dannify · <a href="https://github.com/Riskraptor/Dannify/releases" data-w="allReleases">Every release</a> · <a href="https://github.com/Riskraptor/Dannify/issues" data-w="report">Report a problem</a> · <a href="https://github.com/sponsors/Riskraptor" data-w="support">Support Dannify</a></p>
+      <nav class="langs" aria-label="Language" data-wl="language">
+        <a href="?lang=en" lang="en" hreflang="en" data-lang="en">English</a>
+        <a href="?lang=fr" lang="fr" hreflang="fr" data-lang="fr">Français</a>
+        <a href="?lang=es" lang="es" hreflang="es" data-lang="es">Español</a>
+        <a href="?lang=pt" lang="pt" hreflang="pt" data-lang="pt">Português</a>
+        <a href="?lang=de" lang="de" hreflang="de" data-lang="de">Deutsch</a>
+        <a href="?lang=sw" lang="sw" hreflang="sw" data-lang="sw">Kiswahili</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="site.js"></script>
+</body>
+</html>

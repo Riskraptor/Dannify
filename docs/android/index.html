@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dannify for Android</title>
+  <meta name="description" content="Get Dannify for Android: search anything, play it, keep it. Free, with no ads.">
+  <meta name="theme-color" content="#050A07">
+  <link rel="icon" href="../thanks/dannify.svg" type="image/svg+xml">
+  <!-- Where a QR code in Dannify on a computer leads: the newest APK for
+       this phone, found on the latest release (an APK's name carries its
+       version, so this page looks it up rather than the code naming it). -->
+  <style>
+    :root {
+      --bg: #050a07;
+      --ink: #ffffff;
+      --soft: rgba(255, 255, 255, 0.72);
+      --faint: rgba(255, 255, 255, 0.5);
+      --card: rgba(255, 255, 255, 0.06);
+      --line: rgba(255, 255, 255, 0.12);
+      --accent: #2ee27a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px 18px calc(28px + env(safe-area-inset-bottom));
+      color: var(--ink);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background:
+        radial-gradient(70% 45% at 50% 0%, rgba(46, 226, 122, 0.22), transparent 70%),
+        radial-gradient(60% 40% at 50% 100%, rgba(18, 205, 160, 0.14), transparent 70%),
+        var(--bg);
+    }
+    main { width: min(440px, 100%); text-align: center; }
+    .logo {
+      width: 112px;
+      height: 112px;
+      margin: 8px auto 18px;
+      filter: drop-shadow(0 16px 40px rgba(46, 226, 122, 0.35));
+    }
+    h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
+    .lead { margin: 10px 0 26px; font-size: 16px; line-height: 1.5; color: var(--soft); }
+    .get {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 56px;
+      padding: 0 22px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #05130b;
+      font-size: 17px;
+      font-weight: 800;
+      text-decoration: none;
+      box-shadow: 0 12px 30px rgba(46, 226, 122, 0.3);
+    }
+    .get svg { width: 22px; height: 22px; }
+    .get[aria-busy="true"] { opacity: 0.7; }
+    .meta { margin: 10px 0 0; font-size: 13px; color: var(--faint); }
+    .steps {
+      margin: 26px 0 0;
+      padding: 18px 18px 6px;
+      border-radius: 18px;
+      background: var(--card);
+      box-shadow: inset 0 0 0 1px var(--line);
+      text-align: left;
+      list-style: none;
+      counter-reset: step;
+    }
+    .steps li {
+      position: relative;
+      margin: 0 0 14px;
+      padding-left: 38px;
+      font-size: 14.5px;
+      line-height: 1.45;
+      color: var(--soft);
+      counter-increment: step;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: -1px;
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      background: rgba(46, 226, 122, 0.16);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .elsewhere { display: none; margin-top: 26px; }
+    .elsewhere img { width: 220px; height: 220px; border-radius: 16px; }
+    .elsewhere p { margin: 12px 0 0; font-size: 14px; color: var(--soft); }
+    body.is-computer .elsewhere { display: block; }
+    body.is-computer .steps { display: none; }
+    .more { display: inline-block; margin-top: 22px; font-size: 14px; color: var(--soft); }
+    footer { margin-top: 26px; font-size: 12.5px; color: var(--faint); }
+    footer a, .more { color: var(--soft); }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="logo" src="../thanks/dannify.svg" alt="">
+    <h1 id="title">Dannify for Android</h1>
+    <p class="lead" id="lead">Search anything. Play it. Keep it. Free, with no ads.</p>
+
+    <a class="get" id="get" href="https://github.com/Riskraptor/Dannify/releases/latest" aria-busy="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-8 15a1 1 0 0 1 1 1v1h14v-1a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1Z"/></svg>
+      <span id="getWords">Download for Android</span>
+    </a>
+    <p class="meta" id="meta">&nbsp;</p>
+
+    <ol class="steps">
+      <li id="step1">Open the file once it has downloaded.</li>
+      <li id="step2">If your phone asks, let your browser install apps. This is only needed once.</li>
+      <li id="step3">Open Dannify. It keeps itself up to date from then on.</li>
+    </ol>
+
+    <div class="elsewhere">
+      <img src="qr.svg" alt="">
+      <p id="scan">On a computer? Scan this with your phone's camera.</p>
+    </div>
+
+    <a class="more" id="more" href="../#download">Windows, macOS and Linux</a>
+    <footer>Dannify · <a href="https://github.com/Riskraptor/Dannify">github.com/Riskraptor/Dannify</a></footer>
+  </main>
+
+  <script>
+    // In the visitor's own language, where Dannify speaks it.
+    var WORDS = {
+      en: {
+        title: 'Dannify for Android', lead: 'Search anything. Play it. Keep it. Free, with no ads.',
+        get: 'Download for Android', version: 'Version {v} · {size}',
+        step1: 'Open the file once it has downloaded.',
+        step2: 'If your phone asks, let your browser install apps. This is only needed once.',
+        step3: 'Open Dannify. It keeps itself up to date from then on.',
+        scan: "On a computer? Scan this with your phone's camera.", more: 'Windows, macOS and Linux'
+      },
+      fr: {
+        title: 'Dannify pour Android', lead: 'Cherchez tout. Écoutez. Gardez. Gratuit et sans publicité.',
+        get: 'Télécharger pour Android', version: 'Version {v} · {size}',
+        step1: 'Ouvrez le fichier une fois téléchargé.',
+        step2: 'Si votre téléphone le demande, autorisez votre navigateur à installer des applis. Une seule fois.',
+        step3: 'Ouvrez Dannify. Il se met à jour tout seul ensuite.',
+        scan: 'Sur un ordinateur ? Scannez ceci avec l’appareil photo de votre téléphone.', more: 'Windows, macOS et Linux'
+      },
+      es: {
+        title: 'Dannify para Android', lead: 'Busca lo que quieras. Escúchalo. Guárdalo. Gratis y sin anuncios.',
+        get: 'Descargar para Android', version: 'Versión {v} · {size}',
+        step1: 'Abre el archivo cuando termine de descargarse.',
+        step2: 'Si tu teléfono lo pide, deja que tu navegador instale apps. Solo hace falta una vez.',
+        step3: 'Abre Dannify. Se mantiene al día por sí solo.',
+        scan: '¿En un ordenador? Escanea esto con la cámara de tu teléfono.', more: 'Windows, macOS y Linux'
+      },
+      pt: {
+        title: 'Dannify para Android', lead: 'Busque o que quiser. Ouça. Guarde. Grátis e sem anúncios.',
+        get: 'Baixar para Android', version: 'Versão {v} · {size}',
+        step1: 'Abra o arquivo quando terminar de baixar.',
+        step2: 'Se o telefone pedir, deixe o navegador instalar apps. Só é preciso uma vez.',
+        step3: 'Abra o Dannify. Ele se mantém atualizado sozinho.',
+        scan: 'Num computador? Leia isto com a câmera do telefone.', more: 'Windows, macOS e Linux'
+      },
+      de: {
+        title: 'Dannify für Android', lead: 'Alles suchen. Abspielen. Behalten. Kostenlos und ohne Werbung.',
+        get: 'Für Android herunterladen', version: 'Version {v} · {size}',
+        step1: 'Öffne die Datei, sobald sie heruntergeladen ist.',
+        step2: 'Wenn dein Telefon fragt, erlaube deinem Browser, Apps zu installieren. Das ist nur einmal nötig.',
+        step3: 'Öffne Dannify. Es hält sich danach selbst auf dem neuesten Stand.',
+        scan: 'Am Computer? Scanne das mit der Kamera deines Telefons.', more: 'Windows, macOS und Linux'
+      },
+      sw: {
+        title: 'Dannify kwa Android', lead: 'Tafuta chochote. Kicheze. Kihifadhi. Bure, bila matangazo.',
+        get: 'Pakua kwa Android', version: 'Toleo {v} · {size}',
+        step1: 'Fungua faili likishapakuliwa.',
+        step2: 'Simu ikiuliza, ruhusu kivinjari chako kusakinisha programu. Ni mara moja tu.',
+        step3: 'Fungua Dannify. Itajisasisha yenyewe baada ya hapo.',
+        scan: 'Uko kwenye kompyuta? Changanua hii kwa kamera ya simu yako.', more: 'Windows, macOS na Linux'
+      }
+    };
+    var wanted = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
+    var code = 'en';
+    for (var i = 0; i < wanted.length; i++) {
+      var c = String(wanted[i]).slice(0, 2).toLowerCase();
+      if (WORDS[c]) { code = c; break; }
+    }
+    var w = WORDS[code];
+    document.documentElement.lang = code;
+    document.title = w.title;
+    ['title', 'lead', 'step1', 'step2', 'step3', 'scan', 'more'].forEach(function (id) {
+      document.getElementById(id).textContent = w[id];
+    });
+    document.getElementById('getWords').textContent = w.get;
+
+    // A computer shows the code to scan; a phone gets the download.
+    var ua = navigator.userAgent || '';
+    var android = /Android/i.test(ua);
+    if (!android && !/iPhone|iPad|iPod/i.test(ua)) document.body.classList.add('is-computer');
+
+    // The newest release's APK: arm64 for phones, x86_64 for the rare
+    // Intel one (and emulators).
+    var get = document.getElementById('get');
+    var arch = /x86_64|x86-64|Intel/i.test(ua) && android ? 'x86_64' : 'arm64';
+    function size(bytes) {
+      return bytes > 0 ? Math.round(bytes / 1048576) + ' MB' : '';
+    }
+    // From latest.json beside the front page (written at each release), or
+    // from GitHub's API when it is missing.
+    function fromSite() {
+      return fetch('../latest.json', { cache: 'no-cache' })
+        .then(function (r) { if (!r.ok) throw r; return r.json(); })
+        .then(function (latest) {
+          var apks = (latest.files || []).filter(function (f) { return f.platform === 'android'; });
+          var f = apks.filter(function (a) { return a.arch === arch; })[0] || apks[0];
+          if (!f) throw new Error('no apk');
+          return { url: f.url, size: f.size, version: latest.version };
+        });
+    }
+    function fromApi() {
+      return fetch('https://api.github.com/repos/Riskraptor/Dannify/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (release) {
+          if (!release || !release.assets) return null;
+          var apk = release.assets.filter(function (a) { return /\.apk$/.test(a.name) && a.name.indexOf(arch) !== -1; })[0] ||
+            release.assets.filter(function (a) { return /\.apk$/.test(a.name); })[0];
+          return apk ? { url: apk.browser_download_url, size: apk.size, version: String(release.tag_name || '').replace(/^v/, '') } : null;
+        });
+    }
+    fromSite().catch(fromApi)
+      .then(function (apk) {
+        get.removeAttribute('aria-busy');
+        if (!apk) return;
+        get.href = apk.url;
+        document.getElementById('meta').textContent = w.version.replace('{v}', apk.version).replace('{size}', size(apk.size));
+      })
+      .catch(function () { get.removeAttribute('aria-busy'); });
+  </script>
+</body>
+</html>

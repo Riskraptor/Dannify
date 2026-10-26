@@ -1,0 +1,51 @@
+{
+  "version": "4.18.0",
+  "published": "2026-10-26T04:30:00Z",
+  "page": "https://github.com/Riskraptor/Dannify/releases/tag/v4.18.0",
+  "files": [
+    {
+      "platform": "android",
+      "arch": "arm64",
+      "name": "android-Dannify-4.18.0-arm64.apk",
+      "size": 29190883,
+      "url": "https://github.com/Riskraptor/Dannify/releases/download/v4.18.0/android-Dannify-4.18.0-arm64.apk"
+    },
+    {
+      "platform": "android",
+      "arch": "x86_64",
+      "name": "android-Dannify-4.18.0-x86_64.apk",
+      "size": 29686421,
+      "url": "https://github.com/Riskraptor/Dannify/releases/download/v4.18.0/android-Dannify-4.18.0-x86_64.apk"
+    },
+    {
+      "platform": "windows",
+      "arch": "",
+      "name": "Dannify-Setup-4.18.0.exe",
+      "size": 23829164,
+      "url": "https://github.com/Riskraptor/Dannify/releases/download/v4.18.0/Dannify-Setup-4.18.0.exe"
+    },
+    {
+      "platform": "linux",
+      "arch": "amd64",
+      "name": "linux-dannify_4.18.0_amd64.deb",
+      "size": 18453592,
+      "url": "https://github.com/Riskraptor/Dannify/releases/download/v4.18.0/linux-dannify_4.18.0_amd64.deb"
+    },
+    {
+      "platform": "macos",
+      "arch": "arm64",
+      "name": "macos-Dannify-4.16.0-arm64.dmg",
+      "size": 27724319,
+      "url": "https://github.com/Riskraptor/Dannify/releases/download/v4.16.0/macos-Dannify-4.16.0-arm64.dmg",
+      "version": "4.16.0"
+    },
+    {
+      "platform": "macos",
+      "arch": "x64",
+      "name": "macos-Dannify-4.16.0-x64.dmg",
+      "size": 29706355,
+      "url": "https://github.com/Riskraptor/Dannify/releases/download/v4.16.0/macos-Dannify-4.16.0-x64.dmg",
+      "version": "4.16.0"
+    }
+  ]
+}

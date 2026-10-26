@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Join a room on Dannify</title>
+  <meta name="description" content="Someone is listening on Dannify and invited you: the same song, in step, on your own device.">
+  <meta name="theme-color" content="#050A07">
+  <meta property="og:title" content="Listen with me on Dannify">
+  <meta property="og:description" content="The same song, in step, on your own device.">
+  <link rel="icon" href="../thanks/dannify.svg" type="image/svg+xml">
+  <!-- Where a room's invite leads (?c=CODE, or #CODE): its code, a button
+       that opens Dannify on it where Dannify is installed, and Dannify for
+       whoever does not have it yet. -->
+  <style>
+    :root { --bg: #050a07; --ink: #fff; --soft: rgba(255,255,255,.74); --faint: rgba(255,255,255,.5); --card: rgba(255,255,255,.06); --line: rgba(255,255,255,.12); --accent: #2ee27a; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-height: 100vh; display: grid; place-items: center;
+      padding: 28px 18px calc(28px + env(safe-area-inset-bottom));
+      color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(70% 45% at 50% 0%, rgba(46,226,122,.22), transparent 70%), radial-gradient(60% 40% at 50% 100%, rgba(18,205,160,.14), transparent 70%), var(--bg);
+    }
+    main { width: min(440px, 100%); text-align: center; }
+    .logo { width: 84px; height: 84px; margin: 0 auto 16px; filter: drop-shadow(0 14px 34px rgba(46,226,122,.35)); }
+    h1 { margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -.02em; }
+    .lead { margin: 10px 0 22px; font-size: 16px; line-height: 1.5; color: var(--soft); }
+    .code { display: flex; justify-content: center; gap: 8px; margin: 0 0 22px; }
+    .code span { display: grid; place-items: center; width: 46px; height: 58px; border-radius: 14px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--line); font: 800 26px ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace; }
+    .code span:nth-child(3) { margin-right: 10px; }
+    .btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 56px; padding: 0 22px; border-radius: 999px; font-size: 17px; font-weight: 800; text-decoration: none; border: 0; cursor: pointer; }
+    .btn.main { background: var(--accent); color: #05130b; box-shadow: 0 12px 30px rgba(46,226,122,.3); }
+    .btn.second { margin-top: 10px; background: rgba(255,255,255,.08); color: var(--ink); font-size: 15.5px; min-height: 50px; }
+    .steps { margin: 22px 0 0; padding: 16px 18px 4px; border-radius: 18px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); text-align: left; list-style: none; counter-reset: s; }
+    .steps li { position: relative; margin: 0 0 12px; padding-left: 36px; font-size: 14.5px; line-height: 1.45; color: var(--soft); counter-increment: s; }
+    .steps li::before { content: counter(s); position: absolute; left: 0; top: -1px; display: grid; place-items: center; width: 25px; height: 25px; border-radius: 999px; background: rgba(46,226,122,.16); color: var(--accent); font-size: 12.5px; font-weight: 800; }
+    .none { color: var(--soft); }
+    footer { margin-top: 24px; font-size: 13px; color: var(--faint); }
+    footer a { color: var(--soft); }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="logo" src="../thanks/dannify.svg" alt="">
+    <h1 id="title">Listen together</h1>
+    <p class="lead" id="lead">You are invited to a room: the same song, in step, on your own device.</p>
+    <div class="code" id="code" aria-label=""></div>
+    <a class="btn main" id="open" href="#">Open in Dannify</a>
+    <button class="btn second" id="copy" type="button">Copy the code</button>
+    <ol class="steps" id="steps"></ol>
+    <a class="btn second" id="get" href="../">Get Dannify</a>
+    <footer><a href="../">riskraptor.github.io/Dannify</a></footer>
+  </main>
+  <script>
+    (function () {
+      var WORDS = {
+        en: { title: 'Listen together', lead: 'You are invited to a room: the same song, in step, on your own device.', open: 'Open in Dannify', copy: 'Copy the code', copied: 'Copied', get: 'Get Dannify', none: 'This invite has no room code. Ask for the link again.',
+          steps: ['Open Dannify.', 'Choose Listen together.', 'Type the code, or paste the invite. You are in.'] },
+        fr: { title: 'Écouter ensemble', lead: 'Vous êtes invité dans un salon : le même titre, au même instant, sur votre appareil.', open: 'Ouvrir dans Dannify', copy: 'Copier le code', copied: 'Copié', get: 'Obtenir Dannify', none: 'Cette invitation n’a pas de code. Redemandez le lien.',
+          steps: ['Ouvrez Dannify.', 'Choisissez Écouter ensemble.', 'Tapez le code, ou collez l’invitation. Vous y êtes.'] },
+        es: { title: 'Escuchar juntos', lead: 'Te invitan a una sala: la misma canción, a la vez, en tu propio dispositivo.', open: 'Abrir en Dannify', copy: 'Copiar el código', copied: 'Copiado', get: 'Conseguir Dannify', none: 'Esta invitación no tiene código. Pide el enlace otra vez.',
+          steps: ['Abre Dannify.', 'Elige Escuchar juntos.', 'Escribe el código o pega la invitación. Ya estás dentro.'] },
+        pt: { title: 'Ouvir juntos', lead: 'Você foi convidado para uma sala: a mesma música, no mesmo instante, no seu aparelho.', open: 'Abrir no Dannify', copy: 'Copiar o código', copied: 'Copiado', get: 'Baixar o Dannify', none: 'Este convite não tem código. Peça o link de novo.',
+          steps: ['Abra o Dannify.', 'Escolha Ouvir juntos.', 'Digite o código, ou cole o convite. Pronto.'] },
+        de: { title: 'Zusammen hören', lead: 'Sie sind in einen Raum eingeladen: derselbe Titel, im selben Moment, auf Ihrem Gerät.', open: 'In Dannify öffnen', copy: 'Code kopieren', copied: 'Kopiert', get: 'Dannify holen', none: 'Diese Einladung hat keinen Code. Fragen Sie nochmals nach dem Link.',
+          steps: ['Öffnen Sie Dannify.', 'Wählen Sie Zusammen hören.', 'Code eingeben oder Einladung einfügen. Fertig.'] },
+        sw: { title: 'Sikiliza pamoja', lead: 'Umealikwa chumbani: wimbo uleule, wakati uleule, kwenye kifaa chako.', open: 'Fungua kwenye Dannify', copy: 'Nakili msimbo', copied: 'Imenakiliwa', get: 'Pata Dannify', none: 'Mwaliko huu hauna msimbo. Omba kiungo tena.',
+          steps: ['Fungua Dannify.', 'Chagua Sikiliza pamoja.', 'Andika msimbo, au bandika mwaliko. Umeingia.'] }
+      };
+      var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
+      var lang = 'en';
+      for (var i = 0; i < langs.length; i++) { var c = String(langs[i]).slice(0, 2).toLowerCase(); if (WORDS[c]) { lang = c; break; } }
+      var W = WORDS[lang];
+      document.documentElement.lang = lang;
+      ['title', 'lead'].forEach(function (id) { document.getElementById(id).textContent = W[id]; });
+      document.getElementById('open').textContent = W.open;
+      document.getElementById('copy').textContent = W.copy;
+      document.getElementById('get').textContent = W.get;
+      document.getElementById('steps').innerHTML = W.steps.map(function (s) { return '<li>' + s + '</li>'; }).join('');
+
+      // The code: ?c=ABC234 or #ABC234, six letters and numbers (no 0, O, 1, I).
+      var raw = (new URLSearchParams(location.search).get('c') || location.hash.slice(1) || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      var code = /^[A-HJ-NP-Z2-9]{6}$/.test(raw) ? raw : '';
+      var box = document.getElementById('code');
+      if (!code) {
+        box.outerHTML = '<p class="none">' + W.none + '</p>';
+        document.getElementById('open').style.display = 'none';
+        document.getElementById('copy').style.display = 'none';
+        return;
+      }
+      box.innerHTML = code.split('').map(function (ch) { return '<span>' + ch + '</span>'; }).join('');
+      box.setAttribute('aria-label', code.split('').join(' '));
+
+      // Android: the app, if it is there; this page's download if not.
+      var android = /Android/i.test(navigator.userAgent || '');
+      var open = document.getElementById('open');
+      var fallback = encodeURIComponent(location.origin + '/Dannify/android/');
+      open.href = android
+        ? 'intent://join/' + code + '#Intent;scheme=dannify;package=app.dannify.dev;S.browser_fallback_url=' + fallback + ';end'
+        : 'dannify://join/' + code;
+      if (!android) open.style.display = 'none';
+      document.getElementById('copy').addEventListener('click', function () {
+        var btn = this;
+        var done = function () { btn.textContent = W.copied; setTimeout(function () { btn.textContent = W.copy; }, 1800); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done, done); else done();
+      });
+    })();
+  </script>
+</body>
+</html>

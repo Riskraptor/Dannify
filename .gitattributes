@@ -1,0 +1,9 @@
+# Normalise line endings so the tree is the same on every machine.
+* text=auto eol=lf
+
+# Binaries: never touched.
+*.png binary
+
+# Signed byte for byte: never converted.
+config/support-live.json -text
+config/live.json -text
