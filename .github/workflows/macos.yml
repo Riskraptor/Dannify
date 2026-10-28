@@ -1,0 +1,120 @@
+# Dannify for Mac (Apple Silicon and Intel), built on GitHub's Mac machines.
+#
+# This repository holds no source. The source for a build is handed over
+# sealed (AES-256-GCM) in a draft release only the owner can see, opened here
+# with the repository secret MAC_SOURCE_KEY, checked against the SHA-256 the
+# owner names, built, and thrown away with the machine. Only the finished,
+# unsigned app leaves: it is signed with the release key on the owner's
+# machine, as every other platform's build is, before it is published.
+name: Mac builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version being built (as in Backend/dannify/__init__.py)
+        required: true
+      source_sha256:
+        description: SHA-256 of the source archive before it was sealed
+        required: true
+
+# Reading a draft release needs write access to the repository's contents.
+permissions:
+  contents: write
+
+concurrency:
+  group: mac-builds
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          # The last Intel runner image GitHub offers.
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: The source, opened
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAC_SOURCE_KEY: ${{ secrets.MAC_SOURCE_KEY }}
+          SOURCE_SHA256: ${{ inputs.source_sha256 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MAC_SOURCE_KEY:-}" ]; then echo "The repository secret MAC_SOURCE_KEY is not set"; exit 1; fi
+          gh release download mac-build-source --repo "$GITHUB_REPOSITORY" --pattern source.tar.gz.enc --dir "$RUNNER_TEMP"
+          python -m pip install --quiet --disable-pip-version-check cryptography
+          python - <<'PY'
+          import hashlib, os, pathlib, sys
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+          tmp = pathlib.Path(os.environ['RUNNER_TEMP'])
+          blob = (tmp / 'source.tar.gz.enc').read_bytes()
+          data = AESGCM(bytes.fromhex(os.environ['MAC_SOURCE_KEY'].strip())).decrypt(blob[:12], blob[12:], None)
+          if hashlib.sha256(data).hexdigest() != os.environ['SOURCE_SHA256'].strip().lower():
+              sys.exit('The source is not the one named')
+          (tmp / 'source.tar.gz').write_bytes(data)
+          PY
+          tar -xzf "$RUNNER_TEMP/source.tar.gz" -C "$GITHUB_WORKSPACE"
+          rm -f "$RUNNER_TEMP/source.tar.gz" "$RUNNER_TEMP/source.tar.gz.enc"
+          have=$(sed -n "s/^__version__ = '\(.*\)'/\1/p" Backend/dannify/__init__.py)
+          if [ "$have" != "$VERSION" ]; then echo "The source is $have, not $VERSION"; exit 1; fi
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+      - name: The interface
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund --loglevel=error > "$RUNNER_TEMP/npm.log" 2>&1 || { tail -n 20 "$RUNNER_TEMP/npm.log"; exit 1; }
+          npx vite build > "$RUNNER_TEMP/vite.log" 2>&1 || { tail -n 20 "$RUNNER_TEMP/vite.log"; exit 1; }
+
+      - name: Python libraries
+        run: |
+          python -m pip install --quiet --disable-pip-version-check --upgrade pip
+          python -m pip install --quiet --disable-pip-version-check -r Backend/requirements.txt pyinstaller==6.20.0
+
+      # FFmpeg takes a while to build and only changes with its script.
+      - name: Media tool (cached)
+        id: media
+        uses: actions/cache@v6
+        with:
+          path: packaging/macos/media
+          key: dnfmedia-${{ matrix.arch }}-${{ env.MACOSX_DEPLOYMENT_TARGET }}-${{ hashFiles('packaging/macos/build-media.sh', 'packaging/mediatool/**') }}
+      - name: Build the media tool
+        if: steps.media.outputs.cache-hit != 'true'
+        run: |
+          if [ "${{ matrix.arch }}" = "x64" ]; then brew install nasm > /dev/null; fi
+          bash packaging/macos/build-media.sh > "$RUNNER_TEMP/media.log" 2>&1 || { tail -n 30 "$RUNNER_TEMP/media.log"; exit 1; }
+
+      - name: Build Dannify.app
+        run: |
+          PYTHON=python bash packaging/macos/build.sh out > "$RUNNER_TEMP/build.log" 2>&1 || { tail -n 30 "$RUNNER_TEMP/build.log"; exit 1; }
+          ls -la out
+      - name: Smoke test
+        run: python packaging/macos/smoke_test.py "out/macos-Dannify-$VERSION-${{ matrix.arch }}.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-Dannify-${{ inputs.version }}-${{ matrix.arch }}.zip
+          path: out/macos-Dannify-${{ inputs.version }}-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-Dannify-${{ inputs.version }}-${{ matrix.arch }}.dmg
+          path: out/macos-Dannify-${{ inputs.version }}-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+          compression-level: 0
