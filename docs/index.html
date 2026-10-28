@@ -339,6 +339,19 @@
       .get:hover { transform: none; }
     }
   </style>
+  <!-- Dannify's website moved to https://dannify-app.vercel.app. This page
+       forwards there once the new site answers (a quick check of its
+       latest.json), and keeps working on its own when it does not. -->
+  <script>
+    function dannifyForward(to) {
+      var NEW = 'https://dannify-app.vercel.app';
+      if (!window.fetch) return;
+      fetch(NEW + '/latest.json', { cache: 'no-store' }).then(function (r) {
+        if (r.ok) location.replace(NEW + to);
+      }, function () { /* the new site is not reachable: stay here */ });
+    }
+  </script>
+  <link rel="canonical" href="https://dannify-app.vercel.app/">
 </head>
 <body>
   <!-- Icons, drawn here once and used throughout (simple shapes, no logos). -->
@@ -646,6 +659,20 @@
     </div>
   </footer>
 
+  <script>
+    (function () {
+      var lang = String(new URLSearchParams(location.search).get('lang') || '').slice(0, 2).toLowerCase();
+      var prefix = /^(fr|es|pt|de|sw)$/.test(lang) ? '/' + lang : '';
+      var h = location.hash;
+      var to = h === '#download' ? '/download/'
+        : h.indexOf('#get-') === 0 ? '/download/#' + h.slice(5)
+        : h === '#android' || h === '#phone' ? '/android/'
+        : h === '#tv' ? '/android/#tv'
+        : h === '#faq' || h.indexOf('#q-') === 0 ? '/help/'
+        : h === '#features' ? '/#features' : '/';
+      dannifyForward(prefix + to);
+    })();
+  </script>
   <script src="site.js"></script>
 </body>
 </html>

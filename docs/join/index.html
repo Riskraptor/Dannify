@@ -39,6 +39,18 @@
     footer { margin-top: 24px; font-size: 13px; color: var(--faint); }
     footer a { color: var(--soft); }
   </style>
+  <!-- Dannify's website moved to https://dannify-app.vercel.app. This page
+       forwards there once the new site answers (a quick check of its
+       latest.json), and keeps working on its own when it does not. -->
+  <script>
+    function dannifyForward(to) {
+      var NEW = 'https://dannify-app.vercel.app';
+      if (!window.fetch) return;
+      fetch(NEW + '/latest.json', { cache: 'no-store' }).then(function (r) {
+        if (r.ok) location.replace(NEW + to);
+      }, function () { /* the new site is not reachable: stay here */ });
+    }
+  </script>
 </head>
 <body>
   <main>
@@ -82,6 +94,11 @@
       // The code: ?c=ABC234 or #ABC234, six letters and numbers (no 0, O, 1, I).
       var raw = (new URLSearchParams(location.search).get('c') || location.hash.slice(1) || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
       var code = /^[A-HJ-NP-Z2-9]{6}$/.test(raw) ? raw : '';
+      // The room's page on the new site (/r/CODE), with when the code ends.
+      if (code) {
+        var ends = new URLSearchParams(location.search).get('e');
+        dannifyForward('/r/' + code + (ends && /^\d{9,11}$/.test(ends) ? '?e=' + ends : ''));
+      }
       var box = document.getElementById('code');
       if (!code) {
         box.outerHTML = '<p class="none">' + W.none + '</p>';
@@ -97,7 +114,7 @@
       var open = document.getElementById('open');
       var fallback = encodeURIComponent(location.origin + '/Dannify/android/');
       open.href = android
-        ? 'intent://join/' + code + '#Intent;scheme=dannify;package=app.dannify.dev;S.browser_fallback_url=' + fallback + ';end'
+        ? 'intent://join/' + code + '#Intent;scheme=dannify;package=app.dannify;S.browser_fallback_url=' + fallback + ';end'
         : 'dannify://join/' + code;
       if (!android) open.style.display = 'none';
       document.getElementById('copy').addEventListener('click', function () {
