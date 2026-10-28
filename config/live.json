@@ -1,15 +1,22 @@
 {
-  "version": 15,
+  "version": 16,
   "rooms": {
     "servers": [
       "wss://dannify-relay.onrender.com/ws"
     ]
   },
-  "signed_at": 1793197290,
+  "signed_at": 1793220537,
   "sources": [
     "https://dannify-live.onrender.com/live.json"
   ],
   "control_keys": [
     "3d0f4ce4de7717a2a76a344514245139b11326b9b9f8bd648472a4bc2d74753f"
-  ]
+  ],
+  "emergency": {
+    "version": "5.0.0",
+    "from": "4.15.0",
+    "notes": {
+      "en": "Steadier on any connection, and rooms with a real chat"
+    }
+  }
 }
