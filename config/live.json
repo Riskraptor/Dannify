@@ -1,11 +1,11 @@
 {
-  "version": 9,
+  "version": 15,
   "rooms": {
     "servers": [
       "wss://dannify-relay.onrender.com/ws"
     ]
   },
-  "signed_at": 1793002892,
+  "signed_at": 1793197290,
   "sources": [
     "https://dannify-live.onrender.com/live.json"
   ],
