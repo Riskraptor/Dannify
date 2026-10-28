@@ -126,6 +126,19 @@ jobs:
           ls -la out
       - name: Smoke test
         run: python packaging/macos/smoke_test.py "out/macos-Dannify-$VERSION-${{ matrix.arch }}.zip"
+      # Which part of the app brings in a library built for a newer macOS
+      # (file names and the libraries they link only).
+      - name: What links OpenSSL (when the test fails)
+        if: failure()
+        run: |
+          find "$GITHUB_WORKSPACE" -path '*Dannify.app/Contents/*' -type f \( -name '*.so' -o -name '*.dylib' \) 2>/dev/null |
+            while read -r f; do otool -L "$f" 2>/dev/null | grep -q 'libcrypto\|libssl' && echo "links OpenSSL: ${f##*/Contents/}"; done | sort -u | head -30
+          for m in _ssl _hashlib; do
+            p=$(python -c "import $m; print($m.__file__)")
+            echo "== $m: $p"; otool -L "$p" | grep -i 'ssl\|crypto' || true
+          done
+          echo "== Homebrew OpenSSL: $(brew --prefix openssl@3 2>/dev/null || echo none)"
+          python -m pip list --format=freeze 2>/dev/null | head -80
 
       - uses: actions/upload-artifact@v7
         with:
