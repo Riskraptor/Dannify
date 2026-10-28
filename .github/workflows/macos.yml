@@ -72,6 +72,20 @@ jobs:
           have=$(sed -n "s/^__version__ = '\(.*\)'/\1/p" Backend/dannify/__init__.py)
           if [ "$have" != "$VERSION" ]; then echo "The source is $have, not $VERSION"; exit 1; fi
 
+      # The licence and the notices the app carries are this repository's own,
+      # the same files as beside the source.
+      - uses: actions/checkout@v7
+        with:
+          path: public-files
+          sparse-checkout: |
+            LICENSE
+            THIRD-PARTY-NOTICES.md
+          sparse-checkout-cone-mode: false
+      - name: Licence and notices
+        run: |
+          for f in LICENSE THIRD-PARTY-NOTICES.md; do [ -f "$f" ] || cp "public-files/$f" "$f"; done
+          rm -rf public-files
+
       - uses: actions/setup-node@v7
         with:
           node-version: '26'
@@ -89,7 +103,7 @@ jobs:
       # FFmpeg takes a while to build and only changes with its script.
       - name: Media tool (cached)
         id: media
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: packaging/macos/media
           key: dnfmedia-${{ matrix.arch }}-${{ env.MACOSX_DEPLOYMENT_TARGET }}-${{ hashFiles('packaging/macos/build-media.sh', 'packaging/mediatool/**') }}
@@ -98,6 +112,13 @@ jobs:
         run: |
           if [ "${{ matrix.arch }}" = "x64" ]; then brew install nasm > /dev/null; fi
           bash packaging/macos/build-media.sh > "$RUNNER_TEMP/media.log" 2>&1 || { tail -n 30 "$RUNNER_TEMP/media.log"; exit 1; }
+      # Kept at once, so a later step that fails does not throw it away.
+      - name: Keep the media tool
+        if: steps.media.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: packaging/macos/media
+          key: ${{ steps.media.outputs.cache-primary-key }}
 
       - name: Build Dannify.app
         run: |
