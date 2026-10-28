@@ -56,8 +56,11 @@ jobs:
           set -euo pipefail
           if [ -z "${MAC_SOURCE_KEY:-}" ]; then echo "The repository secret MAC_SOURCE_KEY is not set"; exit 1; fi
           gh release download mac-build-source --repo "$GITHUB_REPOSITORY" --pattern source.tar.gz.enc --dir "$RUNNER_TEMP"
-          python -m pip install --quiet --disable-pip-version-check cryptography
-          python - <<'PY'
+          # Opened with a Python of its own, thrown away after: anything installed
+          # into the build's Python can end up inside the app.
+          python -m venv "$RUNNER_TEMP/opener"
+          "$RUNNER_TEMP/opener/bin/python" -m pip install --quiet --disable-pip-version-check cryptography
+          "$RUNNER_TEMP/opener/bin/python" - <<'PY'
           import hashlib, os, pathlib, sys
           from cryptography.hazmat.primitives.ciphers.aead import AESGCM
           tmp = pathlib.Path(os.environ['RUNNER_TEMP'])
@@ -68,7 +71,8 @@ jobs:
           (tmp / 'source.tar.gz').write_bytes(data)
           PY
           tar -xzf "$RUNNER_TEMP/source.tar.gz" -C "$GITHUB_WORKSPACE"
-          rm -f "$RUNNER_TEMP/source.tar.gz" "$RUNNER_TEMP/source.tar.gz.enc"
+          rm -rf "$RUNNER_TEMP/source.tar.gz" "$RUNNER_TEMP/source.tar.gz.enc" "$RUNNER_TEMP/opener"
+          if python -c 'import cryptography' 2>/dev/null; then echo "cryptography is in the build's Python"; exit 1; fi
           have=$(sed -n "s/^__version__ = '\(.*\)'/\1/p" Backend/dannify/__init__.py)
           if [ "$have" != "$VERSION" ]; then echo "The source is $have, not $VERSION"; exit 1; fi
 
