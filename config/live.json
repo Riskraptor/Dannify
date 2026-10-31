@@ -1,11 +1,11 @@
 {
-  "version": 16,
+  "version": 21,
   "rooms": {
     "servers": [
       "wss://dannify-relay.onrender.com/ws"
     ]
   },
-  "signed_at": 1793220537,
+  "signed_at": 1793452586,
   "sources": [
     "https://dannify-live.onrender.com/live.json"
   ],
@@ -17,6 +17,18 @@
     "from": "4.15.0",
     "notes": {
       "en": "Steadier on any connection, and rooms with a real chat"
+    }
+  },
+  "required": {
+    "version": "5.0.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "android",
+      "macos"
+    ],
+    "notes": {
+      "en": "Dannify 5.0 keeps rooms, devices and updates working"
     }
   }
 }
